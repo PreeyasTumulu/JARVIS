@@ -25,7 +25,8 @@ Things that are unreliable, fragile, or risky, written down before building so t
 
 - `hermes3:8b` is 4.7 GB at its default quantization. The RTX 3050 Laptop GPU has 4 GB, so Ollama will put part of the model on the CPU. Expect noticeably slower generation than a model that fits fully.
 - Prompt processing matters as much as generation. Tool schemas add a few thousand tokens to every request. Keeping the system prompt and tool list identical within a session lets Ollama reuse its cache.
-- `hermes3:3b` (2.0 GB) fits on the GPU and will be faster, but is weaker at multi-step planning. Phase 1 measures both on 20 real commands before choosing.
+- `hermes3:3b` (2.0 GB) fits on the GPU and is faster, but in the Phase 1 benchmark it produced malformed tool calls (the function name in the arguments field, no tags) and called no tools at all. See [benchmarks/phase1.md](benchmarks/phase1.md).
+- Measured in Phase 1: `hermes3:8b` picks the right tool on 20 of 20 test commands at about 3 seconds per model call, so a typical command (tool call, then a spoken answer) takes 5 to 7 seconds. The Ollama settings in SETUP.md (flash attention, q8_0 KV cache) should move more of the model onto the GPU.
 - faster-whisper on the GPU would compete for the same 4 GB, which is why STT runs on CPU by default.
 
 ### R4. Notifications (Windows UserNotificationListener)

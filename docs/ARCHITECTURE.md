@@ -109,15 +109,16 @@ If "Mom" matched two contacts, `prepare` would return a clarification request an
 - `messages`: the conversation in OpenAI chat format
 - `turn_id`, `session_id`, `source` (voice / cli / ui)
 - `sensitivity`: the highest sensitivity of anything in the context (see 5.4)
-- `iterations`, `deadline`, `cancel` (a `CancelToken`)
+- `iterations` and the turn deadline
 - `pending_confirmation`: the request currently waiting for you, if any
+
+Implementation note (Phase 1): the state lives on the `Agent` object (`src/jarvis/core/agent.py`) and each turn returns a `TurnResult`. It becomes an explicit graph state object if the loop moves to LangGraph.
 
 ### 4.2 Loop
 
 ```python
 async def run_turn(state: AgentState) -> AgentState:
     for _ in range(cfg.agent.max_iterations):
-        state.cancel.raise_if_cancelled()
         reply = await router.complete(state)                 # picks model, enforces privacy guard
         if not reply.tool_calls:
             return state.finish(reply.text)
@@ -294,9 +295,10 @@ Every outcome, including blocked and denied attempts, is written to the audit lo
 
 ### 6.4 Cancellation
 
-- A `CancelToken` per turn. Three triggers: the global stop hotkey, the voice command "stop", and the Stop button in the UI (Ctrl+C in the CLI).
+- Each turn runs as one asyncio task, and stopping a turn is task cancellation. `Agent.cancel()` is safe to call from any thread. Triggers: Ctrl+C in the CLI (Phase 1), the global stop hotkey and the voice command "stop" (Phase 2), and the Stop button in the UI (Phase 5).
 - "Stop" is matched deterministically on the transcript before the LLM sees it, so it works even when the model is slow.
-- On cancel: the in-flight LLM request is aborted, the running tool task is cancelled, TTS stops, and any pending confirmation is denied. Tools that run in threads check the token between steps (Python threads cannot be killed safely), so a stuck UI automation call may take a moment to stop. This is called out in RISKS.md.
+- On cancel: the in-flight LLM request is aborted, the running tool is cancelled, TTS stops, and any pending confirmation is denied. The audit log records the call as `cancelled`, and the conversation is rolled back to a clean state so the next command works normally.
+- Work running in a thread (for example UI automation) cannot be killed safely in Python. Those tools check a stop flag between steps, so a stuck call may take a moment to wind down. This is called out in RISKS.md.
 
 ### 6.5 Audit log
 
@@ -311,7 +313,7 @@ All models are reached through `AsyncOpenAI(base_url=..., api_key=...)`. Provide
 ```toml
 [llm.providers.local]
 base_url = "http://localhost:11434/v1"
-model = "jarvis-hermes3"          # hermes3:8b plus a Modelfile that sets num_ctx
+model = "jarvis-hermes3"          # hermes3:8b plus config/ollama/hermes3-8b.Modelfile (num_ctx)
 api_key_env = ""                  # Ollama ignores the key
 
 [llm.providers.deepseek]
@@ -430,7 +432,7 @@ Everything that is personal (database, logs, the Playwright browser profile, dow
 - `config/jarvis.toml`: committed defaults.
 - `config/local.toml`: your overrides (allowlists, home city, hotkeys). Gitignored.
 - `.env`: secrets only (API keys). Gitignored; `.env.example` is committed.
-- Loaded with pydantic-settings into typed models, validated at startup with clear errors.
+- Loaded with `tomllib` and python-dotenv into typed pydantic models (`src/jarvis/config.py`). Unknown keys are rejected, so a typo fails at startup with a clear message instead of being silently ignored.
 
 ```toml
 [agent]
@@ -460,20 +462,26 @@ port = 8765
 jarvis/
   pyproject.toml              uv project, ruff, mypy, pytest config
   .env.example
+  .github/workflows/ci.yml    lint, format, mypy, tests, dash check on windows-latest
   config/
     jarvis.toml               committed defaults
-    ollama/hermes3.Modelfile  local model alias with num_ctx
-  docs/                       this documentation
-  scripts/                    benchmark, dash check, demo helpers
+    local.example.toml        template for your gitignored local.toml
+    ollama/*.Modelfile        local model aliases with num_ctx (8B and 3B)
+  docs/                       this documentation, plus benchmarks/
+  scripts/                    benchmark_tools.py, check_dashes.py
   src/jarvis/
     __main__.py               python -m jarvis
-    cli.py                    jarvis chat, jarvis audit, jarvis serve
+    cli.py                    jarvis chat, ask, audit, version (serve in Phase 5)
+    console.py                terminal channel: live tool log, y/n confirmations, questions
+    app.py                    wires settings, storage, model, tools, and agent together
+    services.py               shared helpers tools use (TTS, app index, search backend)
     config.py
-    core/                     agent loop, state, session, events, cancel, prompts
-    llm/                      OpenAI-compatible client, router, privacy guard, tool-call parser
+    core/                     agent loop, executor (gate + confirm + audit), events, channel, prompts
+    llm/                      OpenAI-compatible client, tool-call text parser (router in Phase 8)
     tools/
-      registry.py             @tool decorator, schema generation, executor
-      policy.py               risk evaluation, allowlists, confirmation broker
+      registry.py             @tool decorator, schema generation
+      policy.py               risk evaluation, allowlists
+      catalog.py              the list of tools exposed to the model
       interaction.py          speak, ask_user
       apps/                   app index, launcher, adapters (vscode, docker, browser)
       ui/                     pywinauto tools, PyAutoGUI fallback, vision (flagged)

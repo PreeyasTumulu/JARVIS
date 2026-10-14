@@ -94,13 +94,30 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** your choice during planning.
 - **Cost:** pull requests are opened on the website (or install `gh` later).
 
+### ADR-016: Stopping a command is asyncio task cancellation
+
+- **Decision:** each turn runs as one asyncio task. `Agent.cancel()` cancels it from any thread. In the CLI, the first Ctrl+C cancels the running command (Python's `asyncio.Runner` turns it into task cancellation) and a second Ctrl+C exits.
+- **Why:** cancellation then reaches the in-flight model request, tool, and confirmation prompt with no extra plumbing, and works the same for the hotkey, voice "stop", and the UI button later.
+- **Cost:** threads cannot be cancelled, so thread-based tools need a cooperative stop flag (Phase 6).
+
+### ADR-017: App index in memory for Phase 1
+
+- **Decision:** `open_app` builds its index on first use from `Get-StartApps` (the `shell:AppsFolder` list, which covers both packaged and classic apps) plus Start Menu shortcuts, and launches through `explorer.exe shell:AppsFolder\<AppID>`. Matching is rapidfuzz `WRatio` with config aliases and an ambiguity check.
+- **Why:** one PowerShell call (about 2 seconds, once per session) finds everything the Start menu shows. Persisting it in SQLite waits for Phase 3.
+- **Cost:** the first `open_app` in a session is about 2 seconds slower.
+
+### ADR-018: Hermes 3 8B stays the default local model
+
+- **Decision:** `jarvis-hermes3` (Hermes 3 8B, `num_ctx 8192`) is the default. `jarvis-hermes3-3b` is not recommended.
+- **Why:** in the [Phase 1 benchmark](benchmarks/phase1.md) the 8B picked the right tool on 20 of 20 commands at about 2.8 s median per model call. Hermes 3 3B scored 6 of 20 because it emits malformed tool calls. Llama 3.2 3B (already installed) is about 7 times faster but scored 17 of 20 and invented actions for vague commands (it opened Notepad for "open the app"), which is the wrong failure mode for an assistant that acts on your laptop.
+- **Cost:** 5 to 7 seconds for a typical command, because 61% of the 8B runs on the CPU. Revisit with the Ollama memory settings in SETUP.md, a deterministic fast path for simple commands, or a stronger small model (for example a Qwen 4B class model) if speed becomes the main complaint.
+
 ## Open decisions
 
 These are asked when the phase starts, not before.
 
 | Phase | Decision | Options |
 |---|---|---|
-| 1 | Default local model | `hermes3:8b` (spec, partial CPU offload) vs `hermes3:3b` (fits fully on GPU), chosen from benchmark numbers |
 | 2 | STT size and device | `base.en`, `small.en`, `distil-small.en`; CPU vs GPU |
 | 2 | Default voice engine | Piper vs Kokoro |
 | 2 | Hotkeys | Push-to-talk and stop key combinations |

@@ -2,7 +2,7 @@
 
 A local-first, voice-controlled desktop assistant for Windows 11. Say (or type) a command, and Jarvis plans it with a local LLM, calls typed tools to operate your laptop, and answers out loud.
 
-> **Status: Phase 0, planning complete.** No runnable code yet. Phase 1 (the skeleton) is next. See the [roadmap](docs/ROADMAP.md).
+> **Status: Phase 1 (skeleton) built.** Text commands work end to end with a local Hermes 3 model: open apps, search the web, speak, ask clarifying questions, confirm risky actions, and audit every tool call. Voice arrives in Phase 2. See the [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 
@@ -65,15 +65,18 @@ Full design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Quick start
 
-Available from Phase 1. It will look like this:
+Needs Windows 11, [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.com). Full details in [SETUP.md](docs/SETUP.md).
 
 ```powershell
 git clone https://github.com/PreeyasTumulu/JARVIS.git
 cd JARVIS
 uv sync
 ollama pull hermes3:8b
+ollama create jarvis-hermes3 -f config/ollama/hermes3-8b.Modelfile
 uv run jarvis chat
 ```
+
+Then try `open notepad`, `search the web for the latest Python release`, or `say hello`. `uv run jarvis audit` shows every tool call Jarvis made.
 
 ## License
 

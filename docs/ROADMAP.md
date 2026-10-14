@@ -7,7 +7,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | Phase | Name | Status | Version |
 |---|---|---|---|
 | 0 | Planning, docs, repository | Done | v0.0.1 |
-| 1 | Skeleton: config, model client, agent loop, registry, audit, CLI | Next | v0.1.0 |
+| 1 | Skeleton: config, model client, agent loop, registry, audit, CLI | Built, waiting for your test | v0.1.0 |
 | 2 | Voice: push-to-talk, then wake word | Planned | v0.2.0 |
 | 3 | App index, VS Code, Docker, files | Planned | v0.3.0 |
 | 4 | Data APIs, fetch_page, system tools | Planned | v0.4.0 |
@@ -54,7 +54,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
   - `web_search`: DuckDuckGo via the `ddgs` package.
   - `speak`: through the TTS interface, using Windows SAPI for now (no extra dependency). Piper arrives in Phase 2.
   - `ask_user`.
-- Benchmark script: 20 scripted commands, measuring tool-choice accuracy and latency for `hermes3:8b` and `hermes3:3b` on this laptop.
+- Benchmark script: 20 scripted commands, measuring tool-choice accuracy and latency for `hermes3:8b`, `hermes3:3b`, and the already installed `llama3.2:3b` on this laptop.
 
 **Exit criteria (you test)**
 
@@ -66,19 +66,19 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 - `uv run pytest` passes and CI is green.
 - Benchmark results are written to `docs/benchmarks/phase1.md`.
 
-**Test commands (preview)**
+**Test commands**
 
 ```powershell
 uv sync
-ollama pull hermes3:8b
-ollama create jarvis-hermes3 -f config/ollama/hermes3.Modelfile
+ollama create jarvis-hermes3 -f config/ollama/hermes3-8b.Modelfile
+ollama create jarvis-hermes3-3b -f config/ollama/hermes3-3b.Modelfile
 uv run jarvis chat
 uv run jarvis audit --last 10
 uv run pytest
-uv run python scripts/benchmark_tools.py --models hermes3:8b hermes3:3b
+uv run python scripts/benchmark_tools.py
 ```
 
-**Decisions:** pull `hermes3:8b` (4.7 GB) and `hermes3:3b` (2.0 GB), then pick the default from benchmark numbers.
+**Decisions:** pull `hermes3:8b` (4.7 GB) and `hermes3:3b` (2.0 GB), then pick the default from benchmark numbers. Resolved: the 8B stays the default (ADR-018, [benchmark](benchmarks/phase1.md)).
 
 ## Phase 2: Voice
 

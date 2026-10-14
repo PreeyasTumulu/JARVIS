@@ -37,11 +37,14 @@ uv sync
 ```powershell
 ollama pull hermes3:8b
 ollama pull hermes3:3b
-ollama create jarvis-hermes3 -f config/ollama/hermes3.Modelfile
+ollama create jarvis-hermes3 -f config/ollama/hermes3-8b.Modelfile
+ollama create jarvis-hermes3-3b -f config/ollama/hermes3-3b.Modelfile
 ollama run jarvis-hermes3 "Say hi in five words."
 ```
 
-The Modelfile sets the context window. Ollama's OpenAI-compatible endpoint ignores context length sent by clients, so it has to be set on the model.
+The Modelfiles set the context window (`num_ctx 8192`). Ollama's OpenAI-compatible endpoint ignores context length sent by clients, so it has to be set on the model. `ollama show jarvis-hermes3` should list `tools` under capabilities.
+
+To switch Jarvis to the 3B model, set `model = "jarvis-hermes3-3b"` under `[llm.providers.local]` in `config/local.toml`, or try it for one session with `uv run jarvis chat --model jarvis-hermes3-3b`.
 
 Recommended Ollama environment variables (System Properties, Environment Variables, then restart Ollama):
 
@@ -76,7 +79,20 @@ Fill in only the keys you use. `.env` is gitignored and must never be committed.
 Copy-Item config/local.example.toml config/local.toml
 ```
 
-Set your app allowlist, folder allowlist, home city, and hotkeys there. `config/local.toml` is gitignored.
+Set your app allowlist, model choice, and app aliases there (folder allowlist, home city, and hotkeys arrive in later phases). `config/local.toml` is gitignored.
+
+## 5a. Run it (Phase 1)
+
+```powershell
+uv run jarvis chat                     # interactive; Ctrl+C stops a command, /quit exits
+uv run jarvis chat --speak             # also speak every reply aloud (Windows SAPI voice)
+uv run jarvis ask "open notepad"       # one command, then exit
+uv run jarvis audit --last 20          # recent tool calls with arguments and decisions
+uv run pytest                          # unit tests (no Ollama needed)
+uv run python scripts/benchmark_tools.py   # model accuracy and latency report
+```
+
+Developer hooks (optional): `uv run pre-commit install` runs ruff and the dash check before each commit.
 
 ## 6. Windows settings
 

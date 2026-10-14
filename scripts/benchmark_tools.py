@@ -21,6 +21,7 @@ from pathlib import Path
 
 from jarvis.config import load_settings
 from jarvis.core.prompts import system_prompt
+from jarvis.core.tool_routing import select_tools
 from jarvis.llm.client import LLMClient
 from jarvis.llm.types import LLMError
 from jarvis.tools.catalog import build_registry
@@ -61,6 +62,17 @@ CASES = [
     case("what is 15 times 12", NO_TOOL),
     case("thanks, that's all", NO_TOOL),
     case("tell me a one line joke", NO_TOOL, "speak"),
+    # Phase 3
+    case("switch to vs code", "focus_app", arg=("name", "code")),
+    case("close the calculator", "close_app", arg=("name", "calc")),
+    case("what docker containers are running", "docker_list"),
+    case("stop the postgres container", "docker_stop", arg=("container", "postgres")),
+    case("show me the logs of the backend container", "docker_logs", arg=("container", "backend")),
+    case("find my resume", "find_file", arg=("query", "resume")),
+    case("open the jarvis readme", "find_file", "open_file"),
+    case("what is this file", "get_selected_file"),
+    case("open github.com", "open_url", arg=("url", "github")),
+    case("open the jarvis project folder in vs code", "find_file", "vscode_open"),
 ]
 
 
@@ -119,12 +131,13 @@ def unload_all_models() -> None:
         pass
 
 
-async def run_model(model: str) -> Report:
+async def run_model(model: str, routing: str) -> Report:
     unload_all_models()
     settings = load_settings()
     provider = settings.llm.active().model_copy(update={"model": model})
     client = LLMClient(provider)
-    tools = build_registry().schemas()
+    registry = build_registry()
+    tools = registry.schemas()
     system = {"role": "system", "content": system_prompt()}
 
     started = time.perf_counter()
@@ -133,8 +146,13 @@ async def run_model(model: str) -> Report:
 
     for item in CASES:
         messages = [system, {"role": "user", "content": item.text}]
+        offered = (
+            [tool.schema() for tool in select_tools(item.text, registry)]
+            if routing == "keywords"
+            else tools
+        )
         try:
-            reply = await client.complete(messages, tools)
+            reply = await client.complete(messages, offered)
         except LLMError as exc:
             report.rows.append(Row(item, "error", "", 0, False, error=str(exc)))
             continue
@@ -158,13 +176,19 @@ async def run_model(model: str) -> Report:
     return report
 
 
-def render(reports: list[Report]) -> str:
+def render(reports: list[Report], routing: str) -> str:
     gpu = _gpu_name()
+    offered = (
+        "the tools keyword routing selects (all of them when nothing matches)"
+        if routing == "keywords"
+        else f"all {len(build_registry())} tools"
+    )
     lines = [
-        "# Phase 1 model benchmark",
+        f"# Model benchmark (tool routing: {routing})",
         "",
         f"Run on {datetime.now():%Y-%m-%d %H:%M}, {gpu}. Each of {len(CASES)} commands is "
-        "sent once with the Jarvis system prompt and all Phase 1 tools. A case is correct "
+        f"sent once with the Jarvis system prompt and {offered}. "
+        "A case is correct "
         "if the first tool call (or no call) matches what a careful assistant would do, "
         "including a key argument where noted. Nothing is executed. Other models are "
         "unloaded first, so load time is a cold start and placement is the model alone.",
@@ -215,15 +239,16 @@ async def main() -> None:
     parser.add_argument(
         "--models", nargs="+", default=["jarvis-hermes3", "jarvis-hermes3-3b", "llama3.2:3b"]
     )
-    parser.add_argument("--out", type=Path, default=ROOT / "docs" / "benchmarks" / "phase1.md")
+    parser.add_argument("--out", type=Path, default=ROOT / "docs" / "benchmarks" / "latest.md")
+    parser.add_argument("--routing", choices=["keywords", "all"], default="keywords")
     args = parser.parse_args()
 
     reports = []
     for model in args.models:
         print(f"== {model}")
-        reports.append(await run_model(model))
+        reports.append(await run_model(model, args.routing))
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(render(reports), encoding="utf-8")
+    args.out.write_text(render(reports, args.routing), encoding="utf-8")
     print(f"\nWrote {args.out}")
     for r in reports:
         print(f"{r.model}: {r.accuracy:.0%} correct, median {r.latency(0.5)} ms, {r.placement}")

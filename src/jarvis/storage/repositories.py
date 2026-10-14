@@ -47,7 +47,7 @@ class AuditLog:
         self._db = db
 
     def record(self, entry: AuditEntry) -> None:
-        self._db.conn.execute(
+        self._db.execute(
             """
             INSERT INTO audit_log (ts, session_id, turn_id, call_id, tool, args_json, risk,
                                    decision, confirmed_via, ok, result_json, error, duration_ms)
@@ -71,9 +71,7 @@ class AuditLog:
         )
 
     def recent(self, limit: int = 20) -> list[dict[str, Any]]:
-        rows = self._db.conn.execute(
-            "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)
-        ).fetchall()
+        rows = self._db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))
         return [dict(row) for row in reversed(rows)]
 
 
@@ -95,7 +93,7 @@ class HistoryLog:
         latency_ms: int,
         timings: dict[str, int] | None = None,
     ) -> None:
-        self._db.conn.execute(
+        self._db.execute(
             """
             INSERT INTO command_history (ts, session_id, turn_id, source, input_text,
                                          response_text, status, model, iterations, latency_ms,
@@ -118,9 +116,7 @@ class HistoryLog:
         )
 
     def recent(self, limit: int = 20) -> list[dict[str, Any]]:
-        rows = self._db.conn.execute(
-            "SELECT * FROM command_history ORDER BY id DESC LIMIT ?", (limit,)
-        ).fetchall()
+        rows = self._db.execute("SELECT * FROM command_history ORDER BY id DESC LIMIT ?", (limit,))
         return [dict(row) for row in reversed(rows)]
 
 
@@ -129,13 +125,11 @@ class Preferences:
         self._db = db
 
     def get(self, key: str, default: Any = None) -> Any:
-        row = self._db.conn.execute(
-            "SELECT value_json FROM preferences WHERE key = ?", (key,)
-        ).fetchone()
-        return default if row is None else json.loads(row[0])
+        rows = self._db.execute("SELECT value_json FROM preferences WHERE key = ?", (key,))
+        return json.loads(rows[0][0]) if rows else default
 
     def set(self, key: str, value: Any) -> None:
-        self._db.conn.execute(
+        self._db.execute(
             """
             INSERT INTO preferences (key, value_json, updated_at) VALUES (?, ?, ?)
             ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json,

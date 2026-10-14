@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 # Append new migrations to the end. Never edit one that has shipped.
 MIGRATIONS: list[str] = [
@@ -54,17 +58,49 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE command_history ADD COLUMN timings_json TEXT;
     """,
+    # 3: persistent app and file indexes
+    """
+    CREATE TABLE app_index (
+        normalized TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        target TEXT NOT NULL,
+        exe TEXT
+    );
+
+    CREATE TABLE file_index (
+        path TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        normalized TEXT NOT NULL,
+        is_dir INTEGER NOT NULL,
+        size INTEGER NOT NULL,
+        modified REAL NOT NULL
+    );
+
+    CREATE TABLE index_meta (
+        name TEXT PRIMARY KEY,
+        built_at TEXT NOT NULL,
+        item_count INTEGER NOT NULL
+    );
+    """,
 ]
 
 
 class Database:
+    """One SQLite connection shared by the event loop and worker threads.
+
+    Statements go through `execute` / `executemany` (each holds the lock), and multi-statement
+    changes use `transaction()`, so background indexing can write while the agent keeps working.
+    """
+
     def __init__(self, path: Path | str) -> None:
         self.path = path
         if isinstance(path, Path):
             path.parent.mkdir(parents=True, exist_ok=True)
         # Autocommit mode; multi-statement changes use explicit transactions.
-        self.conn = sqlite3.connect(str(path), isolation_level=None)
+        self.conn = sqlite3.connect(str(path), isolation_level=None, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        self.lock = threading.RLock()
         if str(path) != ":memory:":
             self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
@@ -80,5 +116,25 @@ class Database:
             script = MIGRATIONS[number - 1]
             self.conn.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {number};\nCOMMIT;")
 
+    def execute(self, sql: str, params: Sequence[Any] = ()) -> list[sqlite3.Row]:
+        with self.lock:
+            return self.conn.execute(sql, params).fetchall()
+
+    def executemany(self, sql: str, rows: Iterable[Sequence[Any]]) -> None:
+        with self.lock:
+            self.conn.executemany(sql, rows)
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        with self.lock:
+            self.conn.execute("BEGIN")
+            try:
+                yield self.conn
+            except BaseException:
+                self.conn.execute("ROLLBACK")
+                raise
+            self.conn.execute("COMMIT")
+
     def close(self) -> None:
-        self.conn.close()
+        with self.lock:
+            self.conn.close()

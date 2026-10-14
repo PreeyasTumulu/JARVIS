@@ -25,6 +25,11 @@ from jarvis.tools.registry import Registry, Tool
 
 log = logging.getLogger(__name__)
 
+LIST_REPLY_HINT = (
+    "(Reply in one or two spoken sentences: how many there are and at most three names. "
+    "No list, no paths, no sizes, no dates.)"
+)
+
 
 class Decision(StrEnum):
     AUTO = "auto"  # safe, ran without asking
@@ -53,12 +58,18 @@ class CallOutcome:
     def model_content(self, max_chars: int) -> str:
         """What the model sees for this call. Untrusted output is wrapped as data."""
         if self.result.ok:
-            payload: dict[str, Any] = {"ok": True, "data": self.result.data}
+            payload: dict[str, Any] = {"ok": True}
+            if self.result.speech:
+                payload["summary"] = self.result.speech  # a ready-made spoken answer
+            payload["data"] = self.result.data
         else:
             payload = {"ok": False, "error": self.result.error}
         text = truncate(json.dumps(payload, ensure_ascii=False, default=str), max_chars)
         if self.tool is not None and self.tool.untrusted and self.result.ok:
-            return wrap_untrusted(self.call.name, text)
+            text = wrap_untrusted(self.call.name, text)
+        if self.result.ok and isinstance(self.result.data, list) and len(self.result.data) > 1:
+            # Small models mirror list data as long markdown lists; the reply is spoken.
+            text += f"\n{LIST_REPLY_HINT}"
         return text
 
     def summary(self) -> str:

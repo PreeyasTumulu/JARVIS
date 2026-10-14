@@ -91,9 +91,16 @@ def test_parse_docstring_without_args() -> None:
     assert parse_docstring(None) == ("", {})
 
 
+ALL_TOOLS = {
+    "open_app", "focus_app", "close_app", "find_file", "open_file", "read_file",
+    "get_selected_file", "vscode_open", "docker_list", "docker_logs", "docker_start",
+    "docker_stop", "web_search", "open_url", "speak", "ask_user",
+}  # fmt: skip
+
+
 def test_shipped_tools_have_clean_schemas() -> None:
     registry = build_registry()
-    assert registry.names() == ["open_app", "web_search", "speak", "ask_user"]
+    assert set(registry.names()) == ALL_TOOLS
     for item in registry:
         schema = item.schema()["function"]
         assert schema["description"]

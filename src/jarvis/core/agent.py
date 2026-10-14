@@ -28,6 +28,7 @@ from jarvis.core.events import (
 )
 from jarvis.core.executor import CallOutcome, ToolExecutor
 from jarvis.core.prompts import system_prompt
+from jarvis.core.tool_routing import select_tools
 from jarvis.llm.types import ChatModel, LLMError
 from jarvis.services import Services
 from jarvis.storage.repositories import HistoryLog
@@ -175,8 +176,9 @@ class Agent:
             session_id=self.session_id,
             turn_id=turn_id,
         )
+        schemas = self._tool_schemas()
         for iteration in range(1, agent_cfg.max_iterations + 1):
-            reply = await self._llm.complete(self._model_messages(), self._registry.schemas())
+            reply = await self._llm.complete(self._model_messages(), schemas)
             stage_times["llm_ms"] = stage_times.get("llm_ms", 0) + reply.latency_ms
             calls = reply.tool_calls[: agent_cfg.max_tool_calls_per_step]
             await self._bus.publish(
@@ -214,6 +216,13 @@ class Agent:
         text = f"I couldn't finish that within {agent_cfg.max_iterations} steps, so I stopped."
         self._messages.append({"role": "assistant", "content": text})
         return text, TurnStatus.LIMIT, agent_cfg.max_iterations
+
+    def _tool_schemas(self) -> list[dict[str, Any]]:
+        """Tools for this turn, chosen from the request text (see core/tool_routing.py)."""
+        if self._settings.agent.tool_routing == "all":
+            return self._registry.schemas()
+        request = next(m["content"] for m in reversed(self._messages) if m["role"] == "user")
+        return [tool.schema() for tool in select_tools(request, self._registry)]
 
     def _model_messages(self) -> list[dict[str, Any]]:
         now = self._clock() if self._clock else None

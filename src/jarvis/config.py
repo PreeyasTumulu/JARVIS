@@ -34,6 +34,7 @@ class AgentSettings(_Section):
     max_tool_calls_per_step: int = Field(default=4, ge=1)
     history_turns: int = Field(default=8, ge=0)
     max_tool_result_chars: int = Field(default=4000, ge=200)
+    tool_routing: Literal["keywords", "all"] = "keywords"
 
 
 class ProviderSettings(_Section):
@@ -42,6 +43,7 @@ class ProviderSettings(_Section):
     api_key_env: str = ""
     temperature: float = Field(default=0.2, ge=0, le=2)
     timeout_s: float = Field(default=120, gt=0)
+    max_tokens: int | None = Field(default=300, ge=16)  # caps rambling replies (and their wait)
 
     def api_key(self) -> str:
         """Return the API key from the environment, or a placeholder for keyless servers."""
@@ -74,11 +76,26 @@ class SafetySettings(_Section):
     unlisted_apps: Literal["confirm", "block"] = "confirm"
     confirm_timeout_s: float = Field(default=30, gt=0)
     tool_risk_overrides: dict[str, Risk] = {}
+    safe_to_close: list[str] = []
 
 
 class AppsSettings(_Section):
     match_threshold: float = Field(default=75, ge=0, le=100)
     aliases: dict[str, str] = {}
+    process_names: dict[str, str] = {}  # app name to executable, for matching open windows
+
+
+class FilesSettings(_Section):
+    allowed_folders: list[str] = ["{documents}", "{desktop}", "{downloads}"]
+    blocked_patterns: list[str] = []
+    blocked_extensions: list[str] = []
+    confirm_extensions: list[str] = []
+    skip_dirs: list[str] = []
+    index_max_age_hours: float = Field(default=12, gt=0)
+    max_indexed_files: int = Field(default=300_000, ge=1000)
+    read_max_chars: int = Field(default=6000, ge=500)
+    read_max_mb: float = Field(default=25, gt=0)
+    everything: Literal["auto", "never"] = "auto"
 
 
 class SearchSettings(_Section):
@@ -126,6 +143,7 @@ class Settings(_Section):
     llm: LLMSettings
     safety: SafetySettings = SafetySettings()
     apps: AppsSettings = AppsSettings()
+    files: FilesSettings = FilesSettings()
     search: SearchSettings = SearchSettings()
     tts: TTSSettings = TTSSettings()
     voice: VoiceSettings = VoiceSettings()

@@ -39,6 +39,8 @@ class LLMClient:
             "messages": messages,
             "temperature": self._provider.temperature,
         }
+        if self._provider.max_tokens:
+            kwargs["max_tokens"] = self._provider.max_tokens
         if tools:
             kwargs["tools"] = tools
         try:

@@ -41,6 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("setup-voice", help="download the speech, voice, and wake word models")
 
+    sub.add_parser("index", help="rebuild the app and file indexes now")
+
     audit = sub.add_parser("audit", help="show recent tool calls from the audit log")
     audit.add_argument("--last", type=int, default=20, help="how many entries (default 20)")
 
@@ -69,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "audit":
         return show_audit(settings, args.last, console)
+    if args.command == "index":
+        return rebuild_indexes(settings, console)
     if args.command in ("voice", "setup-voice"):
         try:
             from jarvis.voice import runner
@@ -146,6 +150,29 @@ def run_chat(
                     break
         finally:
             runner.run(app.aclose())
+    return 0
+
+
+def rebuild_indexes(settings: Settings, console: Console) -> int:
+    from jarvis.services import build_services
+
+    db = Database(settings.data_dir / "jarvis.db")
+    try:
+        services = build_services(settings, db)
+        with console.status("Indexing installed apps..."):
+            apps = asyncio.run(services.apps.refresh())
+        console.print(f"{apps} apps indexed.")
+        files = services.files
+        for root in files.guard.roots:
+            console.print(f"[dim]allowed folder: {escape(str(root))}[/dim]")
+        if files.backend == "everything":
+            console.print("File search uses Everything, so there is no file index to build.")
+        else:
+            with console.status("Indexing files in the allowed folders..."):
+                count = asyncio.run(files.rebuild())
+            console.print(f"{count} files and folders indexed.")
+    finally:
+        db.close()
     return 0
 
 

@@ -52,7 +52,7 @@ async def test_every_request_sends_system_prompt_and_tools(make_app: MakeApp) ->
     await h.app.agent.run_turn("hi")
     assert h.llm.requests[0][0]["role"] == "system"
     names = {t["function"]["name"] for t in h.llm.tools_seen[0] or []}
-    assert names == {"open_app", "web_search", "speak", "ask_user"}
+    assert {"open_app", "web_search", "speak", "ask_user", "find_file"} <= names
 
 
 async def test_unlisted_app_needs_confirmation_yes(make_app: MakeApp, launched: list) -> None:

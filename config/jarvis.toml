@@ -35,6 +35,8 @@ app_allowlist = [
 ]
 unlisted_apps = "confirm"    # "confirm" or "block"
 confirm_timeout_s = 30       # no answer within this time means no
+# Apps that close without asking, unless a window title shows unsaved changes.
+safe_to_close = ["Calculator", "Settings", "File Explorer"]
 
 [safety.tool_risk_overrides]
 # Raise a tool's risk level, for example: open_app = "confirm"
@@ -42,6 +44,14 @@ confirm_timeout_s = 30       # no answer within this time means no
 
 [apps]
 match_threshold = 75         # 0 to 100, minimum fuzzy match score for an app name
+
+[apps.process_names]
+# Executable behind an app, used to find its open windows when the index does not know it.
+"File Explorer" = "explorer"
+"Visual Studio Code" = "Code"
+"Google Chrome" = "chrome"
+"Microsoft Edge" = "msedge"
+"Brave" = "brave"
 
 [apps.aliases]
 "vs code" = "Visual Studio Code"
@@ -53,6 +63,34 @@ match_threshold = 75         # 0 to 100, minimum fuzzy match score for an app na
 "explorer" = "File Explorer"
 "file explorer" = "File Explorer"
 "calc" = "Calculator"
+
+[files]
+# Jarvis can only find, open, and read files inside these folders. {documents}, {desktop},
+# {downloads}, {pictures}, {music}, {videos} follow OneDrive redirection. Lists replace,
+# so a local.toml that adds a folder must repeat the ones it keeps.
+allowed_folders = ["{documents}", "{desktop}", "{downloads}"]
+# Never read or open these, even inside allowed folders (matched on the file name).
+blocked_patterns = [
+    ".env", ".env.*", "*.pem", "*.key", "*.pfx", "*.p12", "*.kdbx", "*.ppk",
+    "id_rsa*", "id_ed25519*", "id_ecdsa*", ".git-credentials", ".netrc", ".npmrc", ".pypirc",
+    "*credential*", "*secret*", "*password*", "*.wallet",
+]
+blocked_extensions = [".reg"]  # opening a .reg file edits the registry
+# Opening these runs a program, so it asks first.
+confirm_extensions = [
+    ".exe", ".msi", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".vbe", ".js", ".jse",
+    ".wsf", ".wsh", ".scr", ".lnk", ".hta", ".cpl", ".jar", ".appref-ms", ".py", ".pyw",
+]
+skip_dirs = [
+    ".git", "node_modules", ".venv", "venv", "env", "__pycache__", ".mypy_cache",
+    ".ruff_cache", ".pytest_cache", ".cache", ".idea", ".vs", "dist", "build", ".next",
+    "target", "AppData", "$Recycle.Bin", "site-packages",
+]
+index_max_age_hours = 12     # rebuild the file index in the background after this
+max_indexed_files = 300000
+read_max_chars = 6000        # how much of a file the model gets to see
+read_max_mb = 25             # larger files are not read
+everything = "auto"          # use Everything (voidtools es.exe) for search if installed
 
 [search]
 max_results = 5

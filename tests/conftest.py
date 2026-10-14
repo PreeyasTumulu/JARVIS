@@ -15,9 +15,12 @@ from jarvis.app import App, build_app
 from jarvis.config import Settings, load_settings
 from jarvis.core.channel import ConfirmationRequest
 from jarvis.llm.types import LLMReply, ToolCall
+from jarvis.platform.windows import WindowInfo
 from jarvis.services import Services
 from jarvis.storage.db import Database
 from jarvis.tools.apps.index import AppEntry, AppIndex
+from jarvis.tools.files.guard import FileGuard
+from jarvis.tools.files.index import FileIndex
 from jarvis.tools.registry import Registry
 from jarvis.tools.web.search import SearchHit
 
@@ -112,9 +115,18 @@ class FakeSearch:
         return self.hits[:max_results]
 
 
-def fake_apps(*names: str, aliases: dict[str, str] | None = None) -> AppIndex:
+def fake_apps(
+    *names: str,
+    aliases: dict[str, str] | None = None,
+    process_names: dict[str, str] | None = None,
+) -> AppIndex:
     entries = [AppEntry(name=n, target=f"App.{n}", kind="appsfolder") for n in names]
-    return AppIndex(sources=[lambda: entries], aliases=aliases or {}, threshold=75)
+    return AppIndex(
+        sources=[lambda: entries],
+        aliases=aliases or {},
+        process_names=process_names or {},
+        threshold=75,
+    )
 
 
 DEFAULT_APPS = ("Notepad", "Visual Studio Code", "Spotify", "Calculator")
@@ -138,12 +150,48 @@ def launched(monkeypatch: pytest.MonkeyPatch) -> list[AppEntry]:
     return calls
 
 
+class FakeDesktop:
+    """Stands in for real windows, file opening, the browser, and VS Code in every test."""
+
+    def __init__(self) -> None:
+        self.windows: list[WindowInfo] = []
+        self.focused: list[int] = []
+        self.closed: list[int] = []
+        self.opened_files: list[str] = []
+        self.urls: list[str] = []
+        self.spawned: list[list[str]] = []
+
+    def add(self, title: str, exe: str, class_name: str = "Window") -> WindowInfo:
+        window = WindowInfo(1000 + len(self.windows), title, 1, exe, class_name)
+        self.windows.append(window)
+        return window
+
+    def close(self, hwnd: int) -> None:
+        self.closed.append(hwnd)
+        self.windows = [w for w in self.windows if w.hwnd != hwnd]
+
+
+@pytest.fixture(autouse=True)
+def desktop(monkeypatch: pytest.MonkeyPatch) -> FakeDesktop:
+    fake = FakeDesktop()
+    monkeypatch.setattr("jarvis.platform.windows.list_windows", lambda: list(fake.windows))
+    monkeypatch.setattr(
+        "jarvis.platform.windows.focus_window", lambda hwnd: fake.focused.append(hwnd) or True
+    )
+    monkeypatch.setattr("jarvis.platform.windows.close_window", fake.close)
+    monkeypatch.setattr("os.startfile", fake.opened_files.append, raising=False)
+    monkeypatch.setattr("webbrowser.open", lambda url: fake.urls.append(url) or True)
+    monkeypatch.setattr("jarvis.tools.apps.vscode.spawn", fake.spawned.append)
+    return fake
+
+
 class Harness:
     def __init__(self, app: App, llm: FakeLLM, channel: FakeChannel, tts: FakeTTS) -> None:
         self.app = app
         self.llm = llm
         self.channel = channel
         self.tts = tts
+        self.files_root = Path()
         self.events: list[Any] = []
         app.bus.subscribe(self.events.append)
 
@@ -175,14 +223,20 @@ def make_app(settings: Settings) -> MakeApp:
         llm = FakeLLM(script)
         tts = FakeTTS()
         chan = channel or FakeChannel()
+        db = Database(":memory:")
+        files_root = (cfg.data_dir / "files").resolve()
+        files_root.mkdir(exist_ok=True)
         services = Services(
             tts=tts,
-            apps=fake_apps(*DEFAULT_APPS, aliases=cfg.apps.aliases),
+            apps=fake_apps(
+                *DEFAULT_APPS, aliases=cfg.apps.aliases, process_names=cfg.apps.process_names
+            ),
+            files=FileIndex(db, FileGuard(cfg.files, roots=[files_root]), cfg.files),
             search=search or FakeSearch(),
         )
-        app = build_app(
-            cfg, chan, llm=llm, services=services, registry=registry, db=Database(":memory:")
-        )
-        return Harness(app, llm, chan, tts)
+        app = build_app(cfg, chan, llm=llm, services=services, registry=registry, db=db)
+        harness = Harness(app, llm, chan, tts)
+        harness.files_root = files_root
+        return harness
 
     return factory

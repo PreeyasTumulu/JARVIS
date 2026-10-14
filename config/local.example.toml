@@ -9,8 +9,17 @@
 # app_allowlist = ["Notepad", "Visual Studio Code", "Docker Desktop", "Spotify"]
 # unlisted_apps = "block"
 
+# safe_to_close = ["Calculator", "Settings", "File Explorer", "Spotify"]
+
 # [apps.aliases]
 # "music" = "Spotify"
+
+# [files]
+# allowed_folders = ["{documents}", "{desktop}", "{downloads}", "C:/Projects"]
+# everything = "never"                # ignore Everything even if it is installed
+
+# [agent]
+# tool_routing = "all"                # show the model every tool on every request
 
 # [tts]
 # engine = "piper"               # or "sapi" (built-in Windows voice)

@@ -50,7 +50,7 @@ def build_app(
     history = HistoryLog(db)
     bus = EventBus()
     registry = registry or build_registry()
-    services = services or build_services(settings)
+    services = services or build_services(settings, db)
     llm = llm or LLMClient(settings.llm.active())
     executor = ToolExecutor(
         settings=settings,

@@ -112,15 +112,36 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** in the [Phase 1 benchmark](benchmarks/phase1.md) the 8B picked the right tool on 20 of 20 commands at about 2.8 s median per model call. Hermes 3 3B scored 6 of 20 because it emits malformed tool calls. Llama 3.2 3B (already installed) is about 7 times faster but scored 17 of 20 and invented actions for vague commands (it opened Notepad for "open the app"), which is the wrong failure mode for an assistant that acts on your laptop.
 - **Cost:** 5 to 7 seconds for a typical command, because 61% of the 8B runs on the CPU. Revisit with the Ollama memory settings in SETUP.md, a deterministic fast path for simple commands, or a stronger small model (for example a Qwen 4B class model) if speed becomes the main complaint.
 
+### ADR-019: uv-managed Python instead of the Microsoft Store Python
+
+- **Decision:** `pyproject.toml` sets `[tool.uv] python-preference = "only-managed"`, so the project always runs on a uv-downloaded CPython 3.12.
+- **Why:** the laptop's Python 3.12.10 is the Microsoft Store build. Windows silently redirects its writes under `%LOCALAPPDATA%` into `AppData\Local\Packages\PythonSoftwareFoundation...\LocalCache`, so Jarvis's database, logs, and models were invisible at the documented path (found when the first voice models downloaded). Existing data was moved to the real `%LOCALAPPDATA%\Jarvis`. The CLI warns if it detects the Store Python.
+- **Cost:** a one-time 30 MB Python download per machine. The Store Python is left untouched for other uses.
+
+### ADR-020: Phase 2 voice defaults
+
+- **Decision:** push-to-talk by default and the wake word opt-in (`--wake`); hold `Ctrl+Alt+J` to talk, `Ctrl+Alt+X` to stop; Whisper `small.en`, CPU int8, 8 threads; Piper voice `en_GB-alan-medium`.
+- **Why:** push-to-talk keeps the microphone closed except while you talk. `Ctrl+Alt+Space` was already owned by another app on this laptop, and `Ctrl+Shift+Space` would steal VS Code's parameter hints. On synthesized speech `small.en` takes about 1.4 s per 5 s of audio and `base.en` about 0.45 s with the same text, but real speech with an accent and room noise favours the bigger model. The British Piper voice is a nod to the films.
+- **Cost:** about 1 extra second per command versus `base.en`. Every default is one line in `config/local.toml`.
+
+### ADR-021: Kokoro waits for packaging (Phase 8)
+
+- **Decision:** Phase 2 ships Piper and Windows SAPI. Kokoro is added in Phase 8, where it matters as the bundle-safe (Apache-2.0) voice.
+- **Why:** Piper already sounds good and synthesizes 3 s of speech in 0.16 s on this CPU. Kokoro adds a 300 MB model and another dependency stack without changing anything for daily use yet.
+- **Cost:** none until packaging.
+
+### ADR-022: Confirmations race voice and keyboard
+
+- **Decision:** in voice mode the agent's channel is `FirstAnswerChannel(voice, keyboard)`: Jarvis asks aloud and shows the prompt in the terminal, and the first answer wins. Spoken approval must be one of a few clear phrases ("yes", "go ahead", "send it"); anything else, and silence after the question, is a no. "Stop" is matched on the transcript without the model.
+- **Why:** keeps the safety rule (explicit yes only) while letting you answer whichever way is convenient. The same channel race will include the web UI in Phase 5.
+- **Cost:** "okay" and "sure" do not count as yes, by design.
+
 ## Open decisions
 
 These are asked when the phase starts, not before.
 
 | Phase | Decision | Options |
 |---|---|---|
-| 2 | STT size and device | `base.en`, `small.en`, `distil-small.en`; CPU vs GPU |
-| 2 | Default voice engine | Piper vs Kokoro |
-| 2 | Hotkeys | Push-to-talk and stop key combinations |
 | 3 | File search | Install Everything (voidtools) vs built-in index |
 | 6 | WhatsApp automation | Accept the account risk described in RISKS.md |
 | 7 | Notification source | Windows listener vs WhatsApp Web polling, after the spike |

@@ -358,13 +358,17 @@ stateDiagram-v2
     Thinking --> Idle: stop hotkey
 ```
 
-- **Capture:** sounddevice at 16 kHz mono, callback thread feeding an asyncio queue.
-- **Push-to-talk first (Phase 2a):** hold a hotkey, speak, release.
-- **Wake word (Phase 2b):** openWakeWord with the pretrained "hey jarvis" model, using the ONNX backend (the TFLite backend is not supported on Windows).
-- **Endpointing:** Silero VAD.
-- **STT:** faster-whisper, `small.en`, CPU `int8` by default so the 4 GB GPU stays free for the LLM. `cuda` is a config option.
-- **TTS:** Piper (optional extra, GPL-3.0), Kokoro (Apache-2.0), or Windows SAPI as a zero-dependency fallback. Long replies are spoken sentence by sentence so speech starts before the full text is ready.
-- **Self-trigger:** without echo cancellation, speaker output can trigger the wake word. Wake word detection is paused while Jarvis speaks. Barge-in uses the push-to-talk hotkey.
+- **Capture:** sounddevice at 16 kHz mono in 80 ms frames, callback thread feeding an asyncio queue (`voice/audio.py`). Device names resolve to the MME entry, which accepts 16 kHz directly.
+- **One reader:** `VoiceSession._frame_loop` (`voice/session.py`) routes every frame to the push-to-talk buffer, the endpointer, or the wake word detector, depending on what the session is doing.
+- **Push-to-talk:** hold a hotkey, speak after the beep, release. The microphone is open only while the key is held. Hotkeys use Win32 `RegisterHotKey` on their own thread; releases are detected by polling the key (`platform/hotkeys.py`).
+- **Wake word (opt-in, `--wake`):** openWakeWord "hey jarvis" with the ONNX backend (TFLite is not supported on Windows). The microphone stays open in this mode.
+- **Endpointing:** Silero VAD probabilities per frame feed `Endpointer` (`voice/endpoint.py`), which ends the recording after 0.8 s of silence, after 12 s, or if nothing was said within 5 s.
+- **STT:** faster-whisper `small.en`, CPU `int8`, 8 threads, with a short vocabulary hint (app names). Silent or tiny clips are skipped, and Whisper's typical silence hallucinations ("Thank you.") are dropped.
+- **TTS:** Piper (optional extra, GPL-3.0) speaks sentence by sentence, synthesizing the next sentence while the current one plays; stop cuts it within about 50 ms. Windows SAPI is the fallback. Kokoro arrives with packaging in Phase 8.
+- **Deterministic phrases** (`voice/phrases.py`): "stop" style commands and yes/no answers never go through the model.
+- **Confirmations by voice:** `VoiceChannel` speaks "Should I open Paint? Say yes or no." and waits for the next utterance. In voice mode the agent's channel is `FirstAnswerChannel(voice, keyboard)`, so typing y or n also works (ADR-022).
+- **Self-trigger:** without echo cancellation, speaker output can trigger the wake word. Wake word detection is paused while Jarvis speaks and for 0.4 s after. Barge-in uses the push-to-talk hotkey.
+- **Timings:** every voice command stores `audio_ms`, `stt_ms`, `pre_turn_ms`, `llm_ms`, `first_tool_ms`, and `turn_ms` in `command_history.timings_json`; the session prints the median "end of speech to first action" when it exits.
 
 ## 9. Interfaces
 
@@ -424,7 +428,8 @@ Everything that is personal (database, logs, the Playwright browser profile, dow
 | Audio capture | sounddevice callback thread, handed to asyncio with `call_soon_threadsafe` |
 | STT and TTS inference | Thread pool via `asyncio.to_thread` (ctranslate2 and onnxruntime release the GIL) |
 | pywinauto and COM (UI automation, Explorer selection) | One dedicated worker thread with COM initialized; all UI tools submit jobs to it |
-| Global hotkeys | Dedicated thread with a Win32 message loop (`RegisterHotKey`) |
+| Global hotkeys | Dedicated thread with a Win32 message loop (`RegisterHotKey`), handing events to asyncio with `call_soon_threadsafe` |
+| Wake word, VAD | Thread pool via `asyncio.to_thread`, one frame at a time (a few milliseconds each) |
 | Tray icon | pystray's own thread |
 
 ## 12. Configuration
@@ -491,10 +496,17 @@ jarvis/
       messaging/              contacts, WhatsApp Web, WhatsApp desktop fallback
       notifications/          listener, queue, reader
       system/                 volume, brightness, lock, screenshot, clipboard, timers
-    voice/                    audio io, vad, stt, wake word, push-to-talk, tts engines
+    voice/
+      audio.py                microphone stream, player, earcons, device resolution, mic check
+      session.py              the voice loop (states, frame routing, turns, confirmations)
+      channel.py              VoiceChannel: spoken confirmations and questions
+      stt.py, wake.py         faster-whisper; openWakeWord and Silero VAD
+      endpoint.py, phrases.py end-of-speech logic; stop words, yes/no, transcript cleanup
+      models.py, runner.py    model downloads; `jarvis voice` and `jarvis setup-voice`
+      tts/                    TTS interface, Piper, SAPI, engine factory
     storage/                  sqlite connection, migrations, repositories
-    server/                   FastAPI app, WebSocket, static UI
-    platform/                 Windows helpers: COM worker thread, hotkeys, DPI awareness
+    server/                   FastAPI app, WebSocket, static UI (Phase 5)
+    platform/                 Windows helpers: hotkeys now; COM worker thread, DPI awareness later
   tests/
     unit/                     tools with mocks, policy, router, registry
     integration/              sqlite, real Ollama (marked, optional)

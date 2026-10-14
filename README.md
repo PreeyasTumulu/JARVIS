@@ -2,7 +2,7 @@
 
 A local-first, voice-controlled desktop assistant for Windows 11. Say (or type) a command, and Jarvis plans it with a local LLM, calls typed tools to operate your laptop, and answers out loud.
 
-> **Status: Phase 1 (skeleton) built.** Text commands work end to end with a local Hermes 3 model: open apps, search the web, speak, ask clarifying questions, confirm risky actions, and audit every tool call. Voice arrives in Phase 2. See the [roadmap](docs/ROADMAP.md).
+> **Status: Phase 2 (voice) built.** Talk to Jarvis with push-to-talk or "Hey Jarvis": local Whisper hears you, Hermes 3 plans and calls tools (open apps, search the web, speak, ask questions), risky actions wait for a spoken or typed yes, Piper answers out loud, and every tool call is audited. Phases 1 and 2 are waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 
@@ -70,13 +70,14 @@ Needs Windows 11, [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.
 ```powershell
 git clone https://github.com/PreeyasTumulu/JARVIS.git
 cd JARVIS
-uv sync
+uv sync --extra voice --extra piper
 ollama pull hermes3:8b
 ollama create jarvis-hermes3 -f config/ollama/hermes3-8b.Modelfile
-uv run jarvis chat
+uv run jarvis setup-voice
+uv run jarvis voice --wake
 ```
 
-Then try `open notepad`, `search the web for the latest Python release`, or `say hello`. `uv run jarvis audit` shows every tool call Jarvis made.
+Hold `Ctrl+Alt+J` (or say "Hey Jarvis"), then try "open notepad", "search the web for the latest Python release", or "say hello". `Ctrl+Alt+X` or "stop" cancels. Prefer typing? `uv run jarvis chat`. `uv run jarvis audit` shows every tool call Jarvis made.
 
 ## License
 

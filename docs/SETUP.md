@@ -13,8 +13,9 @@ Checked on 2026-10-14 on the development laptop.
 | RAM | 15.3 GB | Tight with Docker Desktop and an 8B model, see RISKS.md |
 | GPU | NVIDIA RTX 3050 Laptop, 4 GB VRAM, driver 566.07 | `hermes3:8b` (4.7 GB) will not fit fully, Ollama splits it with the CPU |
 | Free disk | 38.5 GB on C: | Enough for models (about 8 GB total) |
-| Python | 3.12.10 | Meets the 3.11+ requirement |
-| uv | 0.11.11 | Used for the virtual environment and dependencies |
+| Python | 3.12.10 (Microsoft Store build) | Not used by Jarvis: the Store build sandboxes AppData writes. The project uses a uv-managed Python 3.12 instead (ADR-019) |
+| uv | 0.11.11 | Manages the project's Python and dependencies |
+| Microphones | AudioRelay "Virtual Mic" is the Windows default (silent); Realtek "Microphone Array" picks up sound | `config/local.toml` sets `input_device = "Microphone Array"` |
 | Ollama | 0.40.4 | Hermes 3 not pulled yet |
 | Ollama models already present | llama3.2:3b, gemma3:4b, qwen3-vl, nomic-embed-text, smollm2 | `nomic-embed-text` is useful later for tool retrieval |
 | git | 2.53.0 | Configured as PreeyasTumulu |
@@ -29,8 +30,10 @@ Checked on 2026-10-14 on the development laptop.
 ```powershell
 git clone https://github.com/PreeyasTumulu/JARVIS.git
 cd JARVIS
-uv sync
+uv sync --extra voice --extra piper
 ```
+
+`pyproject.toml` sets `python-preference = "only-managed"`, so uv downloads its own Python 3.12 the first time (about 30 MB, per user, no admin). Leave out `--extra voice --extra piper` if you only want text chat.
 
 ## 3. Local model (Phase 1)
 
@@ -79,7 +82,7 @@ Fill in only the keys you use. `.env` is gitignored and must never be committed.
 Copy-Item config/local.example.toml config/local.toml
 ```
 
-Set your app allowlist, model choice, and app aliases there (folder allowlist, home city, and hotkeys arrive in later phases). `config/local.toml` is gitignored.
+Set your app allowlist, model choice, app aliases, microphone, hotkeys, and voice there (folder allowlist and home city arrive in later phases). `config/local.toml` is gitignored.
 
 ## 5a. Run it (Phase 1)
 
@@ -93,6 +96,27 @@ uv run python scripts/benchmark_tools.py   # model accuracy and latency report
 ```
 
 Developer hooks (optional): `uv run pre-commit install` runs ruff and the dash check before each commit.
+
+## 5b. Voice (Phase 2)
+
+```powershell
+uv run jarvis setup-voice              # downloads Whisper small.en, the Piper voice, wake word + VAD (about 550 MB)
+uv run jarvis voice --list-devices     # microphones; the Windows default is marked
+uv run jarvis voice                    # push-to-talk
+uv run jarvis voice --wake             # push-to-talk plus "Hey Jarvis"
+uv run python scripts/voice_selftest.py            # wake word, VAD, and Whisper on synthesized speech
+uv run python scripts/voice_selftest.py --agent    # same, then runs the command and speaks the reply
+```
+
+| Key or phrase | What it does |
+|---|---|
+| Hold `Ctrl+Alt+J` | Push-to-talk: speak after the beep, release when done. Also interrupts Jarvis while it talks |
+| `Ctrl+Alt+X` | Stop: cancels the running command, speech, and any pending question |
+| "Hey Jarvis" (with `--wake`) | Starts listening; Jarvis stops recording when you pause for 0.8 s |
+| "stop", "cancel", "never mind" | Same as the stop key, handled without the model |
+| "yes", "go ahead", "send it" | Approves a confirmation. Anything else, or silence, is a no. `y`/`n` on the keyboard also work |
+
+Hotkeys are registered system wide while Jarvis runs. If one is taken by another app (on this laptop `Ctrl+Alt+Space` was), Jarvis says so at startup; pick another under `[voice]` in `config/local.toml`.
 
 ## 6. Windows settings
 
@@ -108,10 +132,10 @@ Run Jarvis as your normal user, not as administrator. Windows blocks a normal pr
 | Phase | Command | What it does |
 |---|---|---|
 | 2 | `uv sync --extra voice --extra piper` | faster-whisper, openWakeWord, sounddevice, Piper |
-| 2 | `uv sync --extra voice --extra kokoro` | Same, with Kokoro instead of Piper |
 | 6 | `uv run playwright install chromium` | Browser for Playwright tasks and WhatsApp Web |
+| 8 | Kokoro extra | Bundle-safe voice for the packaged build (ADR-021) |
 
-Voice models (Whisper, wake word, TTS voices) download on first use into `%LOCALAPPDATA%\Jarvis\models`.
+Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of time with `uv run jarvis setup-voice`, into `%LOCALAPPDATA%\Jarvis\models`.
 
 ## 8. Where Jarvis keeps data
 
@@ -133,4 +157,8 @@ None of this is inside the repository.
 | "Connection refused" to the model | Is Ollama running? Open `http://localhost:11434` in a browser. |
 | Very slow replies | `ollama ps` shows the CPU/GPU split. Close GPU-heavy apps, try `hermes3:3b`. |
 | The model answers in text instead of calling a tool | Make sure you are using the `jarvis-hermes3` model and Ollama is up to date. |
-| No audio input (Phase 2) | Windows microphone privacy setting, default input device in Sound settings. |
+| "is sending pure silence" at voice startup | The selected mic is muted or virtual. `uv run jarvis voice --list-devices`, then set `input_device` in `config/local.toml`. |
+| Jarvis never hears you | Windows privacy setting "Let desktop apps access your microphone", and the device above. |
+| "Could not register" a hotkey | Another app owns that combination. Change `ptt_hotkey` or `stop_hotkey` under `[voice]`. |
+| Jarvis's data is not in `%LOCALAPPDATA%\Jarvis` | You ran it with the Microsoft Store Python. Use `uv run jarvis ...` from the project folder (ADR-019). |
+| Wake word triggers by itself | Raise `wake_threshold` under `[voice]` (default 0.5). |

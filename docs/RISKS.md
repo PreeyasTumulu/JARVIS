@@ -18,6 +18,8 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R10 | Other websites talking to the local UI | Low | High | 127.0.0.1 bind, Origin check, per-launch token | 5 |
 | R11 | A stuck Windows call cannot be cancelled instantly | Medium | Low | Cooperative cancellation, per-tool timeouts, work isolated on worker threads | 1, 6 |
 | R12 | Private data reaches a cloud model | Low | High | Sensitivity labels, fresh public-only cloud context, guard that raises, dedicated tests | 8 |
+| R13 | Microsoft Store Python hides Jarvis's data (AppData redirection) | Happened | Medium | uv-managed Python only (ADR-019), CLI warning, data moved | 2 |
+| R14 | Wrong or silent microphone, hotkeys owned by other apps | Happened | Medium | Startup mic silence check, `--list-devices`, name-based device selection, hotkey conflict warnings | 2 |
 
 ## Details
 
@@ -76,6 +78,9 @@ Any text Jarvis reads (web pages, files, window text, notifications, clipboard) 
 
 - No acoustic echo cancellation is planned, so Jarvis's own voice can trigger the wake word. Wake word detection pauses while it speaks. Barge-in uses the push-to-talk hotkey.
 - Whisper `small.en` handles Indian English well in general, but names of people and Indian companies may be misheard. Contact and ticker aliases help, and a multilingual model is a config option.
+- Phase 2 was verified with synthesized speech (Windows SAPI voice) through the real models, not with a person talking into the laptop's microphone. Real-room accuracy, wake word false triggers, and the 0.8 s end-of-speech pause need your testing and probably some tuning (`wake_threshold`, `vad_threshold`, `end_silence_ms`).
+- On this laptop the Windows default input is AudioRelay's virtual microphone, which is silent unless the phone app streams to it, and the ASUS noise-cancelling input was also silent during setup. `config/local.toml` points Jarvis at the Realtek array. Jarvis checks the level at startup and warns about a silent device.
+- The ASUS "AI Noise-cancelling Input" may become the better choice once the ASUS app is running, because it removes background noise before Whisper hears it.
 
 ### R11. Cancellation
 

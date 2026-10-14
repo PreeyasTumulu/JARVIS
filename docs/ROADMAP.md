@@ -8,7 +8,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 |---|---|---|---|
 | 0 | Planning, docs, repository | Done | v0.0.1 |
 | 1 | Skeleton: config, model client, agent loop, registry, audit, CLI | Built, waiting for your test | v0.1.0 |
-| 2 | Voice: push-to-talk, then wake word | Planned | v0.2.0 |
+| 2 | Voice: push-to-talk, then wake word | Built on `phase/2-voice` (stacked on Phase 1), waiting for your test | v0.2.0 |
 | 3 | App index, VS Code, Docker, files | Planned | v0.3.0 |
 | 4 | Data APIs, fetch_page, system tools | Planned | v0.4.0 |
 | 5 | Web UI with live tool log and confirm buttons | Planned | v0.5.0 |
@@ -108,7 +108,19 @@ uv run python scripts/benchmark_tools.py
 - A typed command and the same spoken command produce the same tool calls.
 - Median time from end of speech to the tool starting is measured and reported.
 
-**Decisions:** STT model size and CPU vs GPU, hotkeys, voice choice, Piper vs Kokoro default.
+**Decisions:** STT model size and CPU vs GPU, hotkeys, voice choice, Piper vs Kokoro default. Resolved with defaults you can change in `config/local.toml`: ADR-020 (voice defaults), ADR-021 (Kokoro moves to Phase 8), ADR-022 (voice and keyboard confirmations).
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper
+uv run jarvis setup-voice
+uv run python scripts/voice_selftest.py --agent
+uv run jarvis voice
+uv run jarvis voice --wake
+```
+
+**Verified during the build (with synthesized speech, not a person talking):** the "hey jarvis" model fires about 50 ms after the phrase with a score of 0.99, Silero VAD notices the end of a command 0.8 s after it, Whisper `small.en` transcribes it exactly in about 1.3 s, and the agent then opens Notepad and Piper speaks the reply. End of speech to text ready: about 2.1 s.
 
 ## Phase 3: Apps, VS Code, Docker, files
 

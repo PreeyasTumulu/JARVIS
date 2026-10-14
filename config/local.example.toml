@@ -1,0 +1,16 @@
+# Copy to config/local.toml and edit. Anything here overrides config/jarvis.toml.
+# Tables merge key by key; lists replace the default list entirely.
+
+# Use the smaller model if the 8B one is too slow on your GPU.
+# [llm.providers.local]
+# model = "jarvis-hermes3-3b"
+
+# [safety]
+# app_allowlist = ["Notepad", "Visual Studio Code", "Docker Desktop", "Spotify"]
+# unlisted_apps = "block"
+
+# [apps.aliases]
+# "music" = "Spotify"
+
+# [tts]
+# rate = 2

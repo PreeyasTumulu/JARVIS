@@ -1,0 +1,63 @@
+# Jarvis default configuration (committed).
+# Put your own changes in config/local.toml, which is gitignored and overrides these values.
+# Secrets never go here. They go in .env (see .env.example).
+
+[agent]
+max_iterations = 6           # model calls per command before giving up
+turn_timeout_s = 120         # hard ceiling for one command
+tool_timeout_s = 20          # default per tool call, tools can override
+max_tool_calls_per_step = 4  # parallel tool calls accepted from one model reply
+history_turns = 8            # past commands kept in the conversation
+max_tool_result_chars = 4000 # tool output is truncated to this before the model sees it
+
+[llm]
+default = "local"
+
+[llm.providers.local]
+base_url = "http://localhost:11434/v1"
+model = "jarvis-hermes3"     # created from config/ollama/hermes3-8b.Modelfile
+temperature = 0.2
+timeout_s = 120
+
+[safety]
+# Apps that open without asking. Others follow unlisted_apps.
+app_allowlist = [
+    "Notepad",
+    "Calculator",
+    "Visual Studio Code",
+    "Docker Desktop",
+    "Claude",
+    "WhatsApp",
+    "Google Chrome",
+    "Microsoft Edge",
+    "File Explorer",
+    "Settings",
+]
+unlisted_apps = "confirm"    # "confirm" or "block"
+confirm_timeout_s = 30       # no answer within this time means no
+
+[safety.tool_risk_overrides]
+# Raise a tool's risk level, for example: open_app = "confirm"
+# Values below a tool's built-in floor are ignored, so this can only tighten.
+
+[apps]
+match_threshold = 75         # 0 to 100, minimum fuzzy match score for an app name
+
+[apps.aliases]
+"vs code" = "Visual Studio Code"
+"vscode" = "Visual Studio Code"
+"code" = "Visual Studio Code"
+"docker" = "Docker Desktop"
+"chrome" = "Google Chrome"
+"edge" = "Microsoft Edge"
+"explorer" = "File Explorer"
+"file explorer" = "File Explorer"
+"calc" = "Calculator"
+
+[search]
+max_results = 5
+region = "us-en"
+
+[tts]
+engine = "sapi"              # Phase 2 adds "piper" and "kokoro"
+rate = 0                     # -10 (slow) to 10 (fast)

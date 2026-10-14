@@ -1,0 +1,6 @@
+# Jarvis alias for Hermes 3 8B with a context window large enough for tool schemas.
+# Create it with:
+#   ollama create jarvis-hermes3 -f config/ollama/hermes3-8b.Modelfile
+FROM hermes3:8b
+PARAMETER num_ctx 8192
+PARAMETER temperature 0.2

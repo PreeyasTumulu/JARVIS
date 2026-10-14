@@ -1,0 +1,46 @@
+# Secrets and personal config (never commit)
+.env
+.env.*
+!.env.example
+config/local.toml
+
+# Personal runtime data (normally in %LOCALAPPDATA%\Jarvis, ignored here in case of local overrides)
+/data/
+/logs/
+/models/
+/browser-profile/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Downloaded models and audio
+*.onnx
+*.tflite
+*.wav
+*.mp3
+
+# Playwright
+test-results/
+playwright-report/
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store

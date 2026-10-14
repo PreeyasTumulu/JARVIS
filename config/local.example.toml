@@ -13,4 +13,13 @@
 # "music" = "Spotify"
 
 # [tts]
-# rate = 2
+# engine = "piper"               # or "sapi" (built-in Windows voice)
+# piper_voice = "en_US-lessac-medium"
+# piper_speed = 1.1
+
+# [voice]
+# input_device = "Microphone Array"   # part of a name from: uv run jarvis voice --list-devices
+# ptt_hotkey = "ctrl+alt+j"
+# stop_hotkey = "ctrl+alt+x"
+# wake_word_enabled = true            # same as: uv run jarvis voice --wake
+# stt_model = "base.en"               # about 3x faster than small.en, a little less accurate

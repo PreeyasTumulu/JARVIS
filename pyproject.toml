@@ -19,6 +19,17 @@ dependencies = [
 [project.scripts]
 jarvis = "jarvis.cli:main"
 
+[project.optional-dependencies]
+voice = [
+    "faster-whisper>=1.2.1",
+    "numpy>=2.4.6",
+    "openwakeword>=0.6.0",
+    "sounddevice>=0.5.6",
+]
+piper = [
+    "piper-tts>=1.8.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -27,6 +38,11 @@ dev = [
     "mypy>=1.11",
     "pre-commit>=3.8",
 ]
+
+[tool.uv]
+# The Microsoft Store Python sandboxes AppData writes, which hides Jarvis's data folder.
+# uv's own Python builds behave like a normal install. See docs/DECISIONS.md ADR-019.
+python-preference = "only-managed"
 
 [build-system]
 requires = ["hatchling>=1.27"]
@@ -53,7 +69,7 @@ mypy_path = "src"
 packages = ["jarvis"]
 
 [[tool.mypy.overrides]]
-module = ["ddgs", "ddgs.*"]
+module = ["ddgs", "ddgs.*", "faster_whisper", "openwakeword.*", "sounddevice", "piper", "piper.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

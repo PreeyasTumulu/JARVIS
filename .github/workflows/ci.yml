@@ -16,7 +16,7 @@ jobs:
           enable-cache: true
 
       - name: Install
-        run: uv sync --locked
+        run: uv sync --locked --extra voice
 
       - name: Lint
         run: uv run ruff check .

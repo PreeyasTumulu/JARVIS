@@ -1,9 +1,10 @@
-"""Command line entry point: `jarvis chat`, `jarvis ask`, `jarvis audit`, `jarvis version`."""
+"""Command line entry point: chat, ask, voice, setup-voice, audit, version."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 from datetime import datetime
 
 from rich.console import Console
@@ -33,6 +34,13 @@ def build_parser() -> argparse.ArgumentParser:
         cmd.add_argument("--model", help="use a different model for this session")
         cmd.add_argument("--speak", action="store_true", help="also speak every reply aloud")
 
+    voice = sub.add_parser("voice", help="talk to Jarvis: push-to-talk, optional wake word")
+    voice.add_argument("--wake", action="store_true", help='also listen for "hey jarvis"')
+    voice.add_argument("--model", help="use a different model for this session")
+    voice.add_argument("--list-devices", action="store_true", help="list microphones and exit")
+
+    sub.add_parser("setup-voice", help="download the speech, voice, and wake word models")
+
     audit = sub.add_parser("audit", help="show recent tool calls from the audit log")
     audit.add_argument("--last", type=int, default=20, help="how many entries (default 20)")
 
@@ -46,6 +54,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "version":
         console.print(f"jarvis {__version__}")
         return 0
+    if _is_store_python():
+        console.print(
+            "[yellow]This is the Microsoft Store Python, which hides Jarvis's data folder. "
+            "Use `uv run jarvis ...` from the project folder instead (see ADR-019).[/yellow]"
+        )
 
     try:
         settings = load_settings()
@@ -56,6 +69,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "audit":
         return show_audit(settings, args.last, console)
+    if args.command in ("voice", "setup-voice"):
+        try:
+            from jarvis.voice import runner
+        except ImportError:
+            console.print(
+                "[red]Voice support is not installed. Run: "
+                "uv sync --extra voice --extra piper[/red]"
+            )
+            return 2
+        if args.command == "setup-voice":
+            return runner.setup_voice(settings, console)
+        if args.list_devices:
+            return runner.list_devices(console)
+        if args.model:
+            settings.llm.active().model = args.model
+        return runner.run_voice(settings, console, wake=args.wake, verbose=args.verbose)
 
     if args.model:
         settings.llm.active().model = args.model
@@ -118,6 +147,12 @@ def run_chat(
         finally:
             runner.run(app.aclose())
     return 0
+
+
+def _is_store_python() -> bool:
+    return "PythonSoftwareFoundation.Python" in sys.base_prefix or (
+        "WindowsApps" in sys.base_prefix
+    )
 
 
 async def _speak_quietly(tts: TTSEngine, text: str, console: Console) -> None:

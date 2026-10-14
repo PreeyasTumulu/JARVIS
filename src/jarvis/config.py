@@ -87,8 +87,33 @@ class SearchSettings(_Section):
 
 
 class TTSSettings(_Section):
-    engine: Literal["sapi"] = "sapi"
-    rate: int = Field(default=0, ge=-10, le=10)
+    engine: Literal["piper", "sapi"] = "piper"
+    piper_voice: str = "en_GB-alan-medium"
+    piper_speed: float = Field(default=1.0, gt=0.25, le=3.0)
+    rate: int = Field(default=0, ge=-10, le=10)  # SAPI only
+
+
+class VoiceSettings(_Section):
+    input_device: str | int | None = None  # None means the Windows default microphone
+    ptt_hotkey: str = "ctrl+alt+j"
+    stop_hotkey: str = "ctrl+alt+x"
+    stt_model: str = "small.en"
+    stt_device: Literal["cpu", "cuda", "auto"] = "cpu"
+    stt_compute_type: str = "int8"
+    stt_cpu_threads: int = Field(default=8, ge=0)  # 0 lets CTranslate2 decide
+    stt_beam_size: int = Field(default=1, ge=1, le=10)
+    stt_language: str | None = "en"
+    stt_hint: str = (
+        "Jarvis, open, close, search, VS Code, Docker, WhatsApp, Notepad, Chrome, Calculator."
+    )
+    wake_word: str = "hey_jarvis"
+    wake_word_enabled: bool = False
+    wake_threshold: float = Field(default=0.5, gt=0, lt=1)
+    vad_threshold: float = Field(default=0.5, gt=0, lt=1)
+    end_silence_ms: int = Field(default=800, ge=200)
+    max_utterance_s: float = Field(default=12, gt=1)
+    no_speech_timeout_s: float = Field(default=5, gt=0.5)
+    earcons: bool = True
 
 
 def default_data_dir() -> Path:
@@ -103,7 +128,12 @@ class Settings(_Section):
     apps: AppsSettings = AppsSettings()
     search: SearchSettings = SearchSettings()
     tts: TTSSettings = TTSSettings()
+    voice: VoiceSettings = VoiceSettings()
     data_dir: Path = Field(default_factory=default_data_dir)
+
+    @property
+    def models_dir(self) -> Path:
+        return self.data_dir / "models"
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

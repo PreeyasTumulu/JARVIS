@@ -93,12 +93,14 @@ class HistoryLog:
         model: str | None,
         iterations: int,
         latency_ms: int,
+        timings: dict[str, int] | None = None,
     ) -> None:
         self._db.conn.execute(
             """
             INSERT INTO command_history (ts, session_id, turn_id, source, input_text,
-                                         response_text, status, model, iterations, latency_ms)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                         response_text, status, model, iterations, latency_ms,
+                                         timings_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 utc_now(),
@@ -111,6 +113,7 @@ class HistoryLog:
                 model,
                 iterations,
                 latency_ms,
+                None if timings is None else to_json(timings),
             ),
         )
 

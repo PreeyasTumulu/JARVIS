@@ -50,6 +50,10 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_audit_turn ON audit_log (turn_id);
     CREATE INDEX idx_history_ts ON command_history (ts);
     """,
+    # 2: per-stage timings (stt_ms, llm_ms, first_tool_ms, turn_ms, ...) as JSON
+    """
+    ALTER TABLE command_history ADD COLUMN timings_json TEXT;
+    """,
 ]
 
 

@@ -19,10 +19,17 @@ from jarvis.core.events import (
     ModelReplied,
     ToolCallFinished,
     ToolCallStarted,
+    TranscriptHeard,
     TurnFinished,
+    VoiceStateChanged,
 )
 
 _YES = {"y", "yes"}
+_STATE_LABELS = {
+    "listening": "[bold yellow]listening[/bold yellow]",
+    "awaiting_answer": "[bold yellow]waiting for your answer[/bold yellow]",
+    "transcribing": "[dim]transcribing[/dim]",
+}
 
 
 async def read_line() -> str:
@@ -68,7 +75,7 @@ class ConsoleChannel:
         self._console.print(
             f"[yellow]Allow? y/N ({request.timeout_s:.0f}s to answer)[/yellow] ", end=""
         )
-        answer = await read_line()
+        answer = await self._read()
         return answer.strip().casefold() in _YES
 
     async def ask(self, question: str, options: Sequence[str] | None = None) -> str:
@@ -76,10 +83,17 @@ class ConsoleChannel:
         for number, option in enumerate(options or [], start=1):
             self._console.print(f"  {number}. {escape(option)}")
         self._console.print("[magenta]>[/magenta] ", end="")
-        answer = (await read_line()).strip()
+        answer = (await self._read()).strip()
         if options and answer.isdigit() and 1 <= int(answer) <= len(options):
             return options[int(answer) - 1]
         return answer
+
+    async def _read(self) -> str:
+        try:
+            return await read_line()
+        except asyncio.CancelledError:
+            self._console.print()  # another channel (voice) answered first; end the prompt line
+            raise
 
 
 class ConsoleRenderer:
@@ -105,8 +119,17 @@ class ConsoleRenderer:
                 console.print(f"    {mark} {escape(summary)} [dim]{decision}, {ms} ms[/dim]")
             case AssistantMessage(text=text):
                 console.print(f"[bold green]jarvis[/bold green] > {escape(text)}")
-            case TurnFinished(status=status, latency_ms=ms) if self._verbose:
-                console.print(f"  [dim]turn {status} in {ms / 1000:.1f}s[/dim]")
+            case TurnFinished(status=status, latency_ms=ms, timings=timings) if self._verbose:
+                detail = f" {timings}" if timings else ""
+                console.print(f"  [dim]turn {status} in {ms / 1000:.1f}s{detail}[/dim]")
+            case TranscriptHeard(text=text, stt_ms=stt_ms):
+                console.print(
+                    f"[bold cyan]you[/bold cyan] [dim](voice)[/dim] > {escape(text)} "
+                    f"[dim]heard in {stt_ms / 1000:.1f}s[/dim]"
+                )
+            case VoiceStateChanged(state=state, detail=detail) if state in _STATE_LABELS:
+                suffix = f" [dim]({escape(detail)})[/dim]" if detail else ""
+                console.print(f"  {_STATE_LABELS[state]}{suffix}")
             case _:
                 pass
 

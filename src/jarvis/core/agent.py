@@ -53,6 +53,7 @@ class TurnResult:
     iterations: int
     latency_ms: int
     outcomes: list[CallOutcome] = field(default_factory=list)
+    timings: dict[str, int] = field(default_factory=dict)
 
     @property
     def sensitivity(self) -> Sensitivity:
@@ -104,7 +105,10 @@ class Agent:
         loop.call_soon_threadsafe(task.cancel)
         return True
 
-    async def run_turn(self, text: str, source: str = "cli") -> TurnResult:
+    async def run_turn(
+        self, text: str, source: str = "cli", timings: dict[str, int] | None = None
+    ) -> TurnResult:
+        """Run one command. `timings` carries stage times measured before the turn (e.g. STT)."""
         turn_id = uuid.uuid4().hex[:12]
         started = time.perf_counter()
         self._task = asyncio.current_task()
@@ -114,10 +118,13 @@ class Agent:
         mark = len(self._messages)
         self._messages.append({"role": "user", "content": text})
         outcomes: list[CallOutcome] = []
+        stage_times = dict(timings or {})
         iterations = 0
         try:
             async with asyncio.timeout(self._settings.agent.turn_timeout_s):
-                reply, status, iterations = await self._loop(turn_id, outcomes)
+                reply, status, iterations = await self._loop(
+                    turn_id, outcomes, stage_times, started
+                )
         except TimeoutError:
             reply, status = "That took too long, so I stopped.", TurnStatus.TIMEOUT
         except asyncio.CancelledError:
@@ -142,13 +149,24 @@ class Agent:
         self._trim_history()
 
         latency_ms = int((time.perf_counter() - started) * 1000)
-        result = TurnResult(turn_id, reply, status, iterations, latency_ms, outcomes)
+        stage_times["turn_ms"] = latency_ms
+        result = TurnResult(
+            turn_id, reply, status, iterations, latency_ms, outcomes, timings=stage_times
+        )
         self._record_history(result, text, source)
         await self._bus.publish(AssistantMessage(turn_id=turn_id, text=reply))
-        await self._bus.publish(TurnFinished(turn_id=turn_id, status=status, latency_ms=latency_ms))
+        await self._bus.publish(
+            TurnFinished(turn_id=turn_id, status=status, latency_ms=latency_ms, timings=stage_times)
+        )
         return result
 
-    async def _loop(self, turn_id: str, outcomes: list[CallOutcome]) -> tuple[str, TurnStatus, int]:
+    async def _loop(
+        self,
+        turn_id: str,
+        outcomes: list[CallOutcome],
+        stage_times: dict[str, int],
+        started: float,
+    ) -> tuple[str, TurnStatus, int]:
         agent_cfg = self._settings.agent
         ctx = ToolContext(
             settings=self._settings,
@@ -159,6 +177,7 @@ class Agent:
         )
         for iteration in range(1, agent_cfg.max_iterations + 1):
             reply = await self._llm.complete(self._model_messages(), self._registry.schemas())
+            stage_times["llm_ms"] = stage_times.get("llm_ms", 0) + reply.latency_ms
             calls = reply.tool_calls[: agent_cfg.max_tool_calls_per_step]
             await self._bus.publish(
                 ModelReplied(
@@ -181,6 +200,7 @@ class Agent:
                 }
             )
             for call in calls:
+                stage_times.setdefault("first_tool_ms", int((time.perf_counter() - started) * 1000))
                 outcome = await self._executor.run(call, ctx)
                 outcomes.append(outcome)
                 self._messages.append(
@@ -218,6 +238,7 @@ class Agent:
                 model=self._llm.model,
                 iterations=result.iterations,
                 latency_ms=result.latency_ms,
+                timings=result.timings,
             )
         except Exception:
             log.exception("Failed to record command history")

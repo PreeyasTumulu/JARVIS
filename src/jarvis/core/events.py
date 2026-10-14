@@ -65,6 +65,20 @@ class TurnFinished:
     turn_id: str
     status: str
     latency_ms: int
+    timings: dict[str, int] | None = None
+
+
+@dataclass(frozen=True)
+class VoiceStateChanged:
+    state: str  # idle, listening, transcribing, thinking, speaking, awaiting_answer
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class TranscriptHeard:
+    text: str
+    audio_ms: int
+    stt_ms: int
 
 
 Event = (
@@ -75,6 +89,8 @@ Event = (
     | ToolCallFinished
     | AssistantMessage
     | TurnFinished
+    | VoiceStateChanged
+    | TranscriptHeard
 )
 Handler = Callable[[Event], Awaitable[None] | None]
 

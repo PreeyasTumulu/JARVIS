@@ -2,7 +2,7 @@
 
 A local-first, voice-controlled desktop assistant for Windows 11. Say (or type) a command, and Jarvis plans it with a local LLM, calls typed tools to operate your laptop, and answers out loud.
 
-> **Status: Phase 2 (voice) built.** Talk to Jarvis with push-to-talk or "Hey Jarvis": local Whisper hears you, Hermes 3 plans and calls tools (open apps, search the web, speak, ask questions), risky actions wait for a spoken or typed yes, Piper answers out loud, and every tool call is audited. Phases 1 and 2 are waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
+> **Status: Phase 3 (apps, files, Docker) built.** Talk to Jarvis with push-to-talk or "Hey Jarvis", or type. It opens, switches to, and closes apps; finds, opens, and reads files in folders you allow (text, PDF, Word); opens projects in VS Code; lists and controls Docker containers; searches the web; and answers in short spoken sentences. Risky actions wait for your yes, and every tool call is audited. Phases 1 to 3 are waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 

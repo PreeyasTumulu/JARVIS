@@ -136,13 +136,42 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** keeps the safety rule (explicit yes only) while letting you answer whichever way is convenient. The same channel race will include the web UI in Phase 5.
 - **Cost:** "okay" and "sure" do not count as yes, by design.
 
+### ADR-023: Everything if installed, otherwise Jarvis's own file index
+
+- **Decision:** `find_file` uses Everything's `es.exe` automatically when it is installed (`files.everything = "auto"`), and otherwise a SQLite index of the allowed folders, built on first use and rebuilt in the background after 12 hours. Results from either source go through the same allowlist and ranking.
+- **Why:** installing system software needs your OK, and the built-in index is fast enough here: about 20,000 entries in a few seconds, searched in about 6 ms. Everything stays a free upgrade (always current, no rebuilds).
+- **Cost:** files created since the last build are found only after the next rebuild (`uv run jarvis index` forces one).
+
+### ADR-024: Windows control through Win32, politely
+
+- **Decision:** windows are listed, focused, and closed with plain Win32 calls through ctypes (`platform/windows.py`). Closing sends WM_CLOSE (the X button), never a process kill. Desktop and taskbar windows are excluded. `close_app` asks first unless the app is on `safety.safe_to_close` and no window title shows unsaved changes (`*` or a dot marker).
+- **Why:** no extra dependency, a few milliseconds per call, and apps keep their own "save changes?" dialogs. pywinauto comes in Phase 6 for element-level automation.
+- **Cost:** unsaved-change detection is a title heuristic; apps that do not mark their titles rely on their own save prompt.
+
+### ADR-025: Keyword tool routing
+
+- **Decision:** each request gets only the tool groups its words point to (apps, files, docker, web), or every tool when nothing matches (`core/tool_routing.py`, `agent.tool_routing`).
+- **Why:** measured on 30 commands with Hermes 3 8B, first-call accuracy was 80% with all 16 tools and 87% with routing, and the median call got slightly faster.
+- **Cost:** a request phrased with none of the keywords sees all tools (the old behaviour). Embedding-based retrieval is the next step if needed.
+
+### ADR-026: Recover from invented file paths
+
+- **Decision:** `open_file`, `read_file`, and `vscode_open` search for the words of a path that does not exist, use the best hit if it leads the next one clearly, and otherwise return the closest real paths.
+- **Why:** the 8B model sometimes calls `read_file("/path/to/my/jarvis/readme.md")` instead of searching first.
+- **Cost:** a lookup can pick a file the user did not mean when one candidate dominates. Reading is local and private; opening programs still asks first.
+
+### ADR-027: Short spoken replies
+
+- **Decision:** tool results include a one-sentence `summary`, list results end with a reply instruction (how many, at most three names), the system prompt describes the spoken style concretely, and replies are capped at 300 tokens.
+- **Why:** listing seven containers as markdown took the 8B model 40 to 60 seconds. After the change the same question took 4.7 s with a two-sentence answer.
+- **Cost:** less detail by default; the user can ask for more.
+
 ## Open decisions
 
 These are asked when the phase starts, not before.
 
 | Phase | Decision | Options |
 |---|---|---|
-| 3 | File search | Install Everything (voidtools) vs built-in index |
 | 6 | WhatsApp automation | Accept the account risk described in RISKS.md |
 | 7 | Notification source | Windows listener vs WhatsApp Web polling, after the spike |
 | 8 | Cloud provider and budget | DeepSeek or another OpenAI-compatible API, monthly cap |

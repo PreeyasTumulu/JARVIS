@@ -9,7 +9,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 0 | Planning, docs, repository | Done | v0.0.1 |
 | 1 | Skeleton: config, model client, agent loop, registry, audit, CLI | Built, waiting for your test | v0.1.0 |
 | 2 | Voice: push-to-talk, then wake word | Built on `phase/2-voice` (stacked on Phase 1), waiting for your test | v0.2.0 |
-| 3 | App index, VS Code, Docker, files | Planned | v0.3.0 |
+| 3 | App index, VS Code, Docker, files | Built on `phase/3-apps-files` (stacked on Phase 2), waiting for your test | v0.3.0 |
 | 4 | Data APIs, fetch_page, system tools | Planned | v0.4.0 |
 | 5 | Web UI with live tool log and confirm buttons | Planned | v0.5.0 |
 | 6 | UI automation, Playwright, WhatsApp | Planned | v0.6.0 |
@@ -141,7 +141,23 @@ uv run jarvis voice --wake
 - "What containers are running" answers. "Stop the postgres container" asks first.
 - A path outside the allowlist is blocked and shows up in the audit log as blocked.
 
-**Decisions:** install Everything (voidtools) for fast file search, or stay with the built-in index.
+**Decisions:** install Everything (voidtools) for fast file search, or stay with the built-in index. Resolved: no install needed. Jarvis uses Everything automatically if `es.exe` is present, and its own SQLite index otherwise (ADR-023).
+
+**Test commands**
+
+```powershell
+uv run jarvis index
+uv run jarvis ask "what docker containers are running"
+uv run jarvis ask "find my resume"
+uv run jarvis ask "read the readme of my jarvis project and tell me in one sentence what it is"
+uv run jarvis ask "open the calculator"
+uv run jarvis ask "close the calculator"
+uv run python scripts/benchmark_tools.py --models jarvis-hermes3 --out docs/benchmarks/phase3.md
+```
+
+**Verified during the build (live, on this laptop):** 332 apps and 20,059 files indexed in 8 s; file search in about 6 ms; spoken names resolve correctly ("vs code", "docker", "whatsapp", "brave"); Calculator opened, focused, and closed (close in 265 ms, no prompt because it is on the safe list); Notepad brought to the front from a background process; Docker containers listed; the Jarvis README found and summarized in one sentence; a Notepad window with unsaved changes is detected from its title. Not exercised live, on purpose: stopping or starting your containers, opening files from Explorer selections, and opening files in VS Code (all covered by tests with fakes).
+
+**Measured:** with all 16 tools, Hermes 3 8B picked the right first tool for 80% of 30 benchmark commands; keyword tool routing raised that to 87% ([phase3.md](benchmarks/phase3.md), [phase3-all-tools.md](benchmarks/phase3-all-tools.md)). Wrong first calls usually recover inside the turn, because invalid arguments and unknown names come back to the model as errors.
 
 ## Phase 4: Data APIs and system tools
 

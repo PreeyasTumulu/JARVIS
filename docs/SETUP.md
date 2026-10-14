@@ -118,6 +118,17 @@ uv run python scripts/voice_selftest.py --agent    # same, then runs the command
 
 Hotkeys are registered system wide while Jarvis runs. If one is taken by another app (on this laptop `Ctrl+Alt+Space` was), Jarvis says so at startup; pick another under `[voice]` in `config/local.toml`.
 
+## 5c. Apps, files, and Docker (Phase 3)
+
+```powershell
+uv run jarvis index                    # rebuild the app and file indexes now (otherwise automatic)
+```
+
+- Jarvis only finds, opens, and reads files inside `[files] allowed_folders`. The defaults are `{documents}`, `{desktop}`, and `{downloads}`, which follow OneDrive (on this laptop Documents and Desktop live in `OneDrive`). `config/local.toml` adds `C:/Internships`. Lists replace, so keep the defaults when you add a folder.
+- Optional: installing [Everything](https://www.voidtools.com/) (with its `es.exe` command line tool) makes file search instant and always current. Jarvis picks it up automatically.
+- Optional: set VS Code's `window.title` to include `${activeEditorLong}` so "this file" always resolves to the exact path. Without it Jarvis looks the name up in the file index.
+- Docker tools need the Docker engine running; Jarvis says so if it is not. Starting and stopping containers always asks first.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

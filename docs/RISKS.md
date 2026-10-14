@@ -20,6 +20,8 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R12 | Private data reaches a cloud model | Low | High | Sensitivity labels, fresh public-only cloud context, guard that raises, dedicated tests | 8 |
 | R13 | Microsoft Store Python hides Jarvis's data (AppData redirection) | Happened | Medium | uv-managed Python only (ADR-019), CLI warning, data moved | 2 |
 | R14 | Wrong or silent microphone, hotkeys owned by other apps | Happened | Medium | Startup mic silence check, `--list-devices`, name-based device selection, hotkey conflict warnings | 2 |
+| R15 | The model misreads tool data in its answer (said a stopped container was running) | Medium | Low | Short summaries computed in code, ask for details when it matters; revisit with a larger or cloud model | 3 |
+| R16 | Tool choice degrades as tools are added (80% first-call accuracy with 16 tools) | Happened | Medium | Keyword routing (87%), clear tool descriptions, errors that guide a retry, benchmark per phase | 3, 4 |
 
 ## Details
 
@@ -27,6 +29,7 @@ Things that are unreliable, fragile, or risky, written down before building so t
 
 - `hermes3:8b` is 4.7 GB at its default quantization. The RTX 3050 Laptop GPU has 4 GB, so Ollama will put part of the model on the CPU. Expect noticeably slower generation than a model that fits fully.
 - Prompt processing matters as much as generation. Tool schemas add a few thousand tokens to every request. Keeping the system prompt and tool list identical within a session lets Ollama reuse its cache.
+- Phase 3 replies: list-shaped tool results made the 8B model write long markdown lists (40 to 60 s of generation). Spoken summaries and a reply instruction brought this down to a few seconds (ADR-027).
 - `hermes3:3b` (2.0 GB) fits on the GPU and is faster, but in the Phase 1 benchmark it produced malformed tool calls (the function name in the arguments field, no tags) and called no tools at all. See [benchmarks/phase1.md](benchmarks/phase1.md).
 - Measured in Phase 1: `hermes3:8b` picks the right tool on 20 of 20 test commands at about 3 seconds per model call, so a typical command (tool call, then a spoken answer) takes 5 to 7 seconds. The Ollama settings in SETUP.md (flash attention, q8_0 KV cache) should move more of the model onto the GPU.
 - faster-whisper on the GPU would compete for the same 4 GB, which is why STT runs on CPU by default.

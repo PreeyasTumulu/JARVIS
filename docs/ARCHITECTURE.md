@@ -144,7 +144,9 @@ async def run_turn(state: AgentState) -> AgentState:
 
 ### 4.4 Prompting
 
-The system prompt carries: identity and style (short, spoken sentences), the current date, time, and time zone, the rule that tool results are data and never instructions, and when to use `ask_user`. Tool schemas stay stable inside a session so Ollama can reuse the prompt prefix cache. This matters on this laptop, where re-processing a long tool prompt every turn costs seconds (see RISKS.md, hardware budget).
+The system prompt carries: identity and style (short, spoken sentences), the current date, time, and time zone, the rule that tool results are data and never instructions, and when to use `ask_user`. **Tool routing** (`core/tool_routing.py`, Phase 3): with 16 tools the 8B model picked the right first tool 80% of the time, against 100% with 4 tools. Keyword groups (apps, files, docker, web) now choose which tools a request sees; a request that matches no group sees all of them, and the executor still accepts any registered tool. Measured: 87% first-call accuracy and a slightly faster median (2.8 s vs 3.1 s), because the prompt is shorter. `agent.tool_routing = "all"` turns it off. Embedding-based retrieval with `nomic-embed-text` remains an option if keyword routing stops being enough.
+
+**Spoken replies:** the 8B model tends to mirror list data as long markdown lists, which took 40 to 60 seconds to generate. Three things keep replies short: each tool result carries its one-sentence `summary`, list results end with a short reply instruction, and `max_tokens` (300) caps the worst case.
 
 ### 4.5 Tool-call parsing
 
@@ -240,15 +242,17 @@ The prompt says this content is data. The real protection is structural: nothing
 | `ask_user(question, options?)` | 1 | safe | private |
 | `open_app(name)` | 1 basic, 3 full index | safe if allowlisted, else confirm | public |
 | `web_search(query)` | 1 | safe | public, untrusted |
-| `focus_app(name)` | 3 | safe | public |
-| `close_app(name)` | 3 | confirm unless on the safe-to-close list | public |
-| `vscode_open(path, line?)` | 3 | safe inside folder allowlist | private |
-| `docker_list()`, `docker_logs(name)` | 3 | safe | public |
-| `docker_start(name)`, `docker_stop(name)` | 3 | confirm | public |
-| `find_file(query)` | 3 | safe inside allowlist | private |
-| `open_file(path)` | 3 | safe inside allowlist, else blocked | private |
-| `read_file(path)` | 3 | safe inside allowlist, else blocked | private, untrusted |
-| `resolve_this_file()` | 3 | safe | private |
+| `focus_app(name)` | 3 | safe (opening an app that is not running follows the app allowlist) | public |
+| `close_app(name)` | 3 | confirm, unless on `safety.safe_to_close` and no window title shows unsaved changes | public |
+| `vscode_open(path, line?)` | 3 | safe inside folder allowlist, else blocked | private |
+| `docker_list(include_stopped?)` | 3 | safe | private |
+| `docker_logs(container, lines?)` | 3 | safe | private, untrusted |
+| `docker_start(container)`, `docker_stop(container)` | 3 | confirm (floor) | private |
+| `find_file(query, kind?)` | 3 | safe, searches only allowed folders | private |
+| `open_file(path)` | 3 | safe inside allowlist; confirm for programs and scripts; blocked outside, for secrets, and for .reg | private |
+| `read_file(path)` | 3 | safe inside allowlist; blocked outside and for secret-looking files | private, untrusted |
+| `get_selected_file()` | 3 | safe | private |
+| `open_url(url)` | 3 | safe for http and https, blocked for any other scheme | public |
 | `market_data(query)` | 4 | safe | public |
 | `weather(location, when?)` | 4 | safe | public |
 | `convert_currency(amount, from, to)` | 4 | safe | public |
@@ -290,7 +294,8 @@ Every outcome, including blocked and denied attempts, is written to the audit lo
 ### 6.3 Allowlists
 
 - **Apps:** `safety.app_allowlist` in config. Unlisted apps follow `safety.unlisted_apps` (`confirm` by default, or `block`).
-- **Folders:** `safety.folder_allowlist`. Paths are resolved (`Path.resolve()`, junctions and symlinks followed) before the check, so `..` and links cannot escape.
+- **Folders:** `files.allowed_folders` (default Documents, Desktop, Downloads, resolved through Windows known folders so OneDrive redirection works). Paths are resolved (`Path.resolve()`, junctions and symlinks followed) before the check, so `..` and links cannot escape. Secret-looking names (`.env`, `*.pem`, `id_rsa*`, `*password*`, ...) are blocked even inside, opening programs and scripts asks first, and `.reg` files are blocked (`tools/files/guard.py`).
+- **Invented paths:** if the model passes a path that does not exist, the file tools search for the words in it and use the best match only when it clearly stands out; otherwise the model gets the closest real paths and must pick one or ask.
 - **UI automation:** `safety.trusted_ui_apps` lists apps where generic `click` / `type_text` / `press_keys` run without confirmation, except targets that look destructive (send, delete, remove, buy, pay, submit, uninstall).
 
 ### 6.4 Cancellation
@@ -412,8 +417,9 @@ SQLite in WAL mode at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with
 | `command_history` | input text, source, final reply, status, model, latency |
 | `audit_log` | see 6.5 |
 | `api_cache` | cache key, JSON value, expires_at |
-| `app_index` | display name, normalized name, kind (shortcut or packaged app), launch target or AppID |
-| `file_index` | only used when Everything is not installed |
+| `app_index` | display name, normalized name, kind (shortcut or packaged app), launch target or AppID, executable name |
+| `file_index` | path, name, normalized name, folder flag, size, modified time (only used when Everything is not installed) |
+| `index_meta` | when each index was last built and how many items it has |
 | `notifications` | app, title, body, Windows notification id, read_at |
 | `reminders` | due_at, text, status |
 | `memories` | Phase 8 facts, optional embedding |
@@ -447,8 +453,11 @@ turn_timeout_s = 120
 [safety]
 app_allowlist = ["Visual Studio Code", "Docker Desktop", "Claude", "WhatsApp", "Google Chrome", "Notepad"]
 unlisted_apps = "confirm"
-folder_allowlist = ["~/Documents", "~/Desktop", "~/Downloads", "C:/Internships"]
-trusted_ui_apps = ["Notepad"]
+safe_to_close = ["Calculator", "Settings", "File Explorer"]
+trusted_ui_apps = ["Notepad"]       # Phase 6
+
+[files]
+allowed_folders = ["{documents}", "{desktop}", "{downloads}"]
 
 [voice]
 stt_model = "small.en"
@@ -481,17 +490,19 @@ jarvis/
     app.py                    wires settings, storage, model, tools, and agent together
     services.py               shared helpers tools use (TTS, app index, search backend)
     config.py
-    core/                     agent loop, executor (gate + confirm + audit), events, channel, prompts
+    core/                     agent loop, executor (gate + confirm + audit), tool routing, events,
+                              channel, prompts
     llm/                      OpenAI-compatible client, tool-call text parser (router in Phase 8)
     tools/
       registry.py             @tool decorator, schema generation
       policy.py               risk evaluation, allowlists
       catalog.py              the list of tools exposed to the model
       interaction.py          speak, ask_user
-      apps/                   app index, launcher, adapters (vscode, docker, browser)
+      apps/                   app index (SQLite), open/focus/close, window matching, vscode, docker
       ui/                     pywinauto tools, PyAutoGUI fallback, vision (flagged)
-      files/                  allowlist, Everything CLI, fallback index, "this file" resolver
-      web/                    search, fetch_page, Playwright browser_task
+      files/                  guard (allowlist, secrets), index and search (Everything or SQLite),
+                              readers (text, PDF, docx), "this file" from Explorer or VS Code
+      web/                    search, open_url; fetch_page (Phase 4); Playwright browser_task (Phase 6)
       data/                   market_data chain, weather, currency, crypto, cache, rate limits
       messaging/              contacts, WhatsApp Web, WhatsApp desktop fallback
       notifications/          listener, queue, reader
@@ -506,7 +517,7 @@ jarvis/
       tts/                    TTS interface, Piper, SAPI, engine factory
     storage/                  sqlite connection, migrations, repositories
     server/                   FastAPI app, WebSocket, static UI (Phase 5)
-    platform/                 Windows helpers: hotkeys now; COM worker thread, DPI awareness later
+    platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close
   tests/
     unit/                     tools with mocks, policy, router, registry
     integration/              sqlite, real Ollama (marked, optional)

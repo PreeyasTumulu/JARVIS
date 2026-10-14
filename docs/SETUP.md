@@ -27,8 +27,8 @@ Checked on 2026-10-14 on the development laptop.
 ## 2. Get the code
 
 ```powershell
-git clone https://github.com/PreeyasTumulu/jarvis.git
-cd jarvis
+git clone https://github.com/PreeyasTumulu/JARVIS.git
+cd JARVIS
 uv sync
 ```
 

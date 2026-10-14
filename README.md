@@ -68,8 +68,8 @@ Full design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Available from Phase 1. It will look like this:
 
 ```powershell
-git clone https://github.com/PreeyasTumulu/jarvis.git
-cd jarvis
+git clone https://github.com/PreeyasTumulu/JARVIS.git
+cd JARVIS
 uv sync
 ollama pull hermes3:8b
 uv run jarvis chat

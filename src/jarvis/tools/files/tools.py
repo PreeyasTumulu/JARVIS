@@ -28,8 +28,11 @@ async def locate(ctx: ToolContext, raw: str) -> str:
     """
     text = raw.strip().strip('"')
     candidate = Path(text)
-    if candidate.is_absolute() and await asyncio.to_thread(candidate.exists):
-        return text
+    if candidate.is_absolute():
+        resolved = await asyncio.to_thread(candidate.resolve, strict=False)
+        guard = ctx.services.files.guard
+        if not guard.inside(resolved) or await asyncio.to_thread(resolved.exists):
+            return text  # outside paths go straight to the guard, which blocks them
     words = [w for w in query_words(re.sub(r"[\\/]", " ", text)) if w not in _PATH_FILLER]
     hits = await ctx.services.files.search(" ".join(words), limit=3) if words else []
     if hits and (len(hits) == 1 or hits[0].score - hits[1].score >= CLEAR_LEAD):

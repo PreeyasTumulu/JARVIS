@@ -172,3 +172,14 @@ async def test_vscode_open_outside_allowed_folders_is_blocked(
     await h.app.agent.run_turn("open win.ini in vs code")
     assert h.audit()[0]["decision"] == "blocked"
     assert desktop.spawned == []
+
+
+async def test_refresh_on_miss_works_right_after_boot(monkeypatch: pytest.MonkeyPatch) -> None:
+    # time.monotonic() counts from boot; a fresh machine (like a CI runner) starts near zero.
+    monkeypatch.setattr(app_index.time, "monotonic", lambda: 5.0)
+    db = Database(":memory:")
+    AppStore(db).save([AppEntry("Notepad", "id.Notepad", "appsfolder")])
+    index = AppIndex(
+        sources=[lambda: [AppEntry("Figma", "id.Figma", "appsfolder")]], store=AppStore(db)
+    )
+    assert (await index.match("figma")).entry is not None

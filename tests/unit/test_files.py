@@ -246,3 +246,15 @@ async def test_get_selected_file_with_nothing_open(
     h = make_app([reply("", ("get_selected_file", {})), reply("Which file?")])
     await h.app.agent.run_turn("read this file")
     assert "Ask the user" in h.audit()[0]["error"]
+
+
+async def test_missing_paths_outside_the_allowlist_are_blocked_not_searched(
+    make_app: MakeApp,
+) -> None:
+    h = make_app()
+    make_tree(h.files_root)
+    missing = "C:/Definitely/Not/Here/Resume_Preeyas_2026.pdf"  # name exists inside, path does not
+    h.llm._script = [reply("", ("read_file", {"path": missing})), reply("Not allowed.")]
+    await h.app.agent.run_turn("read that file")
+    (row,) = h.audit()
+    assert row["decision"] == "blocked"

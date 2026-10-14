@@ -107,7 +107,7 @@ class AppIndex:
         self._store = store
         self._max_age = max_age
         self._entries: dict[str, AppEntry] | None = None
-        self._last_refresh = 0.0
+        self._last_refresh: float | None = None  # monotonic time; None means never this session
         self._lock = asyncio.Lock()
 
     async def entries(self) -> dict[str, AppEntry]:
@@ -128,7 +128,7 @@ class AppIndex:
 
     async def match(self, spoken: str) -> AppMatch:
         result = self._match(await self.entries(), spoken)
-        if result.entry is None and time.monotonic() - self._last_refresh > REFRESH_ON_MISS_S:
+        if result.entry is None and self._may_refresh():
             await self.refresh()  # maybe the app was installed after the index was built
             result = self._match(await self.entries(), spoken)
         return result
@@ -159,6 +159,11 @@ class AppIndex:
         best_key, best_score, _ = results[0]
         close = [key for key, score, _ in results[1:] if score >= best_score - 2]
         return AppMatch(entries[best_key], float(best_score), candidates, ambiguous=bool(close))
+
+    def _may_refresh(self) -> bool:
+        # time.monotonic() counts from boot, so "0 means never" would break right after a reboot.
+        last = self._last_refresh
+        return last is None or time.monotonic() - last > REFRESH_ON_MISS_S
 
     def _load_stored(self) -> dict[str, AppEntry] | None:
         if self._store is None:

@@ -127,6 +127,10 @@ class Agent:
             reply, status = "Stopped.", TurnStatus.CANCELLED
         except LLMError as exc:
             reply, status = str(exc), TurnStatus.ERROR
+        except Exception:
+            log.exception("Turn %s failed", turn_id)
+            reply = "Something went wrong on my side. The details are in the log file."
+            status = TurnStatus.ERROR
         finally:
             self._task = None
 

@@ -108,7 +108,19 @@ def ollama_placement(model: str) -> str:
     return "unknown"
 
 
+def unload_all_models() -> None:
+    """Free GPU memory so each model is measured alone, not squeezed by the previous one."""
+    try:
+        output = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=10).stdout
+        for line in output.splitlines()[1:]:
+            if line.split():
+                subprocess.run(["ollama", "stop", line.split()[0]], capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 async def run_model(model: str) -> Report:
+    unload_all_models()
     settings = load_settings()
     provider = settings.llm.active().model_copy(update={"model": model})
     client = LLMClient(provider)
@@ -154,7 +166,8 @@ def render(reports: list[Report]) -> str:
         f"Run on {datetime.now():%Y-%m-%d %H:%M}, {gpu}. Each of {len(CASES)} commands is "
         "sent once with the Jarvis system prompt and all Phase 1 tools. A case is correct "
         "if the first tool call (or no call) matches what a careful assistant would do, "
-        "including a key argument where noted. Nothing is executed.",
+        "including a key argument where noted. Nothing is executed. Other models are "
+        "unloaded first, so load time is a cold start and placement is the model alone.",
         "",
         "Regenerate with `uv run python scripts/benchmark_tools.py`.",
         "",

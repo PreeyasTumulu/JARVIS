@@ -170,6 +170,13 @@ async def test_model_server_error_is_reported(make_app: MakeApp) -> None:
     assert "can't reach" in result.text
 
 
+async def test_unexpected_bug_fails_the_turn_not_the_session(make_app: MakeApp) -> None:
+    h = make_app([RuntimeError("bug"), reply("Fine now.")])
+    result = await h.app.agent.run_turn("hi")
+    assert result.status is TurnStatus.ERROR
+    assert (await h.app.agent.run_turn("again")).status is TurnStatus.OK
+
+
 async def test_tool_crash_and_timeout_become_failures(make_app: MakeApp) -> None:
     @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PUBLIC)
     async def boom(ctx: ToolContext) -> ToolResult:

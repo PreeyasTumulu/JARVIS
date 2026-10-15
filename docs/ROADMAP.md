@@ -302,6 +302,8 @@ Use real contacts for the sends you want to go out. Try "tell Ravi the meeting m
 
 I report the results and risks to you, and you pick the path before anything is built.
 
+**Spike result (done):** reading works from plain Python (access was already allowed), a poll every 0.5 s saw a new notification in 0.6 s, and the `NotificationChanged` event fails with "Element not found" as expected. WhatsApp desktop notifications carry the sender and the message. Details in RISKS.md R4; the script is `scripts/spike_notifications.py`.
+
 **Scope (after the spike)**
 
 - Listener (polling and diffing by notification id), app allowlist filter, queue stored in SQLite as `private`.

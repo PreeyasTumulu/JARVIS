@@ -9,7 +9,7 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R1 | Hermes 3 8B does not fit in 4 GB VRAM, replies are slow | High | Medium | KV cache quantization, keep-alive, stable prompt prefix, benchmark against `hermes3:3b`, fast path for "stop" | 1 |
 | R2 | A small model picks the wrong tool or wrong arguments | Medium | Medium | Policy gate, confirmations, argument validation, benchmark suite, tool retrieval if accuracy drops | 1, 4 |
 | R3 | 16 GB RAM is tight with LLM, Whisper, Playwright, Docker Desktop, and your own apps | Medium | Medium | STT on CPU with a small model, DuckDuckGo instead of SearXNG, lazy-load voice and browser components | 2, 6 |
-| R4 | Notification listener does not work from unpackaged Python | Medium | High for Phase 7 | Feasibility spike first, polling instead of events, WhatsApp Web polling fallback | 7 |
+| R4 | Notification listener does not work from unpackaged Python | Spike passed | High for Phase 7 | Spike done (reading and polling work, events do not); poll and diff by id, app allowlist, WhatsApp Web polling only as a fallback | 7 |
 | R5 | WhatsApp automation breaks or risks the account | Medium | High | You accepted the risk (ADR-037); read back and explicit yes on every send, low volume, WhatsApp's own click-to-chat links, selectors in one file, desktop fallback, never two sends | 6 |
 | R6 | UI automation is flaky on some apps | High | Medium | Prefer CLI adapters, UIA only where needed, paced typing read back afterwards, focus checked before every burst, clear failure messages | 6 |
 | R7 | Prompt injection from web pages, files, or notifications | Medium | High | Untrusted-data wrapping, policy gate in code, confirmations cannot be answered by tool content | All |
@@ -61,6 +61,20 @@ Other limits:
 - Notification text can contain messages written by other people. It is always data, never instructions.
 
 If the spike fails: options are an MSIX "sparse package" to give the Python process an identity (complex), or WhatsApp-only notifications by polling unread chats in WhatsApp Web.
+
+**Spike results (2026-10-15, this laptop, Windows 11 build 26300, pywinrt 3.2.1, `scripts/spike_notifications.py`):**
+
+| Check | Result |
+|---|---|
+| `get_access_status()` | `ALLOWED` already, so no prompt was shown and `request_access_async()` was not needed |
+| `get_notifications_async(TOAST)` | 29 notifications from 4 apps in 70 ms; title and text readable for every one |
+| Own test toast | read back exactly (app "Windows PowerShell", both text lines) |
+| Poll and diff by id, every 0.5 s | a new toast was seen 0.6 s after it was shown |
+| `add_notification_changed` | fails with 0x80070490 "Element not found", as reported for unpackaged apps |
+| WhatsApp desktop | its notifications carry two text lines (chat or sender, then the message), so previews are on; app id `5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App` |
+| Removing a notification | works for the spike's own toasts |
+
+The spike printed only counts per app and text lengths, never other apps' text. What it means: reading works from plain Python and polling is fast enough, so no MSIX package is needed; the event subscription is not available, so changes must be found by polling. Notifications stay in the center for days (the oldest here was three days old), so the first poll after a start sees a backlog, which Jarvis must treat as "already there", not new.
 
 ### R5. WhatsApp automation
 

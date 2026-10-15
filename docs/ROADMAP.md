@@ -11,7 +11,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 2 | Voice: push-to-talk, then wake word | On `main` | v0.2.0 |
 | 3 | App index, VS Code, Docker, files | On `main` | v0.3.0 |
 | 4 | Data APIs, fetch_page, system tools | Built on `phase/4-data-system`, waiting for your test | v0.4.0 |
-| 5 | Web UI with live tool log and confirm buttons | Planned | v0.5.0 |
+| 5 | Web UI with live tool log and confirm buttons | Built on `phase/5-web-ui` (stacked on Phase 4), waiting for your test | v0.5.0 |
 | 6 | UI automation, Playwright, WhatsApp | Planned | v0.6.0 |
 | 7 | Notifications (feasibility spike first) | Planned | v0.7.0 |
 | 8 | Model router, memory, tray, startup, packaging | Planned | v0.8.0 |
@@ -227,6 +227,22 @@ home = "Hyderabad"
 - A confirm-level action shows a card, and clicking Cancel stops it.
 - A voice command made while the UI is open shows up live in the chat and the tool log.
 - A WebSocket connection from another origin is rejected.
+
+**Decisions:** none needed asking. The design follows ADR-011; the details are ADR-035 and ADR-036.
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper
+uv run jarvis serve                 # opens http://127.0.0.1:8765/?token=... in your browser
+uv run jarvis serve --wake          # also listen for "Hey Jarvis"
+uv run jarvis serve --no-voice      # the page only, no microphone or hotkeys
+uv run pytest tests/unit/test_server.py
+```
+
+In the page, try "what's the price of Apple", then "open paint" (not on the app allowlist, so a card asks; Jarvis also asks aloud, and whichever you answer first wins), then a long command and Esc. Hold `Ctrl+Alt+J` and speak while the page is open: the spoken command, its tool calls, and the reply appear in the page.
+
+**Verified during the build (live, on this laptop, in a browser):** the page loaded the earlier conversation from the database; "what's the price of Apple" typed in the page showed the tool chip, the Activity entry, and the reply; "open paint" showed a Confirm card with a countdown while voice asked the same question aloud, and Cancel closed the card ("Cancelled (web)"), left Paint closed, and returned voice to Ready; Esc during a page summary showed "Stopped."; the Audit log tab listed the last 45 tool calls; the layout works at phone width. Against the running server: a WebSocket from another origin and one without an Origin got HTTP 403, the page's own origin upgraded (101), a foreign Host header got 400, and the port did not answer on the laptop's network address. Not exercised live, on purpose: the mic button and a spoken command, which would record your room (both use the same code path as the push-to-talk hotkey, covered by tests).
 
 ## Phase 6: UI automation, Playwright, WhatsApp
 

@@ -2,7 +2,7 @@
 
 A local-first, voice-controlled desktop assistant for Windows 11. Say (or type) a command, and Jarvis plans it with a local LLM, calls typed tools to operate your laptop, and answers out loud.
 
-> **Status: Phase 4 (data and system tools) built.** Talk to Jarvis with push-to-talk or "Hey Jarvis", or type. It opens, switches to, and closes apps; finds, opens, and reads files in folders you allow; opens projects in VS Code; controls Docker containers; searches the web and reads pages; answers stock, index, crypto, currency, and weather questions from free APIs; sets volume and brightness, locks the laptop, takes screenshots, reads and writes the clipboard; and runs timers and reminders. Risky actions wait for your yes, and every tool call is audited. Phase 4 is waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
+> **Status: Phase 5 (web UI) built.** `uv run jarvis serve` opens a local page with chat, a live tool log, Confirm and Cancel cards, a Stop button, a mic button, and the audit log, sharing one conversation with voice. Talk to Jarvis with push-to-talk or "Hey Jarvis", or type. It opens, switches to, and closes apps; finds, opens, and reads files in folders you allow; opens projects in VS Code; controls Docker containers; searches the web and reads pages; answers stock, index, crypto, currency, and weather questions from free APIs; sets volume and brightness, locks the laptop, takes screenshots, reads and writes the clipboard; and runs timers and reminders. Risky actions wait for your yes, and every tool call is audited. Phases 4 and 5 are waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 
@@ -77,7 +77,7 @@ uv run jarvis setup-voice
 uv run jarvis voice --wake
 ```
 
-Hold `Ctrl+Alt+J` (or say "Hey Jarvis"), then try "open notepad", "search the web for the latest Python release", or "say hello". `Ctrl+Alt+X` or "stop" cancels. Prefer typing? `uv run jarvis chat`. `uv run jarvis audit` shows every tool call Jarvis made.
+Hold `Ctrl+Alt+J` (or say "Hey Jarvis"), then try "open notepad", "search the web for the latest Python release", or "say hello". `Ctrl+Alt+X` or "stop" cancels. Prefer a window? `uv run jarvis serve` opens the web UI with voice included. Prefer the terminal? `uv run jarvis chat`. `uv run jarvis audit` shows every tool call Jarvis made.
 
 ## License
 

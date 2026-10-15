@@ -146,6 +146,21 @@ uv run jarvis chat                              # timers and reminders sound whi
 - Brightness works only for the laptop's own screen. Screenshots go to `Pictures\Screenshots` (`[system] screenshot_folder`).
 - Reminders that came due while Jarvis was closed are announced as missed the next time it starts.
 
+## 5e. Web UI (Phase 5)
+
+```powershell
+uv run jarvis serve                 # opens the page; voice and hotkeys run too if installed
+uv run jarvis serve --wake          # also "Hey Jarvis"
+uv run jarvis serve --no-voice      # page only
+uv run jarvis serve --port 8800 --no-browser
+```
+
+- The page lives at `http://127.0.0.1:8765/?token=...`. The token changes every time Jarvis starts, so a bookmark stops working after a restart; use the link Jarvis opens or prints.
+- The page is only reachable from this laptop. Other websites cannot talk to it (Origin, token, and Host checks).
+- Enter sends, Shift+Enter adds a line, Esc stops. The mic button works like holding `Ctrl+Alt+J`: click, speak, click again. It uses the laptop's microphone, not the browser's, so the browser never asks for microphone access.
+- Confirmations show as cards and are also asked aloud when voice is on. Answer either way; the first answer wins.
+- `[server] port` and `open_browser` in `config/local.toml` change the defaults.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

@@ -384,23 +384,22 @@ stateDiagram-v2
 
 ### 9.2 Web UI
 
-FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) and one WebSocket.
+FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) and one WebSocket (`src/jarvis/server/`). `jarvis serve` runs it on the same event loop as the agent, voice, and reminders, so all of them share one conversation (ADR-035, ADR-036).
 
 | Direction | Message | Purpose |
 |---|---|---|
-| client to server | `user_message {text}` | Typed command |
-| client to server | `confirm {request_id, approved}` | Confirm or cancel buttons |
-| client to server | `cancel {}` | Stop button |
-| client to server | `mic {on}` | Mic toggle |
-| server to client | `assistant_message {text}` | Reply text |
-| server to client | `transcript {text, final}` | What Jarvis heard |
-| server to client | `tool_call {id, tool, args, risk}` | Live tool log |
-| server to client | `tool_result {id, ok, summary, duration_ms}` | Live tool log |
-| server to client | `confirmation_request {request_id, summary, expires_at}` | Shows confirm and cancel buttons |
-| server to client | `state {voice_state, model}` | Listening, thinking, speaking |
-| server to client | `error {message}` | Errors |
+| client to server | `command {text}` | Typed command (refused while another runs) |
+| client to server | `confirm {request_id, approved}` | Confirm or Cancel; only `true` approves |
+| client to server | `answer {question_id, text}` | Answer to `ask_user` |
+| client to server | `stop {}` | Stop button and Esc |
+| client to server | `mic {on}` | Talk button, same as holding the push-to-talk hotkey |
+| client to server | `audit {}` | Last 50 audit rows |
+| server to client | `hello {version, model, busy, voice, history, open}` | On connect: recent turns, open cards and questions |
+| server to client | every bus event, e.g. `turn_started`, `tool_call_started`, `tool_call_finished`, `confirmation_requested`, `confirmation_resolved`, `assistant_message`, `turn_finished`, `voice_state_changed`, `transcript_heard`, `reminder_due` | The event's own fields |
+| server to client | `question {question_id, question, options}`, `question_closed` | `ask_user` cards |
+| server to client | `audit {rows}`, `error {message}` | Audit view, errors |
 
-**Local UI security.** Browsers do not apply CORS to WebSockets, so any website you visit could try to connect to `ws://127.0.0.1`. The server therefore binds to `127.0.0.1` only, checks the `Origin` header, and requires a random token generated at each launch (opened for you in the URL).
+**Local UI security.** Browsers do not apply CORS to WebSockets, so any website you visit could try to connect to `ws://127.0.0.1`. The server therefore binds to `127.0.0.1` only, checks the `Origin` header, and requires a random token generated at each launch (opened for you in the URL). It also rejects a foreign `Host` header (DNS rebinding) and sends a Content-Security-Policy that forbids other sites from framing the page, so nobody can overlay an invisible Confirm button. Everything the page shows is inserted as text, never as HTML, because replies can contain text from web pages.
 
 ### 9.3 Tray (Phase 8)
 
@@ -486,7 +485,7 @@ jarvis/
   scripts/                    benchmark_tools.py, check_dashes.py
   src/jarvis/
     __main__.py               python -m jarvis
-    cli.py                    jarvis chat, ask, audit, version (serve in Phase 5)
+    cli.py                    jarvis chat, ask, voice, serve, setup-voice, index, audit, version
     console.py                terminal channel: live tool log, y/n confirmations, questions
     app.py                    wires settings, storage, model, tools, and agent together
     services.py               shared helpers tools use (TTS, app index, search backend)
@@ -518,7 +517,8 @@ jarvis/
       models.py, runner.py    model downloads; `jarvis voice` and `jarvis setup-voice`
       tts/                    TTS interface, Piper, SAPI, engine factory
     storage/                  sqlite connection, migrations, repositories
-    server/                   FastAPI app, WebSocket, static UI (Phase 5)
+    server/                   app.py (routes, security), hub.py (tabs, WebChannel), runtime.py
+                              (requests from tabs), serve.py (uvicorn, voice, reminders), static/
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
                               COM thread, volume, display (brightness, lock, screenshot), clipboard
   tests/

@@ -208,6 +208,18 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** with 31 tools, Hermes 3 8B picked the right first tool for 67% of 45 benchmark commands when it saw every tool, and 89% with routing ([phase4.md](benchmarks/phase4.md), [phase4-all-tools.md](benchmarks/phase4-all-tools.md)). "Close the calculator" (that exact sentence) made the model return an empty reply every time, which used to be reported as "Done."; one user-role nudge recovered it every time in testing, while a system-role nudge did not.
 - **Cost:** an empty reply costs one extra model call (about 2 s). Embedding-based tool retrieval with `nomic-embed-text` remains the next step if accuracy drops again.
 
+### ADR-035: The web UI protocol follows the event bus
+
+- **Decision:** `jarvis serve` runs FastAPI and uvicorn on the same event loop as the agent, voice, and reminders. A hub forwards every bus event to every open tab as JSON, with the event's own fields and a snake_case type (`ToolCallStarted` becomes `tool_call_started`); tabs send `command`, `confirm`, `answer`, `stop`, `mic`, and `audit`. The executor now publishes `ConfirmationResolved`, so every channel can close its card. Open cards and questions are replayed to a tab that connects or reloads. The page is plain HTML, CSS, and JavaScript and inserts all data with `textContent`. Security on top of ADR-011: a Host header check (against DNS rebinding), a Content-Security-Policy that allows only the page's own scripts and forbids framing (so another site cannot overlay a Confirm button), and `no-referrer`. A connection from a foreign origin is refused before the WebSocket opens (HTTP 403); our own page with a stale token is accepted only to be closed with a reason, so it can tell you to open the new link.
+- **Why:** one source of truth for what happened, so the terminal, voice, and every tab show the same thing, and the protocol cannot drift from the events. No build step keeps the UI auditable.
+- **Cost:** the token sits in the page URL and browser history (it changes at every start). Anyone at your unlocked keyboard can use the page, the same as the terminal.
+
+### ADR-036: One agent for every channel
+
+- **Decision:** the page, voice, and reminders share one agent, so a typed command and a spoken one land in the same conversation. Turns are serialized with a lock, and a command typed while one runs is refused with a hint to press Stop (speaking still interrupts, as before). Confirmations race the page against voice; a channel that fails (a broken microphone) drops out of the race instead of ending it. When the page answers a question voice is also asking, voice stops listening and goes back to the state it was in.
+- **Why:** "one session across all channels" without two turns ever editing the history at once.
+- **Cost:** one command at a time. The mic button works like holding the push-to-talk hotkey; it records on the laptop's microphone, not the browser's.
+
 ## Open decisions
 
 These are asked when the phase starts, not before.

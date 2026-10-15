@@ -158,6 +158,14 @@ method = "auto"
 max_chars = 1000             # longer messages are refused, so the read back stays short enough
 verify_timeout_s = 15        # wait this long for the sent tick after pressing Send
 
+[notifications]
+# Jarvis checks the Windows notification center (it cannot be told about changes, RISKS.md R4).
+enabled = true
+apps = ["WhatsApp", "Claude"]  # display names or app ids; other apps' notifications are ignored
+poll_s = 2                   # seconds between checks while Jarvis runs
+keep_days = 7                # notification text older than this is deleted
+max_read = 5                 # how many are read out at once
+
 [server]
 port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachable from the network)
 open_browser = true          # open the page when `jarvis serve` starts

@@ -13,6 +13,7 @@ from jarvis.tools.data.weather import weather
 from jarvis.tools.files.tools import find_file, get_selected_file, open_file, read_file
 from jarvis.tools.interaction import ask_user, speak
 from jarvis.tools.messaging.tools import send_whatsapp
+from jarvis.tools.notifications.tools import read_notifications
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.clipboard import clipboard_read, clipboard_write
 from jarvis.tools.system.controls import lock_screen, screenshot, set_brightness, set_volume
@@ -69,6 +70,7 @@ def build_registry() -> Registry:
             browser_click,
             browser_type,
             send_whatsapp,
+            read_notifications,
             speak,
             ask_user,
         ]

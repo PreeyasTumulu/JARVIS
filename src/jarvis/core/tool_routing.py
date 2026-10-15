@@ -115,6 +115,15 @@ GROUPS: dict[str, Group] = {
             r"let \w+ know|send .+ to \w+|reply to)\b"
         ),
     ),
+    "notifications": Group(
+        ("read_notifications",),
+        re.compile(
+            r"\b(notifications?|alerts?|unread|new (\w+ )?messages?|"
+            r"any (new )?(\w+ )?(messages?|texts?)|"
+            r"anything (new )?from|messages? from|did (anyone|anybody|somebody|\w+) "
+            r"(message|text|write|reply|call)|what did \w+ (say|send|write))\b"
+        ),
+    ),
     "speech": Group(
         ("speak",),
         re.compile(r"\b(say|announce|aloud|out loud|read out|pronounce)\b"),

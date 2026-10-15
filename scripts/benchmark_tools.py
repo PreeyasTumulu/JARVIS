@@ -101,6 +101,10 @@ CASES = [
     case("open github.com in your browser so you can sign me in", "browser_open"),
     case("on the page in your browser, click today's deals", "browser_click", "browser_read"),
     case("what does the page in your browser say", "browser_read"),
+    # Phase 7
+    case("read my notifications", "read_notifications"),
+    case("anything new from Ravi", "read_notifications", arg=("person", "ravi")),
+    case("did mom message me", "read_notifications", arg=("person", "mom")),
 ]
 
 

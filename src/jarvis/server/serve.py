@@ -125,7 +125,7 @@ async def _serve(
             if session is not None:
                 runtime.voice = session
                 background.append(asyncio.create_task(session.run(), name="voice"))
-        await app.start_reminders(session.announce if session else _speaker(app, console))
+        await app.start_background(session.announce if session else _speaker(app, console))
 
         config = uvicorn.Config(
             create_server(runtime, token=token, port=port),

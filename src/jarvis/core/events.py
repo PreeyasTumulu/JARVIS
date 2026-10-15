@@ -90,6 +90,12 @@ class TranscriptHeard:
 
 
 @dataclass(frozen=True)
+class NotificationsArrived:
+    count: int
+    apps: tuple[str, ...]  # app names only; the text stays in the database (private)
+
+
+@dataclass(frozen=True)
 class ReminderDue:
     reminder_id: int
     kind: str  # timer or reminder
@@ -108,6 +114,7 @@ Event = (
     | VoiceStateChanged
     | TranscriptHeard
     | ReminderDue
+    | NotificationsArrived
 )
 Handler = Callable[[Event], Awaitable[None] | None]
 

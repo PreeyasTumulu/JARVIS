@@ -163,6 +163,16 @@ class WhatsAppSettings(_Section):
     verify_timeout_s: float = Field(default=15, gt=0)  # wait for the sent and delivered ticks
 
 
+class NotificationsSettings(_Section):
+    enabled: bool = True
+    # Apps whose notifications Jarvis may read, by display name or app id. Everything else is
+    # never read past its app name, and never stored.
+    apps: list[str] = ["WhatsApp"]
+    poll_s: float = Field(default=2, ge=0.5)  # how often the notification center is checked
+    keep_days: float = Field(default=7, gt=0)  # older notification text is deleted
+    max_read: int = Field(default=5, ge=1, le=20)  # notifications read out at once
+
+
 class ServerSettings(_Section):
     port: int = Field(default=8765, ge=1024, le=65535)  # always on 127.0.0.1, never the network
     open_browser: bool = True
@@ -218,6 +228,7 @@ class Settings(_Section):
     browser: BrowserSettings = BrowserSettings()
     contacts: ContactsSettings = ContactsSettings()
     whatsapp: WhatsAppSettings = WhatsAppSettings()
+    notifications: NotificationsSettings = NotificationsSettings()
     server: ServerSettings = ServerSettings()
     tts: TTSSettings = TTSSettings()
     voice: VoiceSettings = VoiceSettings()

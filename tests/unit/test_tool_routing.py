@@ -104,3 +104,20 @@ def test_phase4_groups(text: str, expected: set[str], absent: set[str]) -> None:
 
 def test_speech_requests_get_only_speak() -> None:
     assert names("announce that the meeting starts in five minutes") == {"speak", "ask_user"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "read my notifications",
+        "any new whatsapp messages",
+        "anything new from Ravi",
+        "what did mom say",
+    ],
+)
+def test_received_messages_get_read_notifications(text: str) -> None:
+    assert "read_notifications" in names(text)
+
+
+def test_sending_a_message_does_not_offer_reading() -> None:
+    assert "read_notifications" not in names("message mom that I'll be late")

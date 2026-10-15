@@ -1,5 +1,5 @@
 """Command line entry point: chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,
-audit, version."""
+notifications, audit, version."""
 
 from __future__ import annotations
 
@@ -72,6 +72,15 @@ def build_parser() -> argparse.ArgumentParser:
     load = actions.add_parser("import", help="import a .vcf file exported from your phone")
     load.add_argument("file")
 
+    notes = sub.add_parser("notifications", help="what Jarvis has kept from allowed apps")
+    notes.add_argument(
+        "action",
+        nargs="?",
+        choices=["list", "test"],
+        default="list",
+        help="list (the default), or test: show a test notification to read back",
+    )
+
     whatsapp = sub.add_parser("whatsapp", help="link WhatsApp Web to Jarvis's own browser")
     whatsapp.add_argument("action", choices=["login"], help="scan the QR code once")
 
@@ -110,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
         return manage_contacts(settings, args, console)
     if args.command == "whatsapp":
         return whatsapp_login(settings, console)
+    if args.command == "notifications":
+        return show_notifications(settings, args.action, console)
     if args.command == "serve":
         from jarvis.server.serve import run_serve
 
@@ -183,7 +194,7 @@ def run_chat(
                 "[dim]Type a command. Ctrl+C stops the current command, /quit exits.[/dim]"
             )
             runner.run(
-                app.start_reminders(lambda text: _speak_quietly(app.services.tts, text, console))
+                app.start_background(lambda text: _speak_quietly(app.services.tts, text, console))
             )
             while True:
                 console.print("[bold cyan]you[/bold cyan] > ", end="")
@@ -271,6 +282,36 @@ def manage_contacts(settings: Settings, args: argparse.Namespace, console: Conso
     except (ContactError, OSError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         return 1
+    finally:
+        db.close()
+    return 0
+
+
+def show_notifications(settings: Settings, action: str, console: Console) -> int:
+    from jarvis.platform import notifications as center
+    from jarvis.tools.notifications.store import TEST_TITLE, Notifications
+
+    if action == "test":
+        center.show_toast(f"{TEST_TITLE}: Ravi", "Hello from Jarvis. Say: read my notifications.")
+        console.print("Showed a test notification. Now ask Jarvis: read my notifications.")
+        return 0
+    db = Database(settings.data_dir / "jarvis.db")
+    try:
+        service = Notifications(db, settings.notifications)
+        try:
+            asyncio.run(service.refresh())
+        except center.NotificationAccessError as exc:
+            console.print(f"[yellow]{escape(str(exc))}[/yellow]")
+        items = service.store.recent(include_read=True)
+        allowed = ", ".join(settings.notifications.apps) or "none"
+        table = Table(title=f"{len(items)} notifications kept (apps: {escape(allowed)})")
+        for column in ("when", "app", "from", "text", "read"):
+            table.add_column(column, overflow="fold")
+        for item in items[:50]:
+            when = item.created.astimezone().strftime("%m-%d %H:%M")
+            read = "yes" if item.read else ""
+            table.add_row(when, escape(item.app), escape(item.title), escape(item.body), read)
+        console.print(table)
     finally:
         db.close()
     return 0

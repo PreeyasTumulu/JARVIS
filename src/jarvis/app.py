@@ -17,6 +17,7 @@ from jarvis.services import Services, build_services
 from jarvis.storage.db import Database
 from jarvis.storage.repositories import AuditLog, HistoryLog
 from jarvis.tools.catalog import build_registry
+from jarvis.tools.notifications.store import NotificationWatcher
 from jarvis.tools.policy import PolicyGate
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.reminders import ReminderScheduler
@@ -35,10 +36,15 @@ class App:
     agent: Agent
     background: list[asyncio.Task[None]] = field(default_factory=list)
 
-    async def start_reminders(self, announce: Callable[[str], Awaitable[None]]) -> None:
-        """Announce timers and reminders while this app runs (chat and voice, not one-shot ask)."""
+    async def start_background(self, announce: Callable[[str], Awaitable[None]]) -> None:
+        """Work that runs while chat, voice, or the web UI is open (not one-shot `ask`):
+        timers and reminders, and watching the notification center."""
         scheduler = ReminderScheduler(self.services.reminders, self.bus, announce)
         self.background.append(asyncio.create_task(scheduler.run(), name="reminders"))
+        settings = self.settings.notifications
+        if settings.enabled:
+            watcher = NotificationWatcher(self.services.notifications, self.bus, settings.poll_s)
+            self.background.append(asyncio.create_task(watcher.run(), name="notifications"))
 
     async def aclose(self) -> None:
         for task in self.background:

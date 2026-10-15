@@ -52,7 +52,7 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
             runner.run(prepare(session, settings, console))
             hotkeys = start_hotkeys(settings, session, runner.get_loop(), console)
             _print_banner(console, settings, wake_enabled)
-            runner.run(app.start_reminders(session.announce))
+            runner.run(app.start_background(session.announce))
             runner.run(session.run())
         except KeyboardInterrupt:
             pass

@@ -7,6 +7,7 @@ import ipaddress
 import itertools
 import json
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from jarvis.app import App, build_app
 from jarvis.config import Settings, load_settings
 from jarvis.core.channel import ConfirmationRequest
 from jarvis.llm.types import LLMReply, ToolCall
+from jarvis.platform.notifications import NotificationAccessError, RawNotification
 from jarvis.platform.uia import Control, WindowContent
 from jarvis.platform.windows import WindowInfo
 from jarvis.services import Services
@@ -30,6 +32,7 @@ from jarvis.tools.files.guard import FileGuard
 from jarvis.tools.files.index import FileIndex
 from jarvis.tools.messaging.contacts import ContactBook
 from jarvis.tools.messaging.whatsapp import SendStatus, Sent
+from jarvis.tools.notifications.store import Notifications
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.reminders import Reminders
 from jarvis.tools.web.search import SearchHit
@@ -462,6 +465,42 @@ class FakeWhatsApp:
         return self.result
 
 
+class FakeNotificationCenter:
+    """The Windows notification center: tests add toasts; `denied` mimics access turned off."""
+
+    NOW = datetime(2026, 10, 15, 12, 0, tzinfo=UTC)
+
+    def __init__(self) -> None:
+        self.toasts: list[RawNotification] = []
+        self.denied = False
+        self.reads = 0
+
+    def add(
+        self, app: str, title: str, body: str, *, minutes_ago: float = 1, app_id: str = ""
+    ) -> RawNotification:
+        toast = RawNotification(
+            win_id=len(self.toasts) + 1,
+            app_id=app_id or f"{app}.App",
+            app=app,
+            title=title,
+            body=body,
+            created=self.NOW - timedelta(minutes=minutes_ago),
+        )
+        self.toasts.append(toast)
+        return toast
+
+    async def read(self) -> list[RawNotification]:
+        self.reads += 1
+        if self.denied:
+            raise NotificationAccessError("Windows does not let Jarvis read notifications.")
+        return list(self.toasts)
+
+
+@pytest.fixture
+def notification_center() -> FakeNotificationCenter:
+    return FakeNotificationCenter()
+
+
 @pytest.fixture
 def fake_browser() -> FakeBrowser:
     return FakeBrowser()
@@ -496,6 +535,7 @@ def make_app(
     yahoo: FakeYahoo,
     fake_browser: FakeBrowser,
     fake_whatsapp: FakeWhatsApp,
+    notification_center: FakeNotificationCenter,
 ) -> MakeApp:
     def factory(
         script: Sequence[LLMReply | BaseException | Hang] = (),
@@ -538,6 +578,12 @@ def make_app(
             browser=fake_browser,  # type: ignore[arg-type]
             contacts=ContactBook(db, cfg.contacts),
             whatsapp=fake_whatsapp,  # type: ignore[arg-type]
+            notifications=Notifications(
+                db,
+                cfg.notifications,
+                reader=notification_center.read,
+                clock=lambda: FakeNotificationCenter.NOW,
+            ),
         )
         app = build_app(cfg, chan, llm=llm, services=services, registry=registry, db=db)
         harness = Harness(app, llm, chan, tts)

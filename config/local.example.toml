@@ -50,3 +50,7 @@
 
 # [browser]
 # channel = "chromium"                # Playwright's Chromium instead of Edge (uv run playwright install chromium)
+
+# [notifications]
+# apps = ["WhatsApp"]                 # only these apps' notifications are read and kept
+# keep_days = 3

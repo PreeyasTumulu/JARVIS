@@ -127,6 +127,23 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (alias_key, contact_id)
     );
     """,
+    # 6: notifications from allowed apps (private; deleted after notifications.keep_days)
+    """
+    CREATE TABLE notifications (
+        id INTEGER PRIMARY KEY,
+        win_id INTEGER NOT NULL,
+        app_id TEXT NOT NULL,
+        app TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        seen_at TEXT NOT NULL,
+        read_at TEXT,
+        UNIQUE (app_id, win_id, created_at)
+    );
+
+    CREATE INDEX idx_notifications_created ON notifications (created_at);
+    """,
 ]
 
 
@@ -203,6 +220,7 @@ SALVAGE_TABLES = (
     "reminders",
     "contacts",
     "contact_aliases",
+    "notifications",
 )
 
 

@@ -220,13 +220,54 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** "one session across all channels" without two turns ever editing the history at once.
 - **Cost:** one command at a time. The mic button works like holding the push-to-talk hotkey; it records on the laptop's microphone, not the browser's.
 
+### ADR-037: Phase 6 choices you made
+
+- **Decision (yours, at the start of Phase 6):** accept the WhatsApp account risk (RISKS.md R5) and send through WhatsApp Web first with the desktop app as the fallback; drive the browser with small step tools rather than one goal-driven tool; contacts come from manual entry plus vCard import; no vision fallback for UI automation in this phase.
+- **Why:** these were the open questions in the roadmap. Step tools keep every browser action visible and individually gated; a vision model would share the 4 GB GPU with Hermes.
+- **Cost:** see the ADRs below for what each choice implies.
+
+### ADR-038: Browser step tools, with search folded into opening
+
+- **Decision:** four tools drive Jarvis's own browser: `browser_open(url, search?)`, `browser_read`, `browser_click(target)`, and `browser_type(text, target?, submit?)`. Pages come back as a title, address, numbered controls, and text; the numbers are written into the page (`data-jarvis-id`) and kept while it is open, so "click 12" means the element the model saw, and the preparer binds the confirmed call to that number and its label. Results are untrusted (outside content) and private (the profile may be signed in somewhere, so fail closed). `browser_open` and `browser_type` are `egress` tools (ADR-029). Pressing Enter in a form or clicking a submit, buy, pay, delete, or send control asks first, except in a search box; passwords, card numbers, and one-time codes are never typed; only public http and https addresses open, checked again after redirects; WhatsApp sites are refused (send_whatsapp has its own profile). `browser_open` takes an optional `search`: it types into the page's search box and presses Enter.
+- **Why:** Hermes 3 8B did not chain `browser_open` and `browser_type` in live tests; it opened Wikipedia and then claimed it had searched, three times, even with a hint after the result. Folding the common "open this site and search it" into one call made it work at once (Wikipedia, Amazon). A hint outside the untrusted wrapper (`ToolResult.hint`) now tells the model to keep going or answer briefly, and never to claim a step no tool did.
+- **Cost:** longer flows (search, then open a result, then add to cart) still depend on the model chaining calls, which is unreliable at 8B. After reading a page, typing into a site asks first (egress), which is safe but adds a confirmation.
+
+### ADR-039: WhatsApp through its own click-to-chat links, Web first
+
+- **Decision:** `send_whatsapp(contact, message)` has a `confirm` floor that config cannot lower. The preparer looks the contact up in the contact book (never trusting a number the model writes), asks which one when a name fits several people, and the confirmation reads back the name, the last four digits, and the exact message. Sending opens `web.whatsapp.com/send?phone=...&text=...` in a separate `whatsapp-profile` (never shared with the browser the model drives), waits until the message box holds exactly the message, presses Send, then looks for the new message in the chat and reads its ticks (sent, delivered, read). The fallback is the desktop app's `whatsapp://send?...` link: Jarvis checks the box holds the message through UI Automation, presses Enter, and checks the box emptied. `[whatsapp] method = "auto"` uses Web once it has been linked (`jarvis whatsapp login`), the desktop app until then, and falls back only when Web never got as far as pressing Send, so a message can never go out twice. All page selectors live in `tools/messaging/selectors.py`.
+- **Why:** WhatsApp's own links fill in the chat and the text without typing into the page, which is the most stable part of a page that changes often. The ticks are the only reliable way to tell delivered from sent. A second profile keeps a page the model opens from ever reaching your chats.
+- **Cost:** contacts need a phone number (groups are not supported yet). The desktop app cannot report delivery. A first WhatsApp Web load can take a minute, so the limit for one command went from 120 to 180 seconds. The selectors for a signed-in WhatsApp Web are written against a stand-in page and need your first real send to confirm them; the logged-out page (QR code) was checked against the real site.
+
+### ADR-040: Microsoft Edge as Jarvis's browser by default
+
+- **Decision:** Playwright drives the Edge that ships with Windows 11 (`[browser] channel = "msedge"`). Playwright's own Chromium remains an option (`"chromium"`, after `uv run playwright install chromium`).
+- **Why:** on this laptop (Windows 11 build 26300, an Insider build), Playwright's Chromium builds 1243 and 1248 both fail to start with "side-by-side configuration is incorrect" (the Event Log names their private assembly), inside and outside the sandbox. Edge started first time, is kept up to date by Windows, and needs no 180 MB download.
+- **Cost:** Edge updates itself, so its version is not pinned with Playwright's; a Playwright upgrade is rarely needed for that.
+
+### ADR-041: UI Automation through comtypes, typing through paced Unicode input
+
+- **Decision:** the UI tools use Windows UI Automation directly through comtypes (already installed for the audio controls) instead of pywinauto: one `FindAllBuildCache` call returns every control with its name, type, and flags, about 80 ms for Notepad. Controls are found again by kind, name, and position when a call runs. Text is typed with `SendInput` as Unicode characters, one at a time, 12 ms apart (80 ms after an emoji), and the field is read back afterwards; if it does not match, Jarvis says the app may have dropped characters. PyAutoGUI is not used: without vision there is nothing for it to click that UI Automation cannot, and `SendInput` covers the keyboard.
+- **Why:** measured on Windows 11 Notepad, a burst of Unicode characters arrives as the last one repeated ("hello world" became "hello ddddd"), and real key presses lose their Shift ("Typing" became "tping"); 8 ms between characters was enough for both, and Unicode input is independent of keyboard layout and input methods. pywinauto would add pywin32 and a COM threading quirk for features this does not use.
+- **Cost:** typing runs at about 75 characters a second, so one call types at most 2,000 characters.
+
+### ADR-042: Generic UI actions ask, except in apps you trust
+
+- **Decision:** `click`, `type_text`, and `press_keys` ask first unless the app is in `safety.trusted_ui_apps` (Notepad by default). Even there, a target that looks destructive (Send, Delete, Buy, Close, Don't save, ...) or a closing shortcut (Alt+F4, Ctrl+W, Delete) asks. Messaging apps and terminals always ask, whatever the config says, because typing plus Enter there sends a message or runs a command. Registry Editor, management consoles, sign-in prompts, and password managers are blocked. Password fields are never typed into (checked when preparing and again when running), Windows key shortcuts are refused, typing stops if another window takes the focus, and a window running as administrator is reported instead of silently ignoring the input. `read_window_text` is private and untrusted.
+- **Why:** a generic click can press anything, so trust is per app and destructive-looking targets are flagged even inside trusted apps (ARCHITECTURE.md 6.3).
+- **Cost:** names are a heuristic: an app that labels a destructive button oddly can slip through inside a trusted app (RISKS.md R6).
+
+### ADR-043: Check the database at startup and recover from damage
+
+- **Decision:** when Jarvis opens `jarvis.db` it runs SQLite's quick check. A damaged file is renamed to `jarvis.db.corrupt-<time>` (with its WAL files, untouched), a fresh database is created, and every row that can still be read from preferences, history, audit, reminders, and contacts is copied over. A warning says where the old file went.
+- **Why:** during Phase 6 testing the database was found damaged: the file had lost the pages holding the file index, history, and audit rows (the cause could not be pinned down; RISKS.md R24). Jarvis kept running but could no longer write the audit log, which must never fail quietly.
+- **Cost:** a check of a few milliseconds at every start. Rows on damaged pages are lost; the indexes rebuild themselves.
+
 ## Open decisions
 
 These are asked when the phase starts, not before.
 
 | Phase | Decision | Options |
 |---|---|---|
-| 6 | WhatsApp automation | Accept the account risk described in RISKS.md |
 | 7 | Notification source | Windows listener vs WhatsApp Web polling, after the spike |
 | 8 | Cloud provider and budget | DeepSeek or another OpenAI-compatible API, monthly cap |
 | 8 | Packaging | uv-based launcher vs PyInstaller build |

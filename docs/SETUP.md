@@ -161,6 +161,45 @@ uv run jarvis serve --port 8800 --no-browser
 - Confirmations show as cards and are also asked aloud when voice is on. Answer either way; the first answer wins.
 - `[server] port` and `open_browser` in `config/local.toml` change the defaults.
 
+## 5f. Apps, the browser, contacts, and WhatsApp (Phase 6)
+
+Nothing to install: UI automation uses Windows UI Automation, and Jarvis's browser is the Microsoft Edge that comes with Windows 11 (ADR-040).
+
+**Typing and clicking in apps.** Say the app: "type hello world in Notepad", "click File in Notepad", "press ctrl s in Notepad", "what does the Notepad window say". Apps in `safety.trusted_ui_apps` (Notepad by default) run these without asking; everything else asks first. Messaging apps and terminals always ask; Registry Editor and password managers are blocked.
+
+```toml
+[safety]
+trusted_ui_apps = ["Notepad", "Calculator"]
+```
+
+**Jarvis's browser.** "Search amazon.in for earbuds in your browser" opens Edge in Jarvis's own profile (`%LOCALAPPDATA%\Jarvis\browser-profile`), separate from your everyday browser. Do not sign in to personal accounts there unless you want Jarvis to work in them. Submitting forms and buying ask first; it never types passwords or card numbers.
+
+**Contacts.** Add the people you message, with the names you call them:
+
+```powershell
+uv run jarvis contacts add "Amma" "+91 98765 43210" --alias Mom --alias Mummy
+uv run jarvis contacts add "Ravi Kumar" "+91 90000 00001" --alias Ravi
+uv run jarvis contacts alias "Ravi Kumar" RK
+uv run jarvis contacts import C:\Users\you\Downloads\contacts.vcf
+uv run jarvis contacts                      # list them
+uv run jarvis contacts remove "Ravi Kumar"
+```
+
+The web page has the same in its Contacts tab, including .vcf import. To export a .vcf on Android: Contacts app, Fix and manage (or Settings), Export to file. Numbers saved without a country code need one setting:
+
+```toml
+[contacts]
+default_country_code = "91"
+```
+
+**WhatsApp.** You accepted the account risk in RISKS.md R5. Until WhatsApp Web is linked, Jarvis uses the WhatsApp desktop app (installed from the Microsoft Store). To use WhatsApp Web, which can also confirm delivery, link it once:
+
+```powershell
+uv run jarvis whatsapp login      # scan the QR code: phone, WhatsApp, Settings, Linked devices
+```
+
+Then say "message Mom that I'll be late". Jarvis reads the message back with the contact's name and the last digits of the number, and sends only after you say or click yes. Silence or "no" sends nothing. To force one way, set `[whatsapp] method = "web"` or `"desktop"`.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |
@@ -175,7 +214,7 @@ Run Jarvis as your normal user, not as administrator. Windows blocks a normal pr
 | Phase | Command | What it does |
 |---|---|---|
 | 2 | `uv sync --extra voice --extra piper` | faster-whisper, openWakeWord, sounddevice, Piper |
-| 6 | `uv run playwright install chromium` | Browser for Playwright tasks and WhatsApp Web |
+| 6 | `uv run playwright install chromium` | Only if you set `[browser] channel = "chromium"`; the default uses Edge (ADR-040) |
 | 8 | Kokoro extra | Bundle-safe voice for the packaged build (ADR-021) |
 
 Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of time with `uv run jarvis setup-voice`, into `%LOCALAPPDATA%\Jarvis\models`.
@@ -189,7 +228,9 @@ Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of
 | `jarvis.db` | Preferences, contacts, history, audit log, app and file indexes, API cache, reminders |
 | `logs\` | Rotating log files |
 | `models\` | Downloaded voice and wake word models |
-| `browser-profile\` | Playwright profile with your WhatsApp Web login (treat as sensitive) |
+| `browser-profile\` | Jarvis's browser profile (cookies of sites it visited) |
+| `whatsapp-profile\` | WhatsApp Web, linked to your phone (treat as sensitive; unlink from your phone and delete it to remove) |
+| `jarvis.db.corrupt-*` | Only after a damaged database was found at startup: the old file, kept untouched (ADR-043) |
 
 None of this is inside the repository.
 
@@ -205,3 +246,8 @@ None of this is inside the repository.
 | "Could not register" a hotkey | Another app owns that combination. Change `ptt_hotkey` or `stop_hotkey` under `[voice]`. |
 | Jarvis's data is not in `%LOCALAPPDATA%\Jarvis` | You ran it with the Microsoft Store Python. Use `uv run jarvis ...` from the project folder (ADR-019). |
 | Wake word triggers by itself | Raise `wake_threshold` under `[voice]` (default 0.5). |
+| "Jarvis's browser did not start" | Edge must be installed (it is part of Windows 11). With `channel = "chromium"`, run `uv run playwright install chromium`; on some Windows builds that Chromium fails with "side-by-side configuration is incorrect" (RISKS.md R23). |
+| Typed text comes out wrong in an app | Jarvis says so when it can read the field back. Type in smaller pieces, or tell the app's name exactly. |
+| `click` cannot find a button you can see | Some apps (Electron, WebView2) hide their controls from UI Automation. `what does <app> say` lists what Jarvis can see. |
+| WhatsApp says "not sent" | `uv run jarvis whatsapp login` again if the phone unlinked it; if WhatsApp Web changed, set `[whatsapp] method = "desktop"` (RISKS.md R27). |
+| "Jarvis's database was damaged" | The old file was kept as `jarvis.db.corrupt-<time>` and a fresh one started. Indexes rebuild themselves; history and audit restart. |

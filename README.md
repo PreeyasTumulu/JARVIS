@@ -2,13 +2,14 @@
 
 A local-first, voice-controlled desktop assistant for Windows 11. Say (or type) a command, and Jarvis plans it with a local LLM, calls typed tools to operate your laptop, and answers out loud.
 
-> **Status: Phase 5 (web UI) built.** `uv run jarvis serve` opens a local page with chat, a live tool log, Confirm and Cancel cards, a Stop button, a mic button, and the audit log, sharing one conversation with voice. Talk to Jarvis with push-to-talk or "Hey Jarvis", or type. It opens, switches to, and closes apps; finds, opens, and reads files in folders you allow; opens projects in VS Code; controls Docker containers; searches the web and reads pages; answers stock, index, crypto, currency, and weather questions from free APIs; sets volume and brightness, locks the laptop, takes screenshots, reads and writes the clipboard; and runs timers and reminders. Risky actions wait for your yes, and every tool call is audited. Phases 4 and 5 are waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
+> **Status: Phase 6 (UI automation, browser, WhatsApp) built.** Jarvis types, clicks, presses keys, and reads windows in any app ("type hello world in Notepad"), works in websites in its own Edge window ("search amazon.in for earbuds"), keeps a contact book with aliases, and sends WhatsApp messages only after reading them back and hearing your yes. `uv run jarvis serve` opens a local page with chat, a live tool log, Confirm and Cancel cards, a Stop button, a mic button, the audit log, and contacts, sharing one conversation with voice. Talk to Jarvis with push-to-talk or "Hey Jarvis", or type. It opens, switches to, and closes apps; finds, opens, and reads files in folders you allow; opens projects in VS Code; controls Docker containers; searches the web and reads pages; answers stock, index, crypto, currency, and weather questions from free APIs; sets volume and brightness, locks the laptop, takes screenshots, reads and writes the clipboard; and runs timers and reminders. Risky actions wait for your yes, and every tool call is audited. Phases 4, 5, and 6 are waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 
 - Open, focus, and close any installed app by name: VS Code, Docker, Claude, WhatsApp, your browser, and more
 - Find and open files inside folders you allow
-- Search the web, read pages, and drive web apps with Playwright
+- Type, click, and press keys in any app, and read what a window shows
+- Search the web, read pages, and work in websites in its own browser (Playwright and Edge)
 - Answer data questions from free APIs: stocks (including NSE and BSE), weather, currency, crypto
 - Read notifications aloud and send WhatsApp messages, always after you confirm
 - Control the system: volume, brightness, lock, screenshot, clipboard, timers
@@ -50,7 +51,7 @@ Full design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | Speech to text | faster-whisper |
 | Text to speech | Piper (optional), Kokoro, or Windows SAPI |
 | Backend and UI | FastAPI, WebSocket, plain HTML and JavaScript |
-| Automation | pywinauto (UIA), Playwright, PyAutoGUI as last resort |
+| Automation | Windows UI Automation (comtypes), SendInput, Playwright driving Edge |
 | Storage | SQLite |
 
 ## Documentation
@@ -77,7 +78,7 @@ uv run jarvis setup-voice
 uv run jarvis voice --wake
 ```
 
-Hold `Ctrl+Alt+J` (or say "Hey Jarvis"), then try "open notepad", "search the web for the latest Python release", or "say hello". `Ctrl+Alt+X` or "stop" cancels. Prefer a window? `uv run jarvis serve` opens the web UI with voice included. Prefer the terminal? `uv run jarvis chat`. `uv run jarvis audit` shows every tool call Jarvis made.
+Hold `Ctrl+Alt+J` (or say "Hey Jarvis"), then try "open notepad", "search the web for the latest Python release", or "say hello". `Ctrl+Alt+X` or "stop" cancels. Prefer a window? `uv run jarvis serve` opens the web UI with voice included. Prefer the terminal? `uv run jarvis chat`. `uv run jarvis audit` shows every tool call Jarvis made. To message people, add them first (`uv run jarvis contacts add "Amma" "+91 98765 43210" --alias Mom`), then say "message Mom that I'll be late".
 
 ## License
 

@@ -63,7 +63,7 @@ flowchart LR
 | Model router | Pick local or cloud model per turn, enforce the privacy guard | openai, httpx |
 | Policy gate | Decide safe / confirm / blocked for each call, run confirmations | pydantic |
 | Tool registry | Register typed tools, generate JSON schemas, execute with timeouts | pydantic, stdlib inspect |
-| Tools | Do the actual work on Windows and the web | pywinauto, PyAutoGUI, Playwright, httpx, pywinrt |
+| Tools | Do the actual work on Windows and the web | UI Automation (comtypes), SendInput, Playwright (Edge), httpx, pywinrt |
 | Event bus | Fan out typed events to UI, CLI, TTS, and the audit log | stdlib asyncio |
 | Storage | Preferences, contacts, history, audit log, caches | sqlite3 (WAL mode) |
 
@@ -137,8 +137,8 @@ async def run_turn(state: AgentState) -> AgentState:
 | Limit | Default | Why |
 |---|---|---|
 | `max_iterations` | 6 | An 8B model can loop; stop early and say what happened |
-| `tool_timeout_s` | 20 | Per tool call; tools can override (Playwright tasks get longer) |
-| `turn_timeout_s` | 120 | Hard ceiling for one command |
+| `tool_timeout_s` | 20 | Per tool call; tools can override (browser and WhatsApp tools get longer) |
+| `turn_timeout_s` | 180 | Hard ceiling for one command (a first WhatsApp Web load takes up to a minute) |
 | `max_tool_calls_per_step` | 4 | Caps parallel tool calls in one model reply |
 | `confirm_timeout_s` | 30 | No answer means no |
 
@@ -262,10 +262,10 @@ The prompt says this content is data. The real protection is structural: nothing
 | `screenshot()` | 4 | safe | private |
 | `clipboard_read()` / `clipboard_write(text)` | 4 | safe | private, untrusted / public |
 | `set_timer`, `set_reminder`, `list_reminders`, `cancel_reminder(which)` | 4 | safe; cancelling more than one confirms | private |
-| `click(element)`, `type_text(text)`, `press_keys(keys)` | 6 | confirm, or safe inside trusted apps except destructive targets | public |
-| `read_window_text(app?)` | 6 | safe | private, untrusted |
-| `browser_task(goal)` | 6 | sub-steps gated individually; submits and purchases confirm | private, untrusted |
-| `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered) | private |
+| `type_text(app, text, field?)`, `click(app, target)`, `press_keys(app, keys)` | 6 | confirm, or safe inside trusted apps except destructive targets and closing keys; always confirm in messaging apps and terminals; blocked in Registry Editor, consoles, sign-in prompts, password managers, and password fields | public |
+| `read_window_text(app)` | 6 | safe (blocked for the apps above) | private, untrusted |
+| `browser_open(url, search?)`, `browser_read()`, `browser_click(target)`, `browser_type(text, target?, submit?)` | 6 | safe; submits, purchases, and deletes confirm (search boxes do not); passwords, card numbers, one-time codes, local addresses, and WhatsApp sites blocked; open and type are `egress` | private, untrusted |
+| `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
 | `read_notifications(app?, person?)` | 7 | safe | private, untrusted |
 | `remember(fact)`, `forget(fact)` | 8 | safe | private |
 
@@ -297,7 +297,7 @@ Every outcome, including blocked and denied attempts, is written to the audit lo
 - **Apps:** `safety.app_allowlist` in config. Unlisted apps follow `safety.unlisted_apps` (`confirm` by default, or `block`).
 - **Folders:** `files.allowed_folders` (default Documents, Desktop, Downloads, resolved through Windows known folders so OneDrive redirection works). Paths are resolved (`Path.resolve()`, junctions and symlinks followed) before the check, so `..` and links cannot escape. Secret-looking names (`.env`, `*.pem`, `id_rsa*`, `*password*`, ...) are blocked even inside, opening programs and scripts asks first, and `.reg` files are blocked (`tools/files/guard.py`).
 - **Invented paths:** if the model passes a path that does not exist, the file tools search for the words in it and use the best match only when it clearly stands out; otherwise the model gets the closest real paths and must pick one or ask.
-- **UI automation:** `safety.trusted_ui_apps` lists apps where generic `click` / `type_text` / `press_keys` run without confirmation, except targets that look destructive (send, delete, remove, buy, pay, submit, uninstall).
+- **UI automation:** `safety.trusted_ui_apps` lists apps where generic `click` / `type_text` / `press_keys` run without confirmation, except targets that look destructive (send, delete, remove, buy, pay, submit, close, don't save, ...) and closing shortcuts (Alt+F4, Ctrl+W). Messaging apps and terminals are never trusted, whatever the config says, and a few apps are blocked outright (ADR-042, `tools/ui/guard.py`).
 
 ### 6.4 Cancellation
 
@@ -394,10 +394,12 @@ FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) an
 | client to server | `stop {}` | Stop button and Esc |
 | client to server | `mic {on}` | Talk button, same as holding the push-to-talk hotkey |
 | client to server | `audit {}` | Last 50 audit rows |
+| client to server | `contacts {}`, `contact_add {name, phone, aliases}`, `contact_remove {id}`, `contact_import {text}` | Contacts tab (the model has no tool that changes contacts) |
 | server to client | `hello {version, model, busy, voice, history, open}` | On connect: recent turns, open cards and questions |
 | server to client | every bus event, e.g. `turn_started`, `tool_call_started`, `tool_call_finished`, `confirmation_requested`, `confirmation_resolved`, `assistant_message`, `turn_finished`, `voice_state_changed`, `transcript_heard`, `reminder_due` | The event's own fields |
 | server to client | `question {question_id, question, options}`, `question_closed` | `ask_user` cards |
 | server to client | `audit {rows}`, `error {message}` | Audit view, errors |
+| server to client | `contacts {contacts, note, error, added}` | Contacts tab, after every change (to every tab) |
 
 **Local UI security.** Browsers do not apply CORS to WebSockets, so any website you visit could try to connect to `ws://127.0.0.1`. The server therefore binds to `127.0.0.1` only, checks the `Origin` header, and requires a random token generated at each launch (opened for you in the URL). It also rejects a foreign `Host` header (DNS rebinding) and sends a Content-Security-Policy that forbids other sites from framing the page, so nobody can overlay an invisible Confirm button. Everything the page shows is inserted as text, never as HTML, because replies can contain text from web pages.
 
@@ -412,8 +414,8 @@ SQLite in WAL mode at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with
 | Table | Contents |
 |---|---|
 | `preferences` | key, JSON value, updated_at |
-| `contacts` | display name, phone (E.164), WhatsApp name, notes |
-| `contact_aliases` | alias to contact (many to many, so "Mom" can be ambiguous on purpose) |
+| `contacts` | name (unique, compared case-insensitively), phone (E.164), notes, created_at |
+| `contact_aliases` | alias to contact (many to many, so "Ravi" can name two people on purpose) |
 | `command_history` | input text, source, final reply, status, model, latency |
 | `audit_log` | see 6.5 |
 | `api_cache` | cache key, JSON value, fetched_at, expires_at (quotes, rates, weather, places, symbols) |
@@ -424,7 +426,9 @@ SQLite in WAL mode at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with
 | `reminders` | kind (timer or reminder), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at |
 | `memories` | Phase 8 facts, optional embedding |
 
-Everything that is personal (database, logs, the Playwright browser profile, downloaded voice models) lives under `%LOCALAPPDATA%\Jarvis\`, outside the repo, so it can never be committed by accident.
+Everything that is personal (database, logs, the two browser profiles `browser-profile` and `whatsapp-profile`, downloaded voice models) lives under `%LOCALAPPDATA%\Jarvis\`, outside the repo, so it can never be committed by accident.
+
+At every start Jarvis runs SQLite's quick check. A damaged database is renamed to `jarvis.db.corrupt-<time>` untouched, and the readable rows of preferences, history, audit, reminders, and contacts are copied into a fresh one (ADR-043).
 
 ## 11. Concurrency on Windows
 
@@ -433,7 +437,8 @@ Everything that is personal (database, logs, the Playwright browser profile, dow
 | Agent loop, HTTP, WebSocket, Playwright | Main asyncio loop (Proactor loop, the Windows default) |
 | Audio capture | sounddevice callback thread, handed to asyncio with `call_soon_threadsafe` |
 | STT and TTS inference | Thread pool via `asyncio.to_thread` (ctranslate2 and onnxruntime release the GIL) |
-| pywinauto and COM (UI automation, Explorer selection) | One dedicated worker thread with COM initialized; all UI tools submit jobs to it |
+| COM (UI Automation, audio, Explorer selection) | One dedicated worker thread with COM initialized (`platform/com.py`); UI tools submit jobs to it |
+| Synthetic keys (`SendInput`) | Thread pool, in bursts of 24 characters with a foreground check before each, so a stop or a focus change ends typing between bursts |
 | Global hotkeys | Dedicated thread with a Win32 message loop (`RegisterHotKey`), handing events to asyncio with `call_soon_threadsafe` |
 | Wake word, VAD | Thread pool via `asyncio.to_thread`, one frame at a time (a few milliseconds each) |
 | Tray icon | pystray's own thread |
@@ -448,13 +453,22 @@ Everything that is personal (database, logs, the Playwright browser profile, dow
 ```toml
 [agent]
 max_iterations = 6
-turn_timeout_s = 120
+turn_timeout_s = 180
 
 [safety]
 app_allowlist = ["Visual Studio Code", "Docker Desktop", "Claude", "WhatsApp", "Google Chrome", "Notepad"]
 unlisted_apps = "confirm"
 safe_to_close = ["Calculator", "Settings", "File Explorer"]
 trusted_ui_apps = ["Notepad"]       # Phase 6
+
+[browser]
+channel = "msedge"                  # or "chromium" (Playwright's build)
+
+[contacts]
+default_country_code = "91"         # for numbers saved without one
+
+[whatsapp]
+method = "auto"                     # Web once linked, else the desktop app
 
 [files]
 allowed_folders = ["{documents}", "{desktop}", "{downloads}"]
@@ -485,7 +499,8 @@ jarvis/
   scripts/                    benchmark_tools.py, check_dashes.py
   src/jarvis/
     __main__.py               python -m jarvis
-    cli.py                    jarvis chat, ask, voice, serve, setup-voice, index, audit, version
+    cli.py                    jarvis chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,
+                              audit, version
     console.py                terminal channel: live tool log, y/n confirmations, questions
     app.py                    wires settings, storage, model, tools, and agent together
     services.py               shared helpers tools use (TTS, app index, search backend)
@@ -499,13 +514,16 @@ jarvis/
       catalog.py              the list of tools exposed to the model
       interaction.py          speak, ask_user
       apps/                   app index (SQLite), open/focus/close, window matching, vscode, docker
-      ui/                     pywinauto tools, PyAutoGUI fallback, vision (flagged)
+      ui/                     type_text, click, press_keys, read_window_text; key parsing; risk rules
       files/                  guard (allowlist, secrets), index and search (Everything or SQLite),
                               readers (text, PDF, docx), "this file" from Explorer or VS Code
-      web/                    search, open_url, fetch_page; Playwright browser_task (Phase 6)
+      web/                    search, open_url, fetch_page
+      browser/                Jarvis's browser (Playwright, two profiles), page snapshot script,
+                              browser_open, browser_read, browser_click, browser_type
       data/                   http (cache, token buckets, breakers), market chain, weather, currency,
                               crypto, spoken number formatting
-      messaging/              contacts, WhatsApp Web, WhatsApp desktop fallback
+      messaging/              contact book and vCard import, send_whatsapp, WhatsApp Web and desktop,
+                              WhatsApp Web selectors
       notifications/          listener, queue, reader
       system/                 volume, brightness, lock, screenshot, clipboard, timers and reminders
     voice/
@@ -520,7 +538,8 @@ jarvis/
     server/                   app.py (routes, security), hub.py (tabs, WebChannel), runtime.py
                               (requests from tabs), serve.py (uvicorn, voice, reminders), static/
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
-                              COM thread, volume, display (brightness, lock, screenshot), clipboard
+                              COM thread, volume, display (brightness, lock, screenshot), clipboard,
+                              UI Automation (uia.py), synthetic keys and clicks (sendinput.py)
   tests/
     unit/                     tools with mocks, policy, router, registry
     integration/              sqlite, real Ollama (marked, optional)
@@ -535,6 +554,6 @@ jarvis/
 
 ## 15. Testing approach
 
-- **Unit:** every tool with its Windows or network dependency mocked (httpx's MockTransport for HTTP, where anything unrouted fails like a dead network; fakes for yfinance, system controls, pywinauto, and Playwright). Policy, router, and registry have their own tests, including "private data never reaches the cloud client".
+- **Unit:** every tool with its Windows or network dependency mocked (httpx's MockTransport for HTTP, where anything unrouted fails like a dead network; fakes for yfinance, system controls, UI Automation, keyboard input, the browser, and WhatsApp). Real-browser tests (`pytest -m browser`) run the page snapshot script and the WhatsApp Web send flow against local pages in Edge. Policy, router, and registry have their own tests, including "private data never reaches the cloud client".
 - **Scripted e2e:** YAML scenarios of utterance to expected tool calls. They run against a scripted fake LLM in CI, and optionally against real Ollama locally (`pytest -m llm`) to measure tool-choice accuracy.
 - **CI:** GitHub Actions on `windows-latest`: ruff, mypy, unit tests, and a check that no em or en dashes appear in docs or comments.

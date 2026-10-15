@@ -12,7 +12,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 3 | App index, VS Code, Docker, files | On `main` | v0.3.0 |
 | 4 | Data APIs, fetch_page, system tools | Built on `phase/4-data-system`, waiting for your test | v0.4.0 |
 | 5 | Web UI with live tool log and confirm buttons | Built on `phase/5-web-ui` (stacked on Phase 4), waiting for your test | v0.5.0 |
-| 6 | UI automation, Playwright, WhatsApp | Planned | v0.6.0 |
+| 6 | UI automation, Playwright, WhatsApp | Built on `phase/6-ui-whatsapp` (stacked on Phase 5), waiting for your test | v0.6.0 |
 | 7 | Notifications (feasibility spike first) | Planned | v0.7.0 |
 | 8 | Model router, memory, tray, startup, packaging | Planned | v0.8.0 |
 | 9 | Test hardening, docs, demo | Planned | v1.0.0 |
@@ -265,7 +265,32 @@ In the page, try "what's the price of Apple", then "open paint" (not on the app 
 - Saying "no" or staying silent sends nothing, and the audit log shows the denial.
 - An ambiguous contact name asks which one you mean.
 
-**Decisions:** accepting the WhatsApp automation risk (see RISKS.md), and where contacts come from (manual entry first).
+**Decisions (yours, ADR-037):** accept the WhatsApp risk and send through Web first with the desktop app as fallback; step tools for the browser; contacts by hand plus vCard import; no vision fallback yet. Details: ADR-038 to ADR-043. Two changes from the plan: UI Automation goes through comtypes instead of pywinauto, and PyAutoGUI is not used (ADR-041); Jarvis's browser is Edge, because Playwright's Chromium does not start on this Windows build (ADR-040, RISKS.md R23).
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper
+uv run jarvis ask "type hello world in Notepad"
+uv run jarvis ask "press ctrl s in notepad"
+uv run jarvis ask "what does the notepad window say"
+uv run jarvis ask "search amazon.in for wireless earbuds in your browser"
+uv run jarvis contacts add "Amma" "+91 98765 43210" --alias Mom
+uv run jarvis contacts add "Ravi Kumar" "+91 90000 00001" --alias Ravi
+uv run jarvis contacts add "Ravi Teja" "+91 90000 00002" --alias Ravi
+uv run jarvis chat                  # then: message Mom that I'll be late (answer n, then y)
+uv run jarvis whatsapp login        # optional: link WhatsApp Web, which also confirms delivery
+uv run jarvis audit --last 5
+uv run pytest -m browser            # the real-browser tests, in Edge
+```
+
+Use real contacts for the sends you want to go out. Try "tell Ravi the meeting moved" to see the "which Ravi?" question, and stay silent once to see the 30 second timeout. In `uv run jarvis serve`, the Contacts tab adds, removes, and imports contacts.
+
+**Verified during the build (live, on this laptop, with Hermes 3 8B):** "type hello world in Notepad" typed into a Notepad tab of a test file (12 ms per character; the first try, before pacing, came out as "hello ddddd", see RISKS.md R6), and "press ctrl s in notepad" saved it, with "hello world" in the file on disk; in a test window with real Windows controls, Unicode text (Hindi, emoji, symbols) typed exactly, the password box was detected, a button and a checkbox were pressed, "click Say hello" asked first (the window belongs to PowerShell, a terminal) and pressed after yes, and "what does the Jarvis UI Test window say" read back the new status; "open wikipedia.org in your browser and search it for Hyderabad" landed on the article in 6 s and "search amazon.in for noise cancelling headphones" on Amazon's results in 3.7 s, in Edge; contacts were added from the CLI and the web page (a duplicate name and a number without a country code were refused with a reason); "message Mom that I'll be late" read back "Send this WhatsApp message to Amma (number ending 1111): "I'll be late"", and "n" sent nothing; "tell Ravi that the meeting moved to 5" asked which of the two Ravis, then confirmed the chosen one; silence timed out after 30 s; the audit log shows `denied` and `timeout`; WhatsApp Web loads in Jarvis's Edge and its QR selector matches the real page. Not exercised live, on purpose: a real WhatsApp send (it needs your account and your contacts), and the desktop app's send (it would type into a real chat).
+
+**Measured:** with 40 tools, Hermes 3 8B picked the right first tool for 91% of 56 benchmark commands with keyword routing (all 11 Phase 6 commands correct) and 77% (43/56) when it saw every tool ([phase6.md](benchmarks/phase6.md), [phase6-all-tools.md](benchmarks/phase6-all-tools.md)). It does not reliably chain browser steps on its own, so "open this site and search it" is one call (ADR-038, RISKS.md R25).
+
+**Found and fixed during the build:** the database had lost pages and was failing to write the audit log; Jarvis now checks it at every start and recovers (ADR-043, RISKS.md R24).
 
 ## Phase 7: Notifications
 

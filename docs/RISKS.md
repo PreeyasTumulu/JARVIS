@@ -10,8 +10,8 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R2 | A small model picks the wrong tool or wrong arguments | Medium | Medium | Policy gate, confirmations, argument validation, benchmark suite, tool retrieval if accuracy drops | 1, 4 |
 | R3 | 16 GB RAM is tight with LLM, Whisper, Playwright, Docker Desktop, and your own apps | Medium | Medium | STT on CPU with a small model, DuckDuckGo instead of SearXNG, lazy-load voice and browser components | 2, 6 |
 | R4 | Notification listener does not work from unpackaged Python | Medium | High for Phase 7 | Feasibility spike first, polling instead of events, WhatsApp Web polling fallback | 7 |
-| R5 | WhatsApp automation breaks or risks the account | Medium | High | Human confirmation on every send, low volume, centralized selectors, deep-link fallback | 6 |
-| R6 | UI automation is flaky on some apps | High | Medium | Prefer CLI adapters, UIA only where needed, PyAutoGUI last, clear failure messages | 6 |
+| R5 | WhatsApp automation breaks or risks the account | Medium | High | You accepted the risk (ADR-037); read back and explicit yes on every send, low volume, WhatsApp's own click-to-chat links, selectors in one file, desktop fallback, never two sends | 6 |
+| R6 | UI automation is flaky on some apps | High | Medium | Prefer CLI adapters, UIA only where needed, paced typing read back afterwards, focus checked before every burst, clear failure messages | 6 |
 | R7 | Prompt injection from web pages, files, or notifications | Medium | High | Untrusted-data wrapping, policy gate in code, confirmations cannot be answered by tool content | All |
 | R8 | Wake word false triggers, especially from Jarvis's own voice | Medium | Low | Pause wake word while speaking, threshold tuning, push-to-talk as the reliable path | 2 |
 | R9 | Unofficial data sources (yfinance, ddgs) change or rate limit | High | Low | Provider fallback chains, caching, circuit breakers | 1, 4 |
@@ -21,13 +21,18 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R13 | Microsoft Store Python hides Jarvis's data (AppData redirection) | Happened | Medium | uv-managed Python only (ADR-019), CLI warning, data moved | 2 |
 | R14 | Wrong or silent microphone, hotkeys owned by other apps | Happened | Medium | Startup mic silence check, `--list-devices`, name-based device selection, hotkey conflict warnings | 2 |
 | R15 | The model misreads tool data in its answer (said a stopped container was running) | Medium | Low | Short summaries computed in code, ask for details when it matters; revisit with a larger or cloud model | 3 |
-| R16 | Tool choice degrades as tools are added (80% with 16 tools, 67% with 31) | Happened | Medium | Keyword routing (87% in Phase 3, 89% in Phase 4), clear tool descriptions, errors that guide a retry, a retry for empty replies, benchmark per phase | 3, 4 |
+| R16 | Tool choice degrades as tools are added (80% with 16 tools, 67% with 31, 77% with 40, where most misses are empty replies to the long prompt) | Happened | Medium | Keyword routing (87% in Phase 3, 89% in Phase 4, 91% in Phase 6), clear tool descriptions, errors that guide a retry, a retry for empty replies, benchmark per phase | 3, 4, 6 |
 | R17 | Prompt injection leaks private data through a web request | Low | High | `egress` tools confirm when private data and outside content are both in context (ADR-029), local addresses blocked | 4 |
 | R18 | Brightness control only reaches the built-in screen | Certain | Low | WMI covers laptop panels; external monitors get a clear message instead of a fake success | 4 |
 | R19 | Reminders do not sound when Jarvis is not running | Certain | Medium | Missed reminders are announced at the next start; start at login in Phase 8 | 4, 8 |
 | R20 | Market data is delayed, or wrong for an ambiguous name | Medium | Low | Providers report the latest price they have; the spoken name says which company was used; aliases in config | 4 |
 | R21 | Output redirected to a pipe or file crashed on non-ASCII text (cp1252) | Happened | Medium | The CLI switches redirected output to UTF-8 at startup | 5, 8 |
 | R22 | The page shows private data (files, clipboard, audit log) to whoever uses the browser | Medium | Medium | Local only, per-launch token; lock the laptop when you leave it | 5 |
+| R23 | Playwright's Chromium does not start on this Windows build | Happened | Medium | Edge is the default browser (ADR-040); Chromium stays an option | 6 |
+| R24 | The database lost pages and stopped accepting audit entries | Happened | High | Quick check at every start, damaged file kept and rows salvaged (ADR-043) | 6 |
+| R25 | An 8B model does not chain browser steps, and claims steps it did not do | Happened | Medium | Open and search in one call (ADR-038), a hint after each step, the tool log shows what really ran | 6 |
+| R26 | Websites block or challenge automated browsers | Medium | Low | Jarvis reports the page as it is and never tries to get past a bot check or CAPTCHA | 6 |
+| R27 | A WhatsApp Web update breaks sending | High | Medium | Selectors in one file, nothing is sent unless the message is seen in the box first, desktop fallback | 6 |
 
 ## Details
 
@@ -59,10 +64,12 @@ If the spike fails: options are an MSIX "sparse package" to give the Python proc
 
 ### R5. WhatsApp automation
 
-- WhatsApp's terms do not allow automated or unofficial clients. Automating WhatsApp Web carries a real, if small for low-volume personal use, risk of the account being restricted or banned. You should decide if this is acceptable before Phase 6.
-- WhatsApp Web's page structure changes without notice, which breaks selectors. Selectors are kept in one file so fixes are quick.
-- The desktop fallback uses the `whatsapp://send` deep link, which needs the contact's phone number and still requires pressing Enter, which Jarvis does only after your yes.
-- The Playwright profile in `%LOCALAPPDATA%\Jarvis\browser-profile` holds a logged-in WhatsApp session. Anyone with that folder can read your chats. It is never in the repository.
+- WhatsApp's terms do not allow automated or unofficial clients. Automating WhatsApp Web carries a real, if small for low-volume personal use, risk of the account being restricted or banned. You accepted this at the start of Phase 6 (ADR-037).
+- WhatsApp Web's page structure changes without notice, which breaks selectors. They are kept in `tools/messaging/selectors.py`. The signed-in selectors (message box, Send button, sent message, ticks) were written against a stand-in page (`tests/fixtures/whatsapp_web.html`) and are unconfirmed until your first real send; the logged-out page (the QR code) was checked against the real site in Edge.
+- Jarvis only presses Send after it sees exactly your message in the box, and falls back to the desktop app only when Web never got that far, so a broken selector means "not sent", never "sent twice".
+- The desktop fallback uses the `whatsapp://send` link, which needs the contact's phone number, and presses Enter only after your yes and after reading the message box through UI Automation. That read was not exercised live (it would need a real chat), and the app cannot say whether the message was delivered.
+- WhatsApp Web lives in its own profile, `%LOCALAPPDATA%\Jarvis\whatsapp-profile`, which holds a logged-in session. Anyone with that folder can read your chats. It is never in the repository, and the browser the model drives (`browser-profile`) never shares it. To unlink, remove the device in WhatsApp on your phone (Linked devices) and delete the folder.
+- Groups and contacts without a phone number cannot be messaged yet.
 
 ### R6. UI automation quirks on Windows
 
@@ -73,6 +80,9 @@ If the spike fails: options are an MSIX "sparse package" to give the Python proc
 - **Secure desktop:** UAC prompts and the lock screen cannot be automated at all. That is a Windows security boundary.
 - **COM threading:** pywinauto and Shell COM objects must stay on one thread with COM initialized. All UI work runs on a single dedicated worker thread.
 - **Generic clicks are hard to risk-rate:** a "click" can press Send or Delete. Generic UI tools require confirmation except inside apps you mark as trusted, and destructive-looking targets always confirm. This is a heuristic, not a guarantee.
+- **Typing speed (measured in Phase 6):** Windows 11 Notepad reads input late. Unicode characters sent in a burst arrive as the last one repeated ("hello world" became "hello ddddd"), and real key presses lose their Shift ("Typing" became "tping"). Jarvis types one character every 12 ms (80 ms after an emoji), about 75 a second, then reads the field back and tells you if the text does not match. Apps that do not expose their text cannot be checked, and Jarvis says it typed without having checked.
+- **Focus can move while typing:** if another window comes to the front, typing stops at the next burst of 24 characters and says how far it got, so the rest never lands in the wrong window. Up to one burst can still land before that check.
+- **Apps that hide their controls:** Electron and some WebView2 apps expose few named controls, so `click` may not find a button you can see. `read_window_text` lists what UI Automation reports.
 
 ### R7. Prompt injection
 
@@ -93,6 +103,26 @@ What is not covered: an injected instruction can still trigger `safe` actions th
 - Phase 2 was verified with synthesized speech (Windows SAPI voice) through the real models, not with a person talking into the laptop's microphone. Real-room accuracy, wake word false triggers, and the 0.8 s end-of-speech pause need your testing and probably some tuning (`wake_threshold`, `vad_threshold`, `end_silence_ms`).
 - On this laptop the Windows default input is AudioRelay's virtual microphone, which is silent unless the phone app streams to it, and the ASUS noise-cancelling input was also silent during setup. `config/local.toml` points Jarvis at the Realtek array. Jarvis checks the level at startup and warns about a silent device.
 - The ASUS "AI Noise-cancelling Input" may become the better choice once the ASUS app is running, because it removes background noise before Whisper hears it.
+
+### R23. Playwright's Chromium on this Windows build
+
+Playwright's Chromium builds 1243 and 1248 fail to start on this laptop (Windows 11 build 26300) with "The application has failed to start because its side-by-side configuration is incorrect"; the Event Log says the private assembly named after the Chromium version "could not be found", though the manifest file is next to `chrome.exe`. It fails inside and outside the command sandbox, so it is the Windows build, not Jarvis. Edge, through Playwright's `msedge` channel, works, and is now the default (ADR-040). If a Windows update fixes this, `[browser] channel = "chromium"` brings Playwright's build back. The unused download sits in `%LOCALAPPDATA%\ms-playwright\chromium-1248` (about 440 MB) and can be deleted.
+
+### R24. The database lost pages
+
+During Phase 6 testing, `jarvis.db` turned out damaged: SQLite could still list the tables, but the pages holding the file index (20,059 rows), the command history, and the audit log were gone from the file, and new audit entries failed with "database disk image is malformed". Jarvis kept answering but logged the failures only to its log file. The cause could not be pinned down: no Jarvis code path writes after closing, tests never touch the real data folder, and the history shows writes working until the last run before the error. The most likely explanation is the write-ahead log being lost while several Jarvis processes, started from different shells during development, used the database. Jarvis now checks the file at every start and moves a damaged one aside, keeping it untouched and copying every readable row into a fresh database (ADR-043). On this laptop that ran once: nothing was readable, so history and audit start fresh, and the damaged file is kept as `jarvis.db.corrupt-20261015-134134`.
+
+### R25. Small models and multi-step browsing
+
+Hermes 3 8B reliably makes one tool call per request, but after `browser_open` it usually answers instead of calling `browser_type`, and it then says it searched when it did not (three live attempts). "Open this site and search it" is therefore one call (`browser_open` with `search`). Longer flows (search, open a result, add to cart) are unreliable at this size; the tool log shows what really ran, so a claimed step that did not happen is visible. A larger model (Phase 8 cloud escalation, for public pages only) is the fix.
+
+### R26. Websites and automated browsers
+
+Jarvis's browser is visibly automated (Playwright marks it, and it starts with a fresh profile). Some sites answer with a bot check, a CAPTCHA, or a sign-in wall. Jarvis reports what the page shows and never tries to get past a bot check or solve a CAPTCHA. Amazon.in served its normal page in testing.
+
+### R27. WhatsApp Web updates
+
+WhatsApp Web changes without notice. When sending breaks, Jarvis says it did not send (it never presses Send without first seeing the message in the box), and `[whatsapp] method = "desktop"` switches to the desktop app until the selectors in `tools/messaging/selectors.py` are fixed.
 
 ### R11. Cancellation
 

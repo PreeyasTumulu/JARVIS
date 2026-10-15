@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import itertools
 import json
 from collections.abc import Callable, Sequence
@@ -16,15 +17,19 @@ from jarvis.app import App, build_app
 from jarvis.config import Settings, load_settings
 from jarvis.core.channel import ConfirmationRequest
 from jarvis.llm.types import LLMReply, ToolCall
+from jarvis.platform.uia import Control, WindowContent
 from jarvis.platform.windows import WindowInfo
 from jarvis.services import Services
 from jarvis.storage.db import Database
 from jarvis.tools.apps.index import AppEntry, AppIndex
+from jarvis.tools.browser.session import PageElement, PageSnapshot
 from jarvis.tools.data.http import ApiClient, ProviderError
 from jarvis.tools.data.hub import DataHub
 from jarvis.tools.data.market import Listing, Price
 from jarvis.tools.files.guard import FileGuard
 from jarvis.tools.files.index import FileIndex
+from jarvis.tools.messaging.contacts import ContactBook
+from jarvis.tools.messaging.whatsapp import SendStatus, Sent
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.reminders import Reminders
 from jarvis.tools.web.search import SearchHit
@@ -158,7 +163,10 @@ class FakeWeb:
         return sum(f"{r.url.host}{r.url.path}".startswith(prefix) for r in self.requests)
 
     async def addresses(self, host: str, port: int) -> list[str]:
-        return self.dns.get(host, ["93.184.216.34"])
+        try:
+            return [str(ipaddress.ip_address(host))]  # an address resolves to itself
+        except ValueError:
+            return self.dns.get(host, ["93.184.216.34"])
 
 
 class FakeYahoo:
@@ -251,11 +259,57 @@ class FakeDesktop:
         self.locked = 0
         self.screenshots: list[Path] = []
         self.clipboard: str | None = None
+        # UI automation: per window, its controls and text; what was typed, pressed, clicked.
+        self.foreground = 0
+        self.refuse_focus = False
+        self.elevated: set[int] = set()  # process ids running as administrator
+        self.controls: dict[int, list[Control]] = {}
+        self.lines: dict[int, list[str]] = {}
+        self.field: dict[int, Control | None] = {}  # the focused control per window
+        self.typed: list[str] = []
+        self.keys: list[tuple[tuple[int, ...], int]] = []
+        self.pressed: list[str] = []
+        self.steal_focus_after: int | None = None  # chunks typed before another window takes over
+        self.app_text: str | None = None  # what the focused field shows; None: what was typed
 
-    def add(self, title: str, exe: str, class_name: str = "Window") -> WindowInfo:
-        window = WindowInfo(1000 + len(self.windows), title, 1, exe, class_name)
+    def add(self, title: str, exe: str, class_name: str = "Window", pid: int = 1) -> WindowInfo:
+        window = WindowInfo(1000 + len(self.windows), title, pid, exe, class_name)
         self.windows.append(window)
         return window
+
+    def focus(self, hwnd: int) -> bool:
+        self.focused.append(hwnd)
+        if self.refuse_focus:
+            return False
+        self.foreground = hwnd
+        return True
+
+    def read_window(
+        self, hwnd: int, max_chars: int, visible_only: bool = True
+    ) -> tuple[WindowContent, bool]:
+        lines = self.lines.get(hwnd, [])
+        return WindowContent(list(lines), list(self.controls.get(hwnd, []))), False
+
+    def focus_field(self, hwnd: int, field: Control | None = None) -> Control:
+        from jarvis.platform.uia import UIAError
+
+        if field is None:
+            field = self.field.get(hwnd) or next(
+                (c for c in self.controls.get(hwnd, []) if c.kind in ("field", "document")), None
+            )
+        if field is None:
+            raise UIAError("I can't find a place to type in that window.")
+        self.field[hwnd] = field
+        return field
+
+    def press(self, hwnd: int, control: Control) -> str:
+        self.pressed.append(control.name)
+        return "pressed"
+
+    def type_unicode(self, text: str) -> None:
+        self.typed.append(text)
+        if self.steal_focus_after is not None and len(self.typed) >= self.steal_focus_after:
+            self.foreground = 1
 
     def close(self, hwnd: int) -> None:
         self.closed.append(hwnd)
@@ -297,9 +351,26 @@ async def _run_inline(fn: Callable[..., Any], *args: Any) -> Any:
 def desktop(monkeypatch: pytest.MonkeyPatch) -> FakeDesktop:
     fake = FakeDesktop()
     monkeypatch.setattr("jarvis.platform.windows.list_windows", lambda: list(fake.windows))
+    monkeypatch.setattr("jarvis.platform.windows.focus_window", fake.focus)
+    monkeypatch.setattr("jarvis.platform.windows.foreground_window", lambda: fake.foreground)
+    monkeypatch.setattr("jarvis.platform.windows.is_minimized", lambda hwnd: False)
+    monkeypatch.setattr("jarvis.platform.uia.read_window", fake.read_window)
+    monkeypatch.setattr("jarvis.platform.uia.focus_field", fake.focus_field)
+    monkeypatch.setattr("jarvis.platform.uia.focused_control", lambda hwnd: fake.field.get(hwnd))
+    monkeypatch.setattr("jarvis.platform.uia.press", fake.press)
     monkeypatch.setattr(
-        "jarvis.platform.windows.focus_window", lambda hwnd: fake.focused.append(hwnd) or True
+        "jarvis.platform.uia.focused_text",
+        lambda hwnd: "".join(fake.typed) if fake.app_text is None else fake.app_text,
     )
+    monkeypatch.setattr("jarvis.platform.sendinput.type_unicode", fake.type_unicode)
+    monkeypatch.setattr(
+        "jarvis.platform.sendinput.press_combo",
+        lambda mods, vk: fake.keys.append((tuple(mods), vk)),
+    )
+    monkeypatch.setattr("jarvis.platform.sendinput.is_elevated", lambda pid: pid in fake.elevated)
+    monkeypatch.setattr("jarvis.tools.ui.tools.run_com", _run_inline)
+    monkeypatch.setattr("jarvis.tools.ui.tools.READBACK_DELAY_S", 0)
+    monkeypatch.setattr("jarvis.tools.messaging.whatsapp.run_com", _run_inline)
     monkeypatch.setattr("jarvis.platform.windows.close_window", fake.close)
     monkeypatch.setattr("os.startfile", fake.opened_files.append, raising=False)
     monkeypatch.setattr("webbrowser.open", lambda url: fake.urls.append(url) or True)
@@ -328,6 +399,79 @@ def yahoo() -> FakeYahoo:
     return FakeYahoo()
 
 
+class FakeTab:
+    """One browser tab: a page made of a title, text, and elements. Records what tools did."""
+
+    def __init__(self) -> None:
+        self.url = "about:blank"
+        self.title = ""
+        self.text = ""
+        self.elements: list[PageElement] = []
+        self.visits: list[str] = []
+        self.clicks: list[int] = []
+        self.fills: list[tuple[int, str, bool]] = []
+        self.redirect: str | None = None  # where the next goto really ends up
+
+    def show(self, url: str, title: str, text: str = "", *elements: PageElement) -> None:
+        self.url, self.title, self.text, self.elements = url, title, text, list(elements)
+
+    async def goto(self, url: str, timeout_s: float) -> None:
+        self.visits.append(url)
+        self.url = self.redirect or url
+        self.redirect = None
+
+    async def snapshot(self, chars: int, elements: int, everything: bool = False) -> PageSnapshot:
+        shown = self.elements if everything else self.elements[:elements]
+        return PageSnapshot(self.title, self.url, self.text[:chars], len(self.text) > chars, shown)
+
+    async def click(self, element_id: int) -> None:
+        self.clicks.append(element_id)
+
+    async def fill(self, element_id: int, text: str, submit: bool) -> None:
+        self.fills.append((element_id, text, submit))
+
+    async def blank(self) -> None:
+        self.url = "about:blank"
+
+
+class FakeBrowser:
+    def __init__(self) -> None:
+        self.tab = FakeTab()
+        self.profiles: list[str] = []
+
+    async def page(self, profile: str = "browser") -> FakeTab:
+        self.profiles.append(profile)
+        return self.tab
+
+    async def aclose(self) -> None:
+        return None
+
+
+class FakeWhatsApp:
+    """Records messages instead of sending them."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str]] = []
+        self.result = Sent("web", SendStatus.DELIVERED)
+        self.error: Exception | None = None
+
+    async def send(self, phone: str, message: str) -> Sent:
+        if self.error is not None:
+            raise self.error
+        self.sent.append((phone, message))
+        return self.result
+
+
+@pytest.fixture
+def fake_browser() -> FakeBrowser:
+    return FakeBrowser()
+
+
+@pytest.fixture
+def fake_whatsapp() -> FakeWhatsApp:
+    return FakeWhatsApp()
+
+
 class Harness:
     def __init__(self, app: App, llm: FakeLLM, channel: FakeChannel, tts: FakeTTS) -> None:
         self.app = app
@@ -346,7 +490,13 @@ MakeApp = Callable[..., Harness]
 
 
 @pytest.fixture
-def make_app(settings: Settings, web: FakeWeb, yahoo: FakeYahoo) -> MakeApp:
+def make_app(
+    settings: Settings,
+    web: FakeWeb,
+    yahoo: FakeYahoo,
+    fake_browser: FakeBrowser,
+    fake_whatsapp: FakeWhatsApp,
+) -> MakeApp:
     def factory(
         script: Sequence[LLMReply | BaseException | Hang] = (),
         *,
@@ -385,6 +535,9 @@ def make_app(settings: Settings, web: FakeWeb, yahoo: FakeYahoo) -> MakeApp:
                 env=env or {},
             ),
             reminders=Reminders(db),
+            browser=fake_browser,  # type: ignore[arg-type]
+            contacts=ContactBook(db, cfg.contacts),
+            whatsapp=fake_whatsapp,  # type: ignore[arg-type]
         )
         app = build_app(cfg, chan, llm=llm, services=services, registry=registry, db=db)
         harness = Harness(app, llm, chan, tts)

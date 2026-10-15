@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "0.5.0"
+version = "0.6.0"
 description = "Local-first voice-controlled desktop assistant for Windows 11"
 readme = "README.md"
 license = "MIT"
@@ -22,6 +22,7 @@ dependencies = [
     "mss>=10.2.0",
     "fastapi>=0.143.1",
     "uvicorn>=0.54.0",
+    "playwright>=1.64.0",
 ]
 
 [project.scripts]
@@ -87,5 +88,8 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-markers = ["llm: needs a running Ollama with the Jarvis models (run with -m llm)"]
-addopts = "-m 'not llm'"
+markers = [
+    "llm: needs a running Ollama with the Jarvis models (run with -m llm)",
+    "browser: needs Playwright's Chromium (uv run playwright install chromium; run with -m browser)",
+]
+addopts = "-m 'not llm and not browser'"

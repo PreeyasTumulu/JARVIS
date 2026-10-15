@@ -10,9 +10,13 @@ const ui = {
   form: $("composer"), input: $("input"), send: $("send"), stop: $("stop"), mic: $("mic"),
   hint: $("hint"), meta: $("meta"), voice: $("voice"), conn: $("conn"),
   log: $("log"), logEmpty: $("log-empty"), audit: $("audit"), auditRefresh: $("audit-refresh"),
-  tabActivity: $("tab-activity"), tabAudit: $("tab-audit"),
+  tabActivity: $("tab-activity"), tabAudit: $("tab-audit"), tabContacts: $("tab-contacts"),
   panelActivity: $("panel-activity"), panelAudit: $("panel-audit"),
+  panelContacts: $("panel-contacts"), contacts: $("contacts"), contactForm: $("contact-form"),
+  contactName: $("contact-name"), contactPhone: $("contact-phone"),
+  contactAliases: $("contact-aliases"), contactFile: $("contact-file"), contactNote: $("contact-note"),
 };
+const MAX_VCARD_BYTES = 2 * 1024 * 1024;
 
 const VOICE_LABELS = {
   off: "Voice off", idle: "Ready", listening: "Listening", transcribing: "Transcribing",
@@ -377,6 +381,64 @@ function renderAudit(rows) {
   }
 }
 
+// Contacts
+
+function renderContacts(message) {
+  ui.contacts.replaceChildren();
+  if (message.note) contactNote(message.note, message.error);
+  if (!message.contacts.length) {
+    ui.contacts.append(el("li", "empty", "No contacts yet. Add the people you message."));
+    return;
+  }
+  for (const contact of message.contacts) {
+    const entry = el("li", "entry contact");
+    const head = el("div", "row");
+    head.append(el("span", "who", contact.name));
+    const remove = el("button", "ghost remove", "Remove");
+    remove.type = "button";
+    remove.addEventListener("click", () => {
+      if (window.confirm(`Remove ${contact.name} from Jarvis's contacts?`)) {
+        send({ type: "contact_remove", id: contact.id });
+      }
+    });
+    head.append(remove);
+    entry.append(head, el("div", "phone", contact.phone));
+    if (contact.aliases.length) entry.append(el("div", "also", "Also: " + contact.aliases.join(", ")));
+    ui.contacts.append(entry);
+  }
+}
+
+function contactNote(text, bad) {
+  ui.contactNote.textContent = text;
+  ui.contactNote.className = "form-note" + (bad ? " bad" : "");
+  ui.contactNote.hidden = !text;
+}
+
+function requestContacts() {
+  ui.contacts.replaceChildren(el("li", "empty", "Loading..."));
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "contacts" }));
+}
+
+ui.contactForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const aliases = ui.contactAliases.value.split(",").map((a) => a.trim()).filter(Boolean);
+  const sent = send({
+    type: "contact_add", name: ui.contactName.value, phone: ui.contactPhone.value, aliases,
+  });
+  if (sent) contactNote("Saving...", false);
+});
+
+ui.contactFile.addEventListener("change", async () => {
+  const file = ui.contactFile.files && ui.contactFile.files[0];
+  ui.contactFile.value = "";
+  if (!file) return;
+  if (file.size > MAX_VCARD_BYTES) {
+    contactNote("That file is larger than 2 MB.", true);
+    return;
+  }
+  if (send({ type: "contact_import", text: await file.text() })) contactNote("Importing...", false);
+});
+
 // Messages from the server
 
 function hello(message) {
@@ -398,6 +460,7 @@ function hello(message) {
   setVoice(message.voice);
   setBusy(message.busy);
   if (!ui.panelAudit.hidden) requestAudit();  // the tab was open while reconnecting
+  if (!ui.panelContacts.hidden) requestContacts();
   for (const item of message.open) {
     if (item.type === "confirmation_requested") confirmCard(item);
     else if (item.type === "question") questionCard(item);
@@ -435,6 +498,10 @@ const handlers = {
   },
   reminder_due(message) { append(el("div", "note reminder", message.text)); },
   audit(message) { renderAudit(message.rows); },
+  contacts(message) {
+    renderContacts(message);
+    if (message.added) ui.contactForm.reset();
+  },
   error(message) { note(message.message, "error"); },
 };
 
@@ -493,20 +560,27 @@ ui.suggestions.addEventListener("click", (event) => {
   if (event.target instanceof HTMLButtonElement) submit(event.target.textContent);
 });
 
-function showTab(audit) {
-  ui.tabActivity.setAttribute("aria-selected", String(!audit));
-  ui.tabAudit.setAttribute("aria-selected", String(audit));
-  ui.panelActivity.hidden = audit;
-  ui.panelAudit.hidden = !audit;
-  if (audit) requestAudit();
+function showTab(name) {
+  const tabs = {
+    activity: [ui.tabActivity, ui.panelActivity],
+    audit: [ui.tabAudit, ui.panelAudit],
+    contacts: [ui.tabContacts, ui.panelContacts],
+  };
+  for (const [key, [tab, panel]] of Object.entries(tabs)) {
+    tab.setAttribute("aria-selected", String(key === name));
+    panel.hidden = key !== name;
+  }
+  if (name === "audit") requestAudit();
+  if (name === "contacts") requestContacts();
 }
 
 function requestAudit() {
   ui.audit.replaceChildren(el("li", "empty", "Loading..."));
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "audit" }));
 }
-ui.tabActivity.addEventListener("click", () => showTab(false));
-ui.tabAudit.addEventListener("click", () => showTab(true));
+ui.tabActivity.addEventListener("click", () => showTab("activity"));
+ui.tabAudit.addEventListener("click", () => showTab("audit"));
+ui.tabContacts.addEventListener("click", () => showTab("contacts"));
 ui.auditRefresh.addEventListener("click", requestAudit);
 
 connect();

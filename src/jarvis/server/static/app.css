@@ -288,3 +288,22 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .status-dot.ok { background: var(--ok); }
 .status-dot.bad { background: var(--bad); }
 .status-dot.running { background: var(--accent); animation: pulse 1s infinite; }
+
+/* Contacts */
+
+.contact-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.contact-form input:not([type="file"]) {
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font: inherit; min-width: 0;
+}
+.form-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.file-button { cursor: pointer; padding: 6px 12px; }
+.file-button:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.form-note { margin: 0; font-size: 13px; color: var(--ok); white-space: pre-wrap; }
+.form-note.bad { color: var(--bad); }
+.contacts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.contact .row { justify-content: space-between; }
+.contact .who { font-weight: 600; overflow-wrap: anywhere; }
+.contact .phone { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.contact .also { font-size: 12px; color: var(--muted); }
+.contact .remove { color: var(--bad); }

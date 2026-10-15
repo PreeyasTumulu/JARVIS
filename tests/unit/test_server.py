@@ -211,3 +211,36 @@ def test_events_keep_their_fields() -> None:
         "args": {"day": "today"},
         "risk": "safe",
     }
+
+
+def test_contacts_can_be_added_listed_imported_and_removed(make_app: MakeApp) -> None:
+    with served(make_app) as (client, h), tab(client) as ws:
+        until(ws, "hello")
+        ws.send_json({"type": "contacts"})
+        assert until(ws, "contacts")[-1]["contacts"] == []
+        ws.send_json(
+            {"type": "contact_add", "name": "Amma", "phone": "+91 98765 43210", "aliases": ["Mom"]}
+        )
+        added = until(ws, "contacts")[-1]
+        assert (added["note"], added["added"], added["error"]) == ("Added Amma.", True, False)
+        assert added["contacts"][0]["phone"] == "+919876543210"
+        ws.send_json({"type": "contact_add", "name": "Amma", "phone": "+91 98765 43211"})
+        refused = until(ws, "contacts")[-1]
+        assert refused["error"] is True
+        assert "already" in refused["note"]
+        vcf = "BEGIN:VCARD\nFN:Ravi\nTEL;CELL:+91 90000 00001\nEND:VCARD\n"
+        ws.send_json({"type": "contact_import", "text": vcf})
+        assert until(ws, "contacts")[-1]["note"] == "Imported 1 contacts."
+        amma = h.app.services.contacts.named("Amma")
+        ws.send_json({"type": "contact_remove", "id": amma.id})
+        assert [c["name"] for c in until(ws, "contacts")[-1]["contacts"]] == ["Ravi"]
+
+
+def test_contact_requests_are_size_limited(make_app: MakeApp) -> None:
+    with served(make_app) as (client, h), tab(client) as ws:
+        until(ws, "hello")
+        ws.send_json({"type": "contact_add", "name": "A", "phone": "+91 1", "aliases": "Mom"})
+        assert until(ws, "contacts")[-1]["error"] is True
+        ws.send_json({"type": "contact_import", "text": "x" * 2_000_001})
+        assert until(ws, "contacts")[-1]["note"] == "That file is too large."
+        assert h.app.services.contacts.all() == []

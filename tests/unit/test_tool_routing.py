@@ -35,6 +35,38 @@ def test_open_by_name_gets_apps_and_files() -> None:
     assert {"open_app", "find_file", "open_file"} <= chosen
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "message mom that I'll be late",
+        "tell Ravi that the meeting moved",
+        "send a whatsapp to dad saying hi",
+        "let Priya know I reached",
+    ],
+)
+def test_messages_get_send_whatsapp(text: str) -> None:
+    assert "send_whatsapp" in names(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "type hello world in notepad",
+        "click save in notepad",
+        "press ctrl s",
+        "what does notepad say",
+    ],
+)
+def test_ui_requests_get_ui_tools(text: str) -> None:
+    assert {"type_text", "click", "press_keys", "read_window_text"} <= names(text)
+
+
+def test_working_in_a_website_gets_browser_tools() -> None:
+    chosen = names("search for headphones on amazon")
+    assert {"browser_open", "browser_type", "browser_click"} <= chosen
+    assert "send_whatsapp" not in chosen
+
+
 async def test_agent_sends_routed_tools(make_app: MakeApp) -> None:
     h = make_app([reply("No containers.")])
     await h.app.agent.run_turn("list my docker containers")

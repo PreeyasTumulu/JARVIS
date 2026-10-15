@@ -29,7 +29,7 @@ class _Section(BaseModel):
 
 class AgentSettings(_Section):
     max_iterations: int = Field(default=6, ge=1, le=20)
-    turn_timeout_s: float = Field(default=120, gt=0)
+    turn_timeout_s: float = Field(default=180, gt=0)
     tool_timeout_s: float = Field(default=20, gt=0)
     max_tool_calls_per_step: int = Field(default=4, ge=1)
     history_turns: int = Field(default=8, ge=0)
@@ -77,6 +77,9 @@ class SafetySettings(_Section):
     confirm_timeout_s: float = Field(default=30, gt=0)
     tool_risk_overrides: dict[str, Risk] = {}
     safe_to_close: list[str] = []
+    # Apps where click, type_text, and press_keys run without asking (destructive targets still
+    # ask). Messaging apps and terminals always ask, whatever this says (tools/ui/guard.py).
+    trusted_ui_apps: list[str] = []
 
 
 class AppsSettings(_Section):
@@ -132,6 +135,34 @@ class SystemSettings(_Section):
     screenshot_folder: str = "{pictures}/Screenshots"
 
 
+class UISettings(_Section):
+    read_max_chars: int = Field(default=6000, ge=500)  # window text the model gets to see
+    window_wait_s: float = Field(default=10, gt=0)  # for an app that type_text had to start
+
+
+class BrowserSettings(_Section):
+    # msedge: the Edge that ships with Windows 11 (ADR-040). chromium: Playwright's own build,
+    # after `uv run playwright install chromium`. chrome: an installed Google Chrome.
+    channel: Literal["msedge", "chromium", "chrome"] = "msedge"
+    read_max_chars: int = Field(default=6000, ge=500)  # page text the model gets to see
+    max_elements: int = Field(default=60, ge=10, le=300)  # links, buttons, and fields listed
+    navigation_timeout_s: float = Field(default=30, gt=0)
+
+
+class ContactsSettings(_Section):
+    # Numbers saved without a country code get this one, for example "91" for India.
+    default_country_code: str = Field(default="", pattern=r"^\d{0,3}$")
+    match_threshold: float = Field(default=85, ge=0, le=100)
+
+
+class WhatsAppSettings(_Section):
+    # auto: WhatsApp Web in Jarvis's own browser profile, or the desktop app if Web is not
+    # linked or will not load. Nothing falls back once Enter may have been pressed.
+    method: Literal["auto", "web", "desktop"] = "auto"
+    max_chars: int = Field(default=1000, ge=10, le=4000)
+    verify_timeout_s: float = Field(default=15, gt=0)  # wait for the sent and delivered ticks
+
+
 class ServerSettings(_Section):
     port: int = Field(default=8765, ge=1024, le=65535)  # always on 127.0.0.1, never the network
     open_browser: bool = True
@@ -183,6 +214,10 @@ class Settings(_Section):
     market: MarketSettings = MarketSettings()
     weather: WeatherSettings = WeatherSettings()
     system: SystemSettings = SystemSettings()
+    ui: UISettings = UISettings()
+    browser: BrowserSettings = BrowserSettings()
+    contacts: ContactsSettings = ContactsSettings()
+    whatsapp: WhatsAppSettings = WhatsAppSettings()
     server: ServerSettings = ServerSettings()
     tts: TTSSettings = TTSSettings()
     voice: VoiceSettings = VoiceSettings()
@@ -191,6 +226,15 @@ class Settings(_Section):
     @property
     def models_dir(self) -> Path:
         return self.data_dir / "models"
+
+    @property
+    def browser_profile_dir(self) -> Path:
+        return self.data_dir / "browser-profile"
+
+    @property
+    def whatsapp_profile_dir(self) -> Path:
+        """WhatsApp Web's login lives apart from the browser the model drives (ADR-039)."""
+        return self.data_dir / "whatsapp-profile"
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

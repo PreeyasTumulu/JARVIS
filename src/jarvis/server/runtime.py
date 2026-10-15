@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from jarvis import __version__
 from jarvis.app import App
 from jarvis.server.hub import Client, Message, WebHub
+from jarvis.tools.messaging.contacts import ContactError
 
 if TYPE_CHECKING:
     from jarvis.voice.session import VoiceSession
@@ -23,6 +24,9 @@ MAX_COMMAND_CHARS = 2000
 HISTORY_TURNS = 20
 AUDIT_ROWS = 50
 BUSY = "Jarvis is still working on the last command. Press Stop to cancel it."
+MAX_NAME_CHARS = 80
+MAX_ALIASES = 10
+MAX_VCARD_CHARS = 2_000_000
 
 
 class Runtime:
@@ -82,6 +86,10 @@ class Runtime:
             self._mic(client, message.get("on") is True)
         elif kind == "audit":
             client.send({"type": "audit", "rows": self.app.audit.recent(AUDIT_ROWS)})
+        elif kind == "contacts":
+            client.send(self.contacts_message())
+        elif kind in ("contact_add", "contact_remove", "contact_import"):
+            self._change_contacts(client, kind, message)
         else:
             client.send({"type": "error", "message": f"Unknown request type {kind!r}."})
 
@@ -98,6 +106,45 @@ class Runtime:
         self._web_turn = asyncio.create_task(
             self.app.agent.run_turn(text, source="web"), name="web-turn"
         )
+
+    def contacts_message(self, note: str = "", error: bool = False, added: bool = False) -> Message:
+        book = self.app.services.contacts
+        return {
+            "type": "contacts",
+            "contacts": [contact.as_dict() for contact in book.all()],
+            "note": note,
+            "error": error,
+            "added": added,
+        }
+
+    def _change_contacts(self, client: Client, kind: str, message: Message) -> None:
+        """Contacts are yours to edit from the page; the model has no tool that changes them."""
+        book = self.app.services.contacts
+        try:
+            if kind == "contact_add":
+                aliases = message.get("aliases") or []
+                if not isinstance(aliases, list) or len(aliases) > MAX_ALIASES:
+                    raise ContactError(f"Give at most {MAX_ALIASES} other names.")
+                contact = book.add(
+                    str(message.get("name") or "")[:MAX_NAME_CHARS],
+                    str(message.get("phone") or "")[:MAX_NAME_CHARS],
+                    [str(alias)[:MAX_NAME_CHARS] for alias in aliases],
+                )
+                note = f"Added {contact.name}."
+            elif kind == "contact_remove":
+                note = f"Removed {book.remove(str(message.get('id') or '')).name}."
+            else:
+                text = str(message.get("text") or "")
+                if len(text) > MAX_VCARD_CHARS:
+                    raise ContactError("That file is too large.")
+                result = book.import_vcard(text)
+                note = f"Imported {len(result.added)} contacts."
+                if result.skipped:
+                    note += f" Skipped {len(result.skipped)}: " + "; ".join(result.skipped[:5])
+        except ContactError as exc:
+            client.send(self.contacts_message(str(exc), error=True))
+            return
+        self.hub.broadcast(self.contacts_message(note, added=kind == "contact_add"))
 
     def _mic(self, client: Client, on: bool) -> None:
         """The page's talk button works like holding the push-to-talk hotkey."""

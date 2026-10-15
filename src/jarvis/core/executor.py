@@ -96,6 +96,8 @@ class CallOutcome:
         if self.tool is not None and self.tool.untrusted and self.result.ok:
             text = wrap_untrusted(self.call.name, text)
         data = self.result.data if self.result.ok else None
+        if self.result.ok and self.result.hint:
+            text += f"\n{self.result.hint}"
         if isinstance(data, list) and len(data) > 1:
             # Small models mirror list data as long markdown lists; the reply is spoken.
             text += f"\n{LIST_REPLY_HINT}"

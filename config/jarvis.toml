@@ -4,7 +4,7 @@
 
 [agent]
 max_iterations = 6           # model calls per command before giving up
-turn_timeout_s = 120         # hard ceiling for one command
+turn_timeout_s = 180         # hard ceiling for one command (a first WhatsApp Web load is slow)
 tool_timeout_s = 20          # default per tool call, tools can override
 max_tool_calls_per_step = 4  # parallel tool calls accepted from one model reply
 history_turns = 8            # past commands kept in the conversation
@@ -37,6 +37,9 @@ unlisted_apps = "confirm"    # "confirm" or "block"
 confirm_timeout_s = 30       # no answer within this time means no
 # Apps that close without asking, unless a window title shows unsaved changes.
 safe_to_close = ["Calculator", "Settings", "File Explorer"]
+# Apps where click, type_text, and press_keys run without asking. Targets that look destructive
+# (Send, Delete, Buy, Alt+F4, ...) still ask. WhatsApp and terminals always ask, whatever this says.
+trusted_ui_apps = ["Notepad"]
 
 [safety.tool_risk_overrides]
 # Raise a tool's risk level, for example: open_app = "confirm"
@@ -131,6 +134,29 @@ units = "celsius"            # or "fahrenheit"
 
 [system]
 screenshot_folder = "{pictures}/Screenshots"
+
+[ui]
+read_max_chars = 6000        # window text the model gets to see
+window_wait_s = 10           # how long type_text waits for an app it had to start
+
+[browser]
+# Jarvis's own browser for browser_open, browser_click, and browser_type. Its profile lives in
+# %LOCALAPPDATA%\Jarvis\browser-profile, apart from your everyday browser.
+channel = "msedge"           # the Edge in Windows 11; or "chromium" (uv run playwright install chromium)
+read_max_chars = 6000        # page text the model gets to see
+max_elements = 60            # links, buttons, and fields listed for the model
+navigation_timeout_s = 30
+
+[contacts]
+default_country_code = ""    # for numbers saved without one, for example "91"; set it in local.toml
+match_threshold = 85         # 0 to 100, how close a spoken name must be to a contact or alias
+
+[whatsapp]
+# "auto": WhatsApp Web in its own profile (link it once: uv run jarvis whatsapp login), or the
+# desktop app if Web is not linked or does not load. "web" or "desktop" use only that one.
+method = "auto"
+max_chars = 1000             # longer messages are refused, so the read back stays short enough
+verify_timeout_s = 15        # wait this long for the sent tick after pressing Send
 
 [server]
 port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachable from the network)

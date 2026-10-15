@@ -44,7 +44,7 @@ class App:
         for task in self.background:
             task.cancel()
         await asyncio.gather(*self.background, return_exceptions=True)
-        await self.services.data.aclose()
+        await self.services.aclose()
         await self.llm.aclose()
         self.db.close()
 

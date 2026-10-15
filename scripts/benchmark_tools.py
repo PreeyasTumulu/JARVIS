@@ -89,6 +89,18 @@ CASES = [
     case("what did I copy", "clipboard_read"),
     case("set a timer for 5 minutes", "set_timer"),
     case("remind me in 10 minutes to stretch", "set_reminder", arg=("message", "stretch")),
+    # Phase 6
+    case("type hello world in notepad", "type_text", arg=("text", "hello world")),
+    case("click the File menu in notepad", "click", arg=("target", "file")),
+    case("press ctrl s in notepad", "press_keys", arg=("keys", "s")),
+    case("what does the notepad window say", "read_window_text", arg=("app", "notepad")),
+    case("message mom that I'll be late", "send_whatsapp", arg=("contact", "mom")),
+    case("tell Ravi on whatsapp that the meeting moved to 5", "send_whatsapp"),
+    case("send a whatsapp to dad saying I reached home", "send_whatsapp", arg=("contact", "dad")),
+    case("search amazon for wireless earbuds in your browser", "browser_open", "browser_type"),
+    case("open github.com in your browser so you can sign me in", "browser_open"),
+    case("on the page in your browser, click today's deals", "browser_click", "browser_read"),
+    case("what does the page in your browser say", "browser_read"),
 ]
 
 

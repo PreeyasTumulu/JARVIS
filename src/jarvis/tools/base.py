@@ -55,10 +55,13 @@ class ToolResult(BaseModel):
     data: Any = None
     speech: str | None = None
     error: str | None = None
+    hint: str | None = None  # Jarvis's own note to the model, kept outside untrusted content
 
     @classmethod
-    def success(cls, data: Any = None, speech: str | None = None) -> ToolResult:
-        return cls(ok=True, data=data, speech=speech)
+    def success(
+        cls, data: Any = None, speech: str | None = None, hint: str | None = None
+    ) -> ToolResult:
+        return cls(ok=True, data=data, speech=speech, hint=hint)
 
     @classmethod
     def failure(cls, error: str) -> ToolResult:

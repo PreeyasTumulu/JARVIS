@@ -61,6 +61,7 @@
       <div class="tabs" role="tablist">
         <button type="button" role="tab" id="tab-activity" aria-selected="true" aria-controls="panel-activity">Activity</button>
         <button type="button" role="tab" id="tab-audit" aria-selected="false" aria-controls="panel-audit">Audit log</button>
+        <button type="button" role="tab" id="tab-contacts" aria-selected="false" aria-controls="panel-contacts">Contacts</button>
       </div>
       <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="tab-activity">
         <p class="empty" id="log-empty">Tool calls show up here as they happen.</p>
@@ -72,6 +73,19 @@
           <button type="button" class="ghost" id="audit-refresh">Refresh</button>
         </div>
         <ol class="audit" id="audit"></ol>
+      </div>
+      <div class="panel" id="panel-contacts" role="tabpanel" aria-labelledby="tab-contacts" hidden>
+        <form class="contact-form" id="contact-form" autocomplete="off">
+          <input id="contact-name" placeholder="Name, for example Amma" aria-label="Name" maxlength="80" required>
+          <input id="contact-phone" placeholder="Phone, for example +91 98765 43210" aria-label="Phone" maxlength="40" inputmode="tel" required>
+          <input id="contact-aliases" placeholder="Also called, for example Mom, Amma" aria-label="Other names, separated by commas" maxlength="200">
+          <div class="form-row">
+            <button type="submit" class="btn primary">Add contact</button>
+            <label class="ghost file-button">Import .vcf<input type="file" id="contact-file" accept=".vcf,text/vcard,text/x-vcard" class="sr-only"></label>
+          </div>
+          <p class="form-note" id="contact-note" hidden></p>
+        </form>
+        <ol class="contacts" id="contacts"></ol>
       </div>
     </aside>
   </main>

@@ -92,6 +92,29 @@ GROUPS: dict[str, Group] = {
             r"|\bat \d{1,2}(:\d{2})? ?(am|pm)?\b"
         ),
     ),
+    "ui": Group(
+        ("type_text", "click", "press_keys", "read_window_text", "open_app"),
+        re.compile(
+            r"\b(type|typing|write|click|tap|press|hit|keys?|shortcut|ctrl|control|alt|button|"
+            r"menu|window says|what does .{1,40}? say|read (the |that )?.{0,30}window|in notepad|"
+            r"into notepad)\b"
+        ),
+    ),
+    "browser": Group(
+        ("browser_open", "browser_read", "browser_click", "browser_type", "web_search"),
+        re.compile(
+            r"\b(fill|form|sign up|add to cart|cart|checkout|book|log ?in to|"
+            r"in (the|your|jarvis'?s?) browser|on (the )?(site|website|page)|"
+            r"search (it|on|for .+ on) \w*|amazon|flipkart|youtube|github)\b"
+        ),
+    ),
+    "messaging": Group(
+        ("send_whatsapp",),
+        re.compile(
+            r"\b(whats ?app|message|messages|msg|text \w+ (that|saying)|tell \w+ (that|to)|"
+            r"let \w+ know|send .+ to \w+|reply to)\b"
+        ),
+    ),
     "speech": Group(
         ("speak",),
         re.compile(r"\b(say|announce|aloud|out loud|read out|pronounce)\b"),

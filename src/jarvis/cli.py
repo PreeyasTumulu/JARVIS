@@ -1,4 +1,5 @@
-"""Command line entry point: chat, ask, voice, serve, setup-voice, index, audit, version."""
+"""Command line entry point: chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,
+audit, version."""
 
 from __future__ import annotations
 
@@ -51,6 +52,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("index", help="rebuild the app and file indexes now")
 
+    contacts = sub.add_parser("contacts", help="the people Jarvis can message")
+    actions = contacts.add_subparsers(dest="action")
+    actions.add_parser("list", help="show every contact (the default)")
+    add = actions.add_parser("add", help="add a contact")
+    add.add_argument("name", help='the name, in quotes if it has spaces, e.g. "Ravi Kumar"')
+    add.add_argument("phone", help="the number with its country code, e.g. +919876543210")
+    add.add_argument(
+        "--alias", action="append", default=[], help="another name you use, e.g. Mom (repeatable)"
+    )
+    alias = actions.add_parser("alias", help="give a contact another name")
+    alias.add_argument("name")
+    alias.add_argument("alias")
+    unalias = actions.add_parser("unalias", help="remove one of a contact's other names")
+    unalias.add_argument("name")
+    unalias.add_argument("alias")
+    remove = actions.add_parser("remove", help="delete a contact")
+    remove.add_argument("name")
+    load = actions.add_parser("import", help="import a .vcf file exported from your phone")
+    load.add_argument("file")
+
+    whatsapp = sub.add_parser("whatsapp", help="link WhatsApp Web to Jarvis's own browser")
+    whatsapp.add_argument("action", choices=["login"], help="scan the QR code once")
+
     audit = sub.add_parser("audit", help="show recent tool calls from the audit log")
     audit.add_argument("--last", type=int, default=20, help="how many entries (default 20)")
 
@@ -82,6 +106,10 @@ def main(argv: list[str] | None = None) -> int:
         return show_audit(settings, args.last, console)
     if args.command == "index":
         return rebuild_indexes(settings, console)
+    if args.command == "contacts":
+        return manage_contacts(settings, args, console)
+    if args.command == "whatsapp":
+        return whatsapp_login(settings, console)
     if args.command == "serve":
         from jarvis.server.serve import run_serve
 
@@ -201,6 +229,87 @@ def rebuild_indexes(settings: Settings, console: Console) -> int:
             console.print(f"{count} files and folders indexed.")
     finally:
         db.close()
+    return 0
+
+
+def manage_contacts(settings: Settings, args: argparse.Namespace, console: Console) -> int:
+    from pathlib import Path
+
+    from jarvis.tools.messaging.contacts import ContactBook, ContactError
+
+    db = Database(settings.data_dir / "jarvis.db")
+    book = ContactBook(db, settings.contacts)
+    try:
+        action = args.action or "list"
+        if action == "add":
+            contact = book.add(args.name, args.phone, args.alias)
+            console.print(f"Added {escape(contact.name)} ({contact.phone}).")
+        elif action == "alias":
+            contact = book.add_alias(args.name, args.alias)
+            console.print(f"{escape(contact.name)} is also {escape(', '.join(contact.aliases))}.")
+        elif action == "unalias":
+            book.remove_alias(args.name, args.alias)
+            console.print(f"Removed the name {escape(args.alias)}.")
+        elif action == "remove":
+            console.print(f"Removed {escape(book.remove(args.name).name)}.")
+        elif action == "import":
+            result = book.import_vcard(
+                Path(args.file).read_text(encoding="utf-8", errors="replace")
+            )
+            console.print(f"Imported {len(result.added)} contacts.")
+            for line in result.skipped:
+                console.print(f"[dim]skipped {escape(line)}[/dim]")
+        else:
+            table = Table(title=f"{len(book.all())} contacts")
+            for column in ("name", "phone", "also called"):
+                table.add_column(column)
+            for contact in book.all():
+                table.add_row(
+                    escape(contact.name), contact.phone, escape(", ".join(contact.aliases))
+                )
+            console.print(table)
+    except (ContactError, OSError) as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return 1
+    finally:
+        db.close()
+    return 0
+
+
+def whatsapp_login(settings: Settings, console: Console) -> int:
+    from jarvis.storage.repositories import Preferences
+    from jarvis.tools.base import ToolError
+    from jarvis.tools.browser.session import BrowserManager
+    from jarvis.tools.messaging.whatsapp import WhatsAppWeb
+
+    console.print(
+        "Opening WhatsApp Web in Jarvis's own browser profile. On your phone, open WhatsApp > "
+        "Settings > Linked devices > Link a device, and scan the code. Waiting up to 3 minutes."
+    )
+    db = Database(settings.data_dir / "jarvis.db")
+    browser = BrowserManager(settings)
+    web = WhatsAppWeb(browser, Preferences(db), settings.whatsapp)
+
+    async def link() -> bool:
+        try:
+            return await web.login(wait_s=180)
+        finally:
+            await browser.aclose()
+
+    try:
+        linked = asyncio.run(link())
+    except ToolError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return 1
+    finally:
+        db.close()
+    if not linked:
+        console.print("[yellow]The chat list did not appear, so it is not linked yet.[/yellow]")
+        return 1
+    console.print(
+        "Linked. send_whatsapp now uses WhatsApp Web first. To unlink, remove the device in "
+        "WhatsApp on your phone (Linked devices)."
+    )
     return 0
 
 

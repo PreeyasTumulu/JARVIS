@@ -134,6 +134,10 @@ def focus_window(hwnd: int) -> bool:
     return foreground_window() == hwnd
 
 
+def is_minimized(hwnd: int) -> bool:
+    return bool(user32.IsIconic(hwnd))
+
+
 def close_window(hwnd: int) -> None:
     """Politely ask the window to close (like clicking X)."""
     user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)

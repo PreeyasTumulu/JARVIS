@@ -97,7 +97,8 @@ ALL_TOOLS = {
     "docker_stop", "web_search", "open_url", "fetch_page", "market_data", "crypto_price",
     "convert_currency", "weather", "set_volume", "set_brightness", "lock_screen", "screenshot",
     "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
-    "cancel_reminder", "speak", "ask_user",
+    "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "browser_open",
+    "browser_read", "browser_click", "browser_type", "send_whatsapp", "speak", "ask_user",
 }  # fmt: skip
 
 
@@ -110,3 +111,17 @@ def test_shipped_tools_have_clean_schemas() -> None:
         for name, prop in schema["parameters"]["properties"].items():
             assert prop.get("description"), f"{item.name}.{name} has no description"
         json.dumps(schema)
+
+
+def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
+    registry = build_registry()
+    send = registry.get("send_whatsapp")
+    assert send is not None
+    assert send.risk is Risk.CONFIRM
+    assert send.sensitivity is Sensitivity.PRIVATE
+    egress = {tool.name for tool in registry if tool.egress}
+    assert egress == {"fetch_page", "browser_open", "browser_type"}
+    read = registry.get("read_window_text")
+    assert read is not None
+    assert read.untrusted
+    assert read.sensitivity is Sensitivity.PRIVATE

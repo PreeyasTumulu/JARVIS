@@ -10,6 +10,7 @@
 # unlisted_apps = "block"
 
 # safe_to_close = ["Calculator", "Settings", "File Explorer", "Spotify"]
+# trusted_ui_apps = ["Notepad", "Calculator"]  # type, click, and press keys without asking
 
 # [apps.aliases]
 # "music" = "Spotify"
@@ -40,3 +41,12 @@
 # crypto_currency = "INR"             # "bitcoin price" in rupees
 # [market.aliases]
 # "reliance" = "RELIANCE.NS"          # skip the symbol search for names you use often
+
+# [contacts]
+# default_country_code = "91"         # for numbers saved without one, like 98765 43210
+
+# [whatsapp]
+# method = "desktop"                  # "auto" (Web once linked, else the app), "web", or "desktop"
+
+# [browser]
+# channel = "chromium"                # Playwright's Chromium instead of Edge (uv run playwright install chromium)

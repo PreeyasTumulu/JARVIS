@@ -5,12 +5,14 @@ from __future__ import annotations
 from jarvis.tools.apps.docker import docker_list, docker_logs, docker_start, docker_stop
 from jarvis.tools.apps.tools import close_app, focus_app, open_app
 from jarvis.tools.apps.vscode import vscode_open
+from jarvis.tools.browser.tools import browser_click, browser_open, browser_read, browser_type
 from jarvis.tools.data.crypto import crypto_price
 from jarvis.tools.data.currency import convert_currency
 from jarvis.tools.data.market import market_data
 from jarvis.tools.data.weather import weather
 from jarvis.tools.files.tools import find_file, get_selected_file, open_file, read_file
 from jarvis.tools.interaction import ask_user, speak
+from jarvis.tools.messaging.tools import send_whatsapp
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.clipboard import clipboard_read, clipboard_write
 from jarvis.tools.system.controls import lock_screen, screenshot, set_brightness, set_volume
@@ -20,6 +22,7 @@ from jarvis.tools.system.reminders import (
     set_reminder,
     set_timer,
 )
+from jarvis.tools.ui.tools import click, press_keys, read_window_text, type_text
 from jarvis.tools.web.browser import open_url
 from jarvis.tools.web.fetch import fetch_page
 from jarvis.tools.web.search import web_search
@@ -57,6 +60,15 @@ def build_registry() -> Registry:
             set_reminder,
             list_reminders,
             cancel_reminder,
+            type_text,
+            click,
+            press_keys,
+            read_window_text,
+            browser_open,
+            browser_read,
+            browser_click,
+            browser_type,
+            send_whatsapp,
             speak,
             ask_user,
         ]

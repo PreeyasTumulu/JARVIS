@@ -92,6 +92,10 @@ GROUPS: dict[str, Group] = {
             r"|\bat \d{1,2}(:\d{2})? ?(am|pm)?\b"
         ),
     ),
+    "speech": Group(
+        ("speak",),
+        re.compile(r"\b(say|announce|aloud|out loud|read out|pronounce)\b"),
+    ),
     "questions": Group(
         ("web_search", "fetch_page"),
         re.compile(r"\b(who|what|when|where|why|how|score)\b"),

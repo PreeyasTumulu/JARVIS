@@ -37,6 +37,12 @@ from jarvis.tools.registry import Registry
 
 log = logging.getLogger(__name__)
 
+EMPTY_REPLY_NUDGE = (
+    "(Your last reply was empty. Call the right tool, or answer in one short sentence.)"
+)
+DONE = "Done."
+NOT_UNDERSTOOD = "Sorry, I didn't get that. Could you say it another way?"
+
 
 class TurnStatus(StrEnum):
     OK = "ok"
@@ -181,6 +187,13 @@ class Agent:
         for iteration in range(1, agent_cfg.max_iterations + 1):
             reply = await self._llm.complete(self._model_messages(), schemas)
             stage_times["llm_ms"] = stage_times.get("llm_ms", 0) + reply.latency_ms
+            if not reply.tool_calls and not reply.text.strip():
+                # Hermes sometimes answers with nothing at all (Ollama drops a tool call it could
+                # not parse). One nudge recovers it; the nudge never enters the history.
+                log.info("Empty model reply in turn %s; asking once more", turn_id)
+                nudge = {"role": "user", "content": EMPTY_REPLY_NUDGE}
+                reply = await self._llm.complete([*self._model_messages(), nudge], schemas)
+                stage_times["llm_ms"] += reply.latency_ms
             calls = reply.tool_calls[: agent_cfg.max_tool_calls_per_step]
             await self._bus.publish(
                 ModelReplied(
@@ -191,7 +204,7 @@ class Agent:
                 )
             )
             if not calls:
-                text = reply.text.strip() or "Done."
+                text = reply.text.strip() or (DONE if outcomes else NOT_UNDERSTOOD)
                 self._messages.append({"role": "assistant", "content": text})
                 return text, TurnStatus.OK, iteration
 

@@ -68,3 +68,7 @@ def test_phase4_groups(text: str, expected: set[str], absent: set[str]) -> None:
     chosen = names(text)
     assert expected <= chosen
     assert not absent & chosen
+
+
+def test_speech_requests_get_only_speak() -> None:
+    assert names("announce that the meeting starts in five minutes") == {"speak", "ask_user"}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from jarvis.core.agent import TurnStatus
+from jarvis.core.agent import EMPTY_REPLY_NUDGE, NOT_UNDERSTOOD, TurnStatus
 from jarvis.core.events import AssistantMessage, ToolCallFinished, ToolCallStarted
 from jarvis.llm.types import LLMError
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolResult
@@ -221,3 +221,18 @@ async def test_history_is_trimmed_at_turn_boundaries(make_app: MakeApp) -> None:
         await h.app.agent.run_turn(f"question {i}")
     users = [m["content"] for m in h.app.agent.messages if m["role"] == "user"]
     assert users == ["question 3", "question 4", "question 5"]
+
+
+async def test_an_empty_reply_is_retried_once_with_a_nudge(make_app: MakeApp) -> None:
+    h = make_app([reply(""), reply("", ("open_app", {"name": "notepad"})), reply("Opened.")])
+    result = await h.app.agent.run_turn("close the calculator")
+    assert result.text == "Opened."
+    assert h.llm.requests[1][-1] == {"role": "user", "content": EMPTY_REPLY_NUDGE}
+    assert EMPTY_REPLY_NUDGE not in json.dumps(h.app.agent.messages)  # never kept in history
+
+
+async def test_nothing_twice_is_not_reported_as_done(make_app: MakeApp) -> None:
+    h = make_app([reply(""), reply("  ")])
+    result = await h.app.agent.run_turn("close the calculator")
+    assert result.text == NOT_UNDERSTOOD
+    assert h.audit() == []

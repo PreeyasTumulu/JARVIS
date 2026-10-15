@@ -9,6 +9,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from jarvis.app import App, build_app
@@ -19,9 +20,13 @@ from jarvis.platform.windows import WindowInfo
 from jarvis.services import Services
 from jarvis.storage.db import Database
 from jarvis.tools.apps.index import AppEntry, AppIndex
+from jarvis.tools.data.http import ApiClient, ProviderError
+from jarvis.tools.data.hub import DataHub
+from jarvis.tools.data.market import Listing, Price
 from jarvis.tools.files.guard import FileGuard
 from jarvis.tools.files.index import FileIndex
 from jarvis.tools.registry import Registry
+from jarvis.tools.system.reminders import Reminders
 from jarvis.tools.web.search import SearchHit
 
 REPO = Path(__file__).resolve().parents[1]
@@ -115,6 +120,86 @@ class FakeSearch:
         return self.hits[:max_results]
 
 
+class FakeWeb:
+    """Canned HTTP answers by URL prefix. Anything else fails the way a dead network does."""
+
+    def __init__(self) -> None:
+        self.routes: dict[str, Callable[[httpx.Request], httpx.Response]] = {}
+        self.requests: list[httpx.Request] = []
+        self.dns: dict[str, list[str]] = {"localhost": ["127.0.0.1"]}
+
+    def route(
+        self,
+        prefix: str,
+        json: Any = None,
+        *,
+        status: int = 200,
+        content: bytes | str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        """Answer requests whose host and path start with `prefix`, e.g. "api.example.com/v1"."""
+
+        def answer(request: httpx.Request) -> httpx.Response:
+            if json is not None:
+                return httpx.Response(status, json=json, headers=headers)
+            return httpx.Response(status, content=content or b"", headers=headers)
+
+        self.routes[prefix] = answer
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        target = f"{request.url.host}{request.url.path}"
+        for prefix, answer in self.routes.items():
+            if target.startswith(prefix):
+                return answer(request)
+        raise httpx.ConnectError("no network in tests", request=request)
+
+    def hits(self, prefix: str) -> int:
+        return sum(f"{r.url.host}{r.url.path}".startswith(prefix) for r in self.requests)
+
+    async def addresses(self, host: str, port: int) -> list[str]:
+        return self.dns.get(host, ["93.184.216.34"])
+
+
+class FakeYahoo:
+    """Stands in for yfinance: symbol search and quotes from dictionaries."""
+
+    name = "yfinance"
+
+    def __init__(self) -> None:
+        self.listings: dict[str, list[Listing]] = {}
+        self.prices: dict[str, Price] = {}
+        self.offline = False
+        self.broken = False  # fails with an error that does not say whether the network is down
+        self.searches: list[str] = []
+        self.quotes: list[str] = []
+
+    def supports(self, symbol: str) -> bool:
+        return True
+
+    async def price(self, api: ApiClient, symbol: str) -> Price:
+        async def request() -> Price:
+            self.quotes.append(symbol)
+            if self.offline:
+                raise ProviderError(self.name, "could not connect", offline=True)
+            if self.broken:
+                raise ProviderError(self.name, "failed (KeyError)")
+            if symbol not in self.prices:
+                raise ProviderError(self.name, f"no price for {symbol}", miss=True)
+            return self.prices[symbol]
+
+        return await api.call(self.name, request)
+
+    async def search(self, api: ApiClient, query: str) -> list[Listing]:
+        async def request() -> list[Listing]:
+            self.searches.append(query)
+            if self.offline:
+                raise ProviderError(self.name, "could not connect", offline=True)
+            return self.listings.get(query.casefold(), [])
+
+        return await api.call(self.name, request)
+
+
 def fake_apps(
     *names: str,
     aliases: dict[str, str] | None = None,
@@ -151,7 +236,7 @@ def launched(monkeypatch: pytest.MonkeyPatch) -> list[AppEntry]:
 
 
 class FakeDesktop:
-    """Stands in for real windows, file opening, the browser, and VS Code in every test."""
+    """Stands in for windows, files, the browser, VS Code, and system controls in every test."""
 
     def __init__(self) -> None:
         self.windows: list[WindowInfo] = []
@@ -160,6 +245,12 @@ class FakeDesktop:
         self.opened_files: list[str] = []
         self.urls: list[str] = []
         self.spawned: list[list[str]] = []
+        self.volume = 40
+        self.muted = False
+        self.brightness: int | None = 50  # None: no built-in screen
+        self.locked = 0
+        self.screenshots: list[Path] = []
+        self.clipboard: str | None = None
 
     def add(self, title: str, exe: str, class_name: str = "Window") -> WindowInfo:
         window = WindowInfo(1000 + len(self.windows), title, 1, exe, class_name)
@@ -169,6 +260,37 @@ class FakeDesktop:
     def close(self, hwnd: int) -> None:
         self.closed.append(hwnd)
         self.windows = [w for w in self.windows if w.hwnd != hwnd]
+
+    def set_volume(self, level: int | None = None, mute: bool | None = None) -> tuple[int, bool]:
+        if level is not None:
+            self.volume = level
+        if mute is not None:
+            self.muted = mute
+        return self.volume, self.muted
+
+    def get_brightness(self) -> int:
+        if self.brightness is None:
+            raise OSError("no WmiMonitorBrightness instance")
+        return self.brightness
+
+    def set_brightness(self, level: int) -> int:
+        self.get_brightness()
+        self.brightness = level
+        return level
+
+    def lock(self) -> None:
+        self.locked += 1
+
+    def capture(self, path: Path) -> tuple[int, int]:
+        self.screenshots.append(path)
+        return 1920, 1080
+
+    def set_clipboard(self, text: str) -> None:
+        self.clipboard = text
+
+
+async def _run_inline(fn: Callable[..., Any], *args: Any) -> Any:
+    return fn(*args)
 
 
 @pytest.fixture(autouse=True)
@@ -182,7 +304,28 @@ def desktop(monkeypatch: pytest.MonkeyPatch) -> FakeDesktop:
     monkeypatch.setattr("os.startfile", fake.opened_files.append, raising=False)
     monkeypatch.setattr("webbrowser.open", lambda url: fake.urls.append(url) or True)
     monkeypatch.setattr("jarvis.tools.apps.vscode.spawn", fake.spawned.append)
+    monkeypatch.setattr("jarvis.tools.system.controls.run_com", _run_inline)
+    monkeypatch.setattr("jarvis.platform.volume.get_volume", lambda: (fake.volume, fake.muted))
+    monkeypatch.setattr("jarvis.platform.volume.set_volume", fake.set_volume)
+    monkeypatch.setattr("jarvis.platform.display.get_brightness", fake.get_brightness)
+    monkeypatch.setattr("jarvis.platform.display.set_brightness", fake.set_brightness)
+    monkeypatch.setattr("jarvis.platform.display.lock_workstation", fake.lock)
+    monkeypatch.setattr("jarvis.platform.display.capture_screen", fake.capture)
+    monkeypatch.setattr("jarvis.platform.clipboard.get_text", lambda: fake.clipboard)
+    monkeypatch.setattr("jarvis.platform.clipboard.set_text", fake.set_clipboard)
     return fake
+
+
+@pytest.fixture(autouse=True)
+def web(monkeypatch: pytest.MonkeyPatch) -> FakeWeb:
+    fake = FakeWeb()
+    monkeypatch.setattr("jarvis.tools.web.fetch.addresses", fake.addresses)
+    return fake
+
+
+@pytest.fixture
+def yahoo() -> FakeYahoo:
+    return FakeYahoo()
 
 
 class Harness:
@@ -203,7 +346,7 @@ MakeApp = Callable[..., Harness]
 
 
 @pytest.fixture
-def make_app(settings: Settings) -> MakeApp:
+def make_app(settings: Settings, web: FakeWeb, yahoo: FakeYahoo) -> MakeApp:
     def factory(
         script: Sequence[LLMReply | BaseException | Hang] = (),
         *,
@@ -211,6 +354,7 @@ def make_app(settings: Settings) -> MakeApp:
         search: FakeSearch | None = None,
         registry: Registry | None = None,
         overrides: dict[str, Any] | None = None,
+        env: dict[str, str] | None = None,
     ) -> Harness:
         cfg = settings
         if overrides:
@@ -233,6 +377,14 @@ def make_app(settings: Settings) -> MakeApp:
             ),
             files=FileIndex(db, FileGuard(cfg.files, roots=[files_root]), cfg.files),
             search=search or FakeSearch(),
+            data=DataHub(
+                db,
+                cfg,
+                http=httpx.AsyncClient(transport=httpx.MockTransport(web.handle)),
+                yahoo=yahoo,
+                env=env or {},
+            ),
+            reminders=Reminders(db),
         )
         app = build_app(cfg, chan, llm=llm, services=services, registry=registry, db=db)
         harness = Harness(app, llm, chan, tts)

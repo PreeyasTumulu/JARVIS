@@ -19,7 +19,15 @@ from jarvis.core.events import ConfirmationRequested, EventBus, ToolCallFinished
 from jarvis.core.prompts import truncate, wrap_untrusted
 from jarvis.llm.types import ToolCall
 from jarvis.storage.repositories import AuditEntry, AuditLog
-from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolError, ToolResult
+from jarvis.tools.base import (
+    ContextFlags,
+    Prepared,
+    Risk,
+    Sensitivity,
+    ToolContext,
+    ToolError,
+    ToolResult,
+)
 from jarvis.tools.policy import PolicyGate
 from jarvis.tools.registry import Registry, Tool
 
@@ -29,6 +37,11 @@ LIST_REPLY_HINT = (
     "(Reply in one or two spoken sentences: how many there are and at most three names. "
     "No list, no paths, no sizes, no dates.)"
 )
+TEXT_REPLY_HINT = (
+    "(Reply in two or three short spoken sentences with the main point, unless the user asked "
+    "for more. No lists.)"
+)
+LONG_TEXT_CHARS = 400
 
 
 class Decision(StrEnum):
@@ -55,6 +68,15 @@ class CallOutcome:
     def sensitivity(self) -> Sensitivity:
         return self.tool.sensitivity if self.tool else Sensitivity.PUBLIC
 
+    @property
+    def flags(self) -> ContextFlags:
+        """What this result adds to the model's context. Failures carry only Jarvis's own text."""
+        if not self.result.ok or self.tool is None:
+            return ContextFlags()
+        return ContextFlags(
+            private=self.tool.sensitivity is Sensitivity.PRIVATE, untrusted=self.tool.untrusted
+        )
+
     def model_content(self, max_chars: int) -> str:
         """What the model sees for this call. Untrusted output is wrapped as data."""
         if self.result.ok:
@@ -67,9 +89,13 @@ class CallOutcome:
         text = truncate(json.dumps(payload, ensure_ascii=False, default=str), max_chars)
         if self.tool is not None and self.tool.untrusted and self.result.ok:
             text = wrap_untrusted(self.call.name, text)
-        if self.result.ok and isinstance(self.result.data, list) and len(self.result.data) > 1:
+        data = self.result.data if self.result.ok else None
+        if isinstance(data, list) and len(data) > 1:
             # Small models mirror list data as long markdown lists; the reply is spoken.
             text += f"\n{LIST_REPLY_HINT}"
+        elif isinstance(data, dict) and len(str(data.get("text") or "")) > LONG_TEXT_CHARS:
+            # A page or file read in full otherwise comes back as a minute-long summary.
+            text += f"\n{TEXT_REPLY_HINT}"
         return text
 
     def summary(self) -> str:
@@ -170,7 +196,7 @@ class ToolExecutor:
                 args=args,
             )
 
-        verdict = self._policy.evaluate(tool, prepared)
+        verdict = self._policy.evaluate(tool, prepared, ctx.flags)
         await self._bus.publish(
             ToolCallStarted(
                 turn_id=ctx.turn_id,

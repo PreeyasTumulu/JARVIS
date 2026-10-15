@@ -32,7 +32,7 @@ from jarvis.core.tool_routing import select_tools
 from jarvis.llm.types import ChatModel, LLMError
 from jarvis.services import Services
 from jarvis.storage.repositories import HistoryLog
-from jarvis.tools.base import Sensitivity, ToolContext
+from jarvis.tools.base import ContextFlags, Sensitivity, ToolContext
 from jarvis.tools.registry import Registry
 
 log = logging.getLogger(__name__)
@@ -87,6 +87,7 @@ class Agent:
         self._clock = clock
         self.session_id = session_id or uuid.uuid4().hex[:12]
         self._messages: list[dict[str, Any]] = []
+        self._call_flags: dict[str, ContextFlags] = {}  # tool_call_id to what its result added
         self._task: asyncio.Task[Any] | None = None
         self._task_loop: asyncio.AbstractEventLoop | None = None
 
@@ -203,8 +204,10 @@ class Agent:
             )
             for call in calls:
                 stage_times.setdefault("first_tool_ms", int((time.perf_counter() - started) * 1000))
+                ctx.flags = self._context_flags()
                 outcome = await self._executor.run(call, ctx)
                 outcomes.append(outcome)
+                self._call_flags[call.id] = outcome.flags
                 self._messages.append(
                     {
                         "role": "tool",
@@ -224,6 +227,19 @@ class Agent:
         request = next(m["content"] for m in reversed(self._messages) if m["role"] == "user")
         return [tool.schema() for tool in select_tools(request, self._registry)]
 
+    def _context_flags(self) -> ContextFlags:
+        """Whether private or outside content is in the context the model is working from.
+
+        Computed from the messages themselves, so trimmed history and rolled-back turns drop out.
+        """
+        private = untrusted = False
+        for message in self._messages:
+            if message["role"] == "tool":
+                flags = self._call_flags.get(message["tool_call_id"], ContextFlags())
+                private = private or flags.private
+                untrusted = untrusted or flags.untrusted
+        return ContextFlags(private=private, untrusted=untrusted)
+
     def _model_messages(self) -> list[dict[str, Any]]:
         now = self._clock() if self._clock else None
         return [{"role": "system", "content": system_prompt(now)}, *self._messages]
@@ -234,6 +250,8 @@ class Agent:
         user_indexes = [i for i, m in enumerate(self._messages) if m["role"] == "user"]
         if len(user_indexes) > keep:
             del self._messages[: user_indexes[-keep]]
+        live = {m["tool_call_id"] for m in self._messages if m["role"] == "tool"}
+        self._call_flags = {k: v for k, v in self._call_flags.items() if k in live}
 
     def _record_history(self, result: TurnResult, text: str, source: str) -> None:
         try:

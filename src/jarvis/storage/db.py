@@ -83,6 +83,27 @@ MIGRATIONS: list[str] = [
         item_count INTEGER NOT NULL
     );
     """,
+    # 4: data API cache, and timers and reminders
+    """
+    CREATE TABLE api_cache (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        fetched_at REAL NOT NULL,
+        expires_at REAL NOT NULL
+    );
+
+    CREATE TABLE reminders (
+        id INTEGER PRIMARY KEY,
+        kind TEXT NOT NULL,
+        message TEXT NOT NULL,
+        due_at REAL NOT NULL,
+        created_at REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        fired_at REAL
+    );
+
+    CREATE INDEX idx_reminders_due ON reminders (status, due_at);
+    """,
 ]
 
 

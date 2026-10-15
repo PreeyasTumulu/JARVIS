@@ -94,7 +94,10 @@ def test_parse_docstring_without_args() -> None:
 ALL_TOOLS = {
     "open_app", "focus_app", "close_app", "find_file", "open_file", "read_file",
     "get_selected_file", "vscode_open", "docker_list", "docker_logs", "docker_start",
-    "docker_stop", "web_search", "open_url", "speak", "ask_user",
+    "docker_stop", "web_search", "open_url", "fetch_page", "market_data", "crypto_price",
+    "convert_currency", "weather", "set_volume", "set_brightness", "lock_screen", "screenshot",
+    "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
+    "cancel_reminder", "speak", "ask_user",
 }  # fmt: skip
 
 

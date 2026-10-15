@@ -47,3 +47,24 @@ async def test_routing_can_be_turned_off(make_app: MakeApp) -> None:
     h = make_app([reply("ok")], overrides={"agent": {"tool_routing": "all"}})
     await h.app.agent.run_turn("list my docker containers")
     assert len(h.llm.tools_seen[0] or []) == len(REGISTRY)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "absent"),
+    [
+        ("what's reliance trading at", {"market_data"}, {"web_search"}),
+        ("bitcoin in rupees", {"crypto_price"}, {"web_search"}),
+        ("convert 100 dollars to rupees", {"convert_currency"}, {"web_search"}),
+        ("what's the weather tomorrow", {"weather"}, {"web_search"}),
+        ("volume to 30", {"set_volume"}, {"weather"}),
+        ("lock my laptop", {"lock_screen"}, {"market_data"}),
+        ("take a screenshot", {"screenshot"}, {"web_search"}),
+        ("remind me in 10 minutes to stretch", {"set_reminder", "set_timer"}, {"web_search"}),
+        ("summarize this article https://example.com/a", {"fetch_page"}, set()),
+        ("who won the cricket world cup", {"web_search"}, {"open_app"}),
+    ],
+)
+def test_phase4_groups(text: str, expected: set[str], absent: set[str]) -> None:
+    chosen = names(text)
+    assert expected <= chosen
+    assert not absent & chosen

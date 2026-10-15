@@ -81,6 +81,13 @@ class TranscriptHeard:
     stt_ms: int
 
 
+@dataclass(frozen=True)
+class ReminderDue:
+    reminder_id: int
+    kind: str  # timer or reminder
+    text: str  # what Jarvis says
+
+
 Event = (
     TurnStarted
     | ModelReplied
@@ -91,6 +98,7 @@ Event = (
     | TurnFinished
     | VoiceStateChanged
     | TranscriptHeard
+    | ReminderDue
 )
 Handler = Callable[[Event], Awaitable[None] | None]
 

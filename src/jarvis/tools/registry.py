@@ -36,6 +36,7 @@ class Tool:
     args_model: type[BaseModel]
     fn: ToolFn
     prepare_fn: PrepareFn | None = None
+    egress: bool = False  # sends a request to an address the model chooses (see policy.py)
 
     def preparer(self, fn: PrepareFn) -> PrepareFn:
         """Register a side-effect-free step that resolves and risk-rates arguments."""
@@ -73,6 +74,7 @@ def tool(
     untrusted: bool = False,
     timeout_s: float | None = None,
     name: str | None = None,
+    egress: bool = False,
 ) -> Callable[[ToolFn], Tool]:
     """Turn an async function into a Tool. Sensitivity defaults to private (fail closed)."""
 
@@ -91,6 +93,7 @@ def tool(
             timeout_s=timeout_s,
             args_model=_build_args_model(fn, arg_docs),
             fn=fn,
+            egress=egress,
         )
 
     return wrap

@@ -1,4 +1,4 @@
-"""Long-lived helpers that tools share (voice, app index, file index, search backend)."""
+"""Long-lived helpers that tools share (voice, indexes, search, data APIs, reminders)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from jarvis.config import Settings
 from jarvis.storage.db import Database
 from jarvis.tools.apps.index import AppIndex, AppStore
+from jarvis.tools.data.hub import DataHub
 from jarvis.tools.files.index import FileIndex
+from jarvis.tools.system.reminders import Reminders
 from jarvis.tools.web.search import DuckDuckGoSearch, SearchBackend
 from jarvis.voice.tts.base import TTSEngine
 from jarvis.voice.tts.factory import build_tts
@@ -19,6 +21,8 @@ class Services:
     apps: AppIndex
     files: FileIndex
     search: SearchBackend
+    data: DataHub
+    reminders: Reminders
 
 
 def build_services(settings: Settings, db: Database) -> Services:
@@ -32,4 +36,6 @@ def build_services(settings: Settings, db: Database) -> Services:
         ),
         files=FileIndex.from_settings(db, settings.files),
         search=DuckDuckGoSearch(region=settings.search.region),
+        data=DataHub(db, settings),
+        reminders=Reminders(db),
     )

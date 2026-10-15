@@ -104,6 +104,8 @@ class VoiceSession:
         self._wake = wake
         self._vad = vad
         self._state = VoiceState.IDLE
+        self._idle = asyncio.Event()
+        self._idle.set()
         self._capture = Capture.NONE
         self._buffer: list[Audio] = []
         self._endpointer: Endpointer | None = None
@@ -183,6 +185,12 @@ class VoiceSession:
             self._pending_answer.set_result("")
         await self._cues.cancelled()
         await self._set_state(VoiceState.IDLE, "stopped")
+
+    async def announce(self, text: str) -> None:
+        """Say something Jarvis brings up on its own (a reminder) without talking over anyone."""
+        while self._state is not VoiceState.IDLE:
+            await self._idle.wait()
+        await self._speak(text)
 
     async def ask_and_listen(self, prompt: str) -> str:
         """Speak a question and return the next thing the user says (used for confirmations)."""
@@ -400,6 +408,10 @@ class VoiceSession:
 
     async def _set_state(self, state: VoiceState, detail: str = "") -> None:
         self._state = state
+        if state is VoiceState.IDLE:
+            self._idle.set()
+        else:
+            self._idle.clear()
         await self._bus.publish(VoiceStateChanged(state=state, detail=detail))
 
     def _spawn(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:

@@ -32,3 +32,11 @@
 # stop_hotkey = "ctrl+alt+x"
 # wake_word_enabled = true            # same as: uv run jarvis voice --wake
 # stt_model = "base.en"               # about 3x faster than small.en, a little less accurate
+
+# [weather]
+# home = "Hyderabad"                  # used when you ask without naming a place
+
+# [market]
+# crypto_currency = "INR"             # "bitcoin price" in rupees
+# [market.aliases]
+# "reliance" = "RELIANCE.NS"          # skip the symbol search for names you use often

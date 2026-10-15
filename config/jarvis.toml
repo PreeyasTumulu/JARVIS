@@ -96,6 +96,42 @@ everything = "auto"          # use Everything (voidtools es.exe) for search if i
 max_results = 5
 region = "us-en"
 
+[web]
+fetch_max_chars = 6000       # page text the model gets to see
+fetch_max_mb = 3             # larger downloads are cut off
+
+[market]
+# Tried in order. Providers without an API key in .env are skipped; yfinance needs none.
+# Exchange-listed symbols (RELIANCE.NS) and indices (^NSEI) always try yfinance first.
+providers = ["finnhub", "twelvedata", "alphavantage", "yfinance"]
+# When symbol search finds the same company on one of these exchanges, use that listing,
+# for example Infosys on NSE (INFY.NS) rather than its US share (INFY).
+prefer_listings = [".NS", ".BO"]
+crypto_currency = "USD"      # used when a crypto question names no currency
+
+[market.aliases]
+# Spoken names that symbol search gets wrong or that are faster to skip searching for.
+"nifty" = "^NSEI"
+"nifty 50" = "^NSEI"
+"nifty fifty" = "^NSEI"
+"bank nifty" = "^NSEBANK"
+"sensex" = "^BSESN"
+"nasdaq" = "^IXIC"
+"dow" = "^DJI"
+"dow jones" = "^DJI"
+"s&p 500" = "^GSPC"
+"s and p 500" = "^GSPC"
+"gold" = "GC=F"
+"silver" = "SI=F"
+"crude oil" = "CL=F"
+
+[weather]
+home = ""                    # your city, for example "Hyderabad"; set it in config/local.toml
+units = "celsius"            # or "fahrenheit"
+
+[system]
+screenshot_folder = "{pictures}/Screenshots"
+
 [tts]
-engine = "sapi"              # Phase 2 adds "piper" and "kokoro"
+engine = "piper"             # "piper", or "sapi" (built-in Windows voice); falls back to sapi if Piper is not installed
 rate = 0                     # -10 (slow) to 10 (fast)

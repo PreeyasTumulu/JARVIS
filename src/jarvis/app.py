@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 
 from jarvis.config import Settings
 from jarvis.core.agent import Agent
@@ -17,6 +19,7 @@ from jarvis.storage.repositories import AuditLog, HistoryLog
 from jarvis.tools.catalog import build_registry
 from jarvis.tools.policy import PolicyGate
 from jarvis.tools.registry import Registry
+from jarvis.tools.system.reminders import ReminderScheduler
 
 
 @dataclass
@@ -30,8 +33,18 @@ class App:
     llm: ChatModel
     services: Services
     agent: Agent
+    background: list[asyncio.Task[None]] = field(default_factory=list)
+
+    async def start_reminders(self, announce: Callable[[str], Awaitable[None]]) -> None:
+        """Announce timers and reminders while this app runs (chat and voice, not one-shot ask)."""
+        scheduler = ReminderScheduler(self.services.reminders, self.bus, announce)
+        self.background.append(asyncio.create_task(scheduler.run(), name="reminders"))
 
     async def aclose(self) -> None:
+        for task in self.background:
+            task.cancel()
+        await asyncio.gather(*self.background, return_exceptions=True)
+        await self.services.data.aclose()
         await self.llm.aclose()
         self.db.close()
 

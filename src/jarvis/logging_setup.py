@@ -27,6 +27,8 @@ def setup_logging(data_dir: Path, *, verbose: bool = False) -> Path:
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
     root.addHandler(file_handler)
     root.addHandler(console_handler)
-    for noisy in ("httpx", "httpcore", "openai", "primp", "ddgs"):
+    for noisy in ("httpx", "httpcore", "openai", "primp", "ddgs", "trafilatura", "htmldate"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+    # yfinance logs its own errors ("possibly delisted") that Jarvis reports in plain words.
+    logging.getLogger("yfinance").setLevel(logging.CRITICAL)
     return log_file

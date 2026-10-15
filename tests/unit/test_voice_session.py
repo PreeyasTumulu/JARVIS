@@ -297,3 +297,16 @@ async def test_wake_word_is_ignored_while_speaking(make_app: MakeApp) -> None:
         await tts.stop()
         runner.cancel()
         await asyncio.gather(runner, return_exceptions=True)
+
+
+async def test_announcements_wait_until_jarvis_is_idle(make_app: MakeApp) -> None:
+    h = make_app([Hang()])
+    session, mic, _, tts = make_session(h, FakeSTT("what is the meaning of life"))
+    await push_to_talk(session, mic)
+    await until(lambda: session.state is VoiceState.THINKING)
+    announcing = asyncio.create_task(session.announce("Reminder: stretch."))
+    await asyncio.sleep(0.05)
+    assert tts.spoken == []  # not while a command is running
+    await session.stop()
+    await until(lambda: tts.spoken == ["Reminder: stretch."])
+    await announcing

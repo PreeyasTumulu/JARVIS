@@ -78,6 +78,7 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
                     "config/local.toml.[/yellow]"
                 )
             _print_banner(console, settings, wake_enabled)
+            runner.run(app.start_reminders(session.announce))
             runner.run(session.run())
         except KeyboardInterrupt:
             pass

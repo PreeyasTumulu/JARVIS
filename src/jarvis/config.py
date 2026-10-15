@@ -103,6 +103,35 @@ class SearchSettings(_Section):
     region: str = "us-en"
 
 
+class WebSettings(_Section):
+    fetch_max_chars: int = Field(default=6000, ge=500)  # page text the model gets to see
+    fetch_max_mb: float = Field(default=3, gt=0)  # larger downloads are cut off
+
+
+class MarketSettings(_Section):
+    # Tried in order. Providers without an API key in .env are skipped; yfinance needs none.
+    providers: list[Literal["finnhub", "twelvedata", "alphavantage", "yfinance"]] = [
+        "finnhub",
+        "twelvedata",
+        "alphavantage",
+        "yfinance",
+    ]
+    aliases: dict[str, str] = {}  # spoken name to ticker, for example "nifty" = "^NSEI"
+    # When search finds the same company on one of these exchanges, use that listing
+    # (Infosys on NSE, INFY.NS, rather than its US share, INFY).
+    prefer_listings: list[str] = []
+    crypto_currency: str = "USD"  # used when a crypto question names no currency
+
+
+class WeatherSettings(_Section):
+    home: str = ""  # your city, used when a question names no place
+    units: Literal["celsius", "fahrenheit"] = "celsius"
+
+
+class SystemSettings(_Section):
+    screenshot_folder: str = "{pictures}/Screenshots"
+
+
 class TTSSettings(_Section):
     engine: Literal["piper", "sapi"] = "piper"
     piper_voice: str = "en_GB-alan-medium"
@@ -145,6 +174,10 @@ class Settings(_Section):
     apps: AppsSettings = AppsSettings()
     files: FilesSettings = FilesSettings()
     search: SearchSettings = SearchSettings()
+    web: WebSettings = WebSettings()
+    market: MarketSettings = MarketSettings()
+    weather: WeatherSettings = WeatherSettings()
+    system: SystemSettings = SystemSettings()
     tts: TTSSettings = TTSSettings()
     voice: VoiceSettings = VoiceSettings()
     data_dir: Path = Field(default_factory=default_data_dir)

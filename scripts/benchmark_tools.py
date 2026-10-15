@@ -73,6 +73,22 @@ CASES = [
     case("what is this file", "get_selected_file"),
     case("open github.com", "open_url", arg=("url", "github")),
     case("open the jarvis project folder in vs code", "find_file", "vscode_open"),
+    # Phase 4
+    case("what's reliance trading at", "market_data", arg=("query", "reliance")),
+    case("price of apple stock", "market_data", arg=("query", "apple")),
+    case("how is the nifty doing today", "market_data", arg=("query", "nifty")),
+    case("bitcoin price in rupees", "crypto_price", arg=("coin", "bitcoin")),
+    case("convert 100 dollars to rupees", "convert_currency"),
+    case("what's the weather tomorrow", "weather", arg=("day", "tomorrow")),
+    case("is it going to rain in mumbai today", "weather", arg=("place", "mumbai")),
+    case("summarize https://www.python.org/about/", "fetch_page", arg=("url", "python.org")),
+    case("set the volume to 30", "set_volume"),
+    case("make the screen dimmer", "set_brightness"),
+    case("lock my laptop", "lock_screen"),
+    case("take a screenshot", "screenshot"),
+    case("what did I copy", "clipboard_read"),
+    case("set a timer for 5 minutes", "set_timer"),
+    case("remind me in 10 minutes to stretch", "set_reminder", arg=("message", "stretch")),
 ]
 
 

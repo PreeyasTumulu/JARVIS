@@ -14,7 +14,7 @@ from rich.table import Table
 from jarvis import __version__
 from jarvis.app import build_app
 from jarvis.config import ConfigError, Settings, load_settings
-from jarvis.console import ConsoleChannel, ConsoleRenderer
+from jarvis.console import ConsoleChannel, ConsoleRenderer, read_line
 from jarvis.core.agent import TurnStatus
 from jarvis.logging_setup import setup_logging
 from jarvis.storage.db import Database
@@ -131,9 +131,14 @@ def run_chat(
                 f"log {escape(log_file)}[/dim]\n"
                 "[dim]Type a command. Ctrl+C stops the current command, /quit exits.[/dim]"
             )
+            runner.run(
+                app.start_reminders(lambda text: _speak_quietly(app.services.tts, text, console))
+            )
             while True:
+                console.print("[bold cyan]you[/bold cyan] > ", end="")
                 try:
-                    text = console.input("[bold cyan]you[/bold cyan] > ").strip()
+                    # Reading inside the event loop keeps reminders running while you type.
+                    text = runner.run(read_line()).strip()
                 except (EOFError, KeyboardInterrupt):
                     console.print()
                     break

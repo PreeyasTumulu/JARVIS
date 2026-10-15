@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "0.4.0"
+version = "0.5.0"
 description = "Local-first voice-controlled desktop assistant for Windows 11"
 readme = "README.md"
 license = "MIT"
@@ -20,6 +20,8 @@ dependencies = [
     "trafilatura>=2.3.1",
     "pycaw>=20260927",
     "mss>=10.2.0",
+    "fastapi>=0.143.1",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]

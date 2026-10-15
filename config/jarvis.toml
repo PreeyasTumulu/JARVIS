@@ -132,6 +132,10 @@ units = "celsius"            # or "fahrenheit"
 [system]
 screenshot_folder = "{pictures}/Screenshots"
 
+[server]
+port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachable from the network)
+open_browser = true          # open the page when `jarvis serve` starts
+
 [tts]
 engine = "piper"             # "piper", or "sapi" (built-in Windows voice); falls back to sapi if Piper is not installed
 rate = 0                     # -10 (slow) to 10 (fast)

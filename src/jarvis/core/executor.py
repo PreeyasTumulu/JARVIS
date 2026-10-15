@@ -15,7 +15,13 @@ from pydantic import ValidationError
 
 from jarvis.config import Settings
 from jarvis.core.channel import ConfirmationRequest
-from jarvis.core.events import ConfirmationRequested, EventBus, ToolCallFinished, ToolCallStarted
+from jarvis.core.events import (
+    ConfirmationRequested,
+    ConfirmationResolved,
+    EventBus,
+    ToolCallFinished,
+    ToolCallStarted,
+)
 from jarvis.core.prompts import truncate, wrap_untrusted
 from jarvis.llm.types import ToolCall
 from jarvis.storage.repositories import AuditEntry, AuditLog
@@ -256,12 +262,25 @@ class ToolExecutor:
             timeout_s=self._settings.safety.confirm_timeout_s,
         )
         await self._bus.publish(ConfirmationRequested(turn_id=ctx.turn_id, request=request))
+        decision = Decision.CANCELLED
         try:
             async with asyncio.timeout(request.timeout_s):
                 approved = await ctx.channel.confirm(request)
+            decision = Decision.CONFIRMED if approved is True else Decision.DENIED
         except TimeoutError:
-            return Decision.TIMEOUT
-        return Decision.CONFIRMED if approved is True else Decision.DENIED
+            decision = Decision.TIMEOUT
+        finally:
+            # Every channel (the web UI especially) needs to know the question is closed.
+            answered = decision in (Decision.CONFIRMED, Decision.DENIED)
+            await self._bus.publish(
+                ConfirmationResolved(
+                    turn_id=ctx.turn_id,
+                    request_id=request.request_id,
+                    decision=decision,
+                    via=ctx.channel.name if answered else None,
+                )
+            )
+        return decision
 
     async def _execute(self, tool: Tool, prepared: Prepared, ctx: ToolContext) -> ToolResult:
         timeout = tool.timeout_s or self._settings.agent.tool_timeout_s

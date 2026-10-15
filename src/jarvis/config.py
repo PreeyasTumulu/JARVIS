@@ -132,6 +132,11 @@ class SystemSettings(_Section):
     screenshot_folder: str = "{pictures}/Screenshots"
 
 
+class ServerSettings(_Section):
+    port: int = Field(default=8765, ge=1024, le=65535)  # always on 127.0.0.1, never the network
+    open_browser: bool = True
+
+
 class TTSSettings(_Section):
     engine: Literal["piper", "sapi"] = "piper"
     piper_voice: str = "en_GB-alan-medium"
@@ -178,6 +183,7 @@ class Settings(_Section):
     market: MarketSettings = MarketSettings()
     weather: WeatherSettings = WeatherSettings()
     system: SystemSettings = SystemSettings()
+    server: ServerSettings = ServerSettings()
     tts: TTSSettings = TTSSettings()
     voice: VoiceSettings = VoiceSettings()
     data_dir: Path = Field(default_factory=default_data_dir)

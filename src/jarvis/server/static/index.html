@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Jarvis</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="logo" src="/static/icon.svg" alt="" width="28" height="28">
+      <span class="name">Jarvis</span>
+      <span class="meta" id="meta"></span>
+    </div>
+    <div class="indicators">
+      <span class="pill" id="voice" data-state="off" title="Voice">Voice off</span>
+      <span class="pill" id="conn" data-state="connecting">Connecting</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="conversation" aria-label="Conversation">
+      <div class="chat" id="chat" aria-live="polite">
+        <div class="welcome" id="welcome">
+          <h1>What can I do for you?</h1>
+          <p>Type a command, or use the mic. Try one of these:</p>
+          <div class="suggestions" id="suggestions">
+            <button type="button" class="chip">what's Reliance trading at</button>
+            <button type="button" class="chip">weather tomorrow</button>
+            <button type="button" class="chip">what docker containers are running</button>
+            <button type="button" class="chip">set a timer for 5 minutes</button>
+            <button type="button" class="chip">open notepad</button>
+          </div>
+        </div>
+      </div>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <button type="button" class="round mic" id="mic" aria-pressed="false" disabled
+                title="Voice is off in this session">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+          <span class="sr-only">Talk</span>
+        </button>
+        <textarea id="input" rows="1" placeholder="Message Jarvis" aria-label="Command"></textarea>
+        <button type="submit" class="round send" id="send" title="Send (Enter)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.1 15 12 3.4 13.9Z"/></svg>
+          <span class="sr-only">Send</span>
+        </button>
+        <button type="button" class="round stop" id="stop" hidden title="Stop (Esc)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          <span class="sr-only">Stop</span>
+        </button>
+      </form>
+      <p class="hint" id="hint">Enter sends, Shift+Enter adds a line, Esc stops.</p>
+    </section>
+
+    <aside class="side" aria-label="Activity">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-activity" aria-selected="true" aria-controls="panel-activity">Activity</button>
+        <button type="button" role="tab" id="tab-audit" aria-selected="false" aria-controls="panel-audit">Audit log</button>
+      </div>
+      <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="tab-activity">
+        <p class="empty" id="log-empty">Tool calls show up here as they happen.</p>
+        <ol class="log" id="log"></ol>
+      </div>
+      <div class="panel" id="panel-audit" role="tabpanel" aria-labelledby="tab-audit" hidden>
+        <div class="panel-head">
+          <span>Last 50 tool calls</span>
+          <button type="button" class="ghost" id="audit-refresh">Refresh</button>
+        </div>
+        <ol class="audit" id="audit"></ol>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>

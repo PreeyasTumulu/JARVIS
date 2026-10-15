@@ -1,9 +1,10 @@
-"""Command line entry point: chat, ask, voice, setup-voice, audit, version."""
+"""Command line entry point: chat, ask, voice, serve, setup-voice, index, audit, version."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import io
 import sys
 from datetime import datetime
 
@@ -39,6 +40,13 @@ def build_parser() -> argparse.ArgumentParser:
     voice.add_argument("--model", help="use a different model for this session")
     voice.add_argument("--list-devices", action="store_true", help="list microphones and exit")
 
+    serve = sub.add_parser("serve", help="open the web UI (with voice, if installed)")
+    serve.add_argument("--port", type=int, help="port on 127.0.0.1 (default from config)")
+    serve.add_argument("--no-browser", action="store_true", help="do not open the browser")
+    serve.add_argument("--no-voice", action="store_true", help="web page only, no microphone")
+    serve.add_argument("--wake", action="store_true", help='also listen for "hey jarvis"')
+    serve.add_argument("--model", help="use a different model for this session")
+
     sub.add_parser("setup-voice", help="download the speech, voice, and wake word models")
 
     sub.add_parser("index", help="rebuild the app and file indexes now")
@@ -52,6 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    _utf8_output()
     console = Console()
     if args.command == "version":
         console.print(f"jarvis {__version__}")
@@ -73,6 +82,20 @@ def main(argv: list[str] | None = None) -> int:
         return show_audit(settings, args.last, console)
     if args.command == "index":
         return rebuild_indexes(settings, console)
+    if args.command == "serve":
+        from jarvis.server.serve import run_serve
+
+        if args.model:
+            settings.llm.active().model = args.model
+        return run_serve(
+            settings,
+            console,
+            port=args.port or settings.server.port,
+            open_browser=settings.server.open_browser and not args.no_browser,
+            voice=not args.no_voice,
+            wake=args.wake,
+            verbose=args.verbose,
+        )
     if args.command in ("voice", "setup-voice"):
         try:
             from jarvis.voice import runner
@@ -179,6 +202,18 @@ def rebuild_indexes(settings: Settings, console: Console) -> int:
     finally:
         db.close()
     return 0
+
+
+def _utf8_output() -> None:
+    """Write UTF-8 when output goes to a pipe or file.
+
+    A real console prints any character, but a redirected stream on Windows defaults to the
+    ANSI code page (cp1252), where spinner and non-English characters crash the program.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").replace("-", "").lower()
+        if encoding != "utf8" and isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def _is_store_python() -> bool:

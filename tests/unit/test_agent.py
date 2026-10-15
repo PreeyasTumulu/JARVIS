@@ -236,3 +236,17 @@ async def test_nothing_twice_is_not_reported_as_done(make_app: MakeApp) -> None:
     result = await h.app.agent.run_turn("close the calculator")
     assert result.text == NOT_UNDERSTOOD
     assert h.audit() == []
+
+
+async def test_turns_from_different_channels_wait_for_each_other(make_app: MakeApp) -> None:
+    h = make_app([Hang(), reply("Second.")])
+    first = asyncio.create_task(h.app.agent.run_turn("slow one", source="web"))
+    await asyncio.sleep(0.01)
+    second = asyncio.create_task(h.app.agent.run_turn("quick one", source="voice"))
+    await asyncio.sleep(0.01)
+    assert len(h.llm.requests) == 1  # the voice turn waits instead of sharing the history
+    assert h.app.agent.cancel()
+    assert (await first).status is TurnStatus.CANCELLED
+    assert (await second).text == "Second."
+    roles = [m["role"] for m in h.app.agent.messages]
+    assert roles == ["user", "assistant", "user", "assistant"]

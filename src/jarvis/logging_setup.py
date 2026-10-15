@@ -8,6 +8,19 @@ from pathlib import Path
 
 from rich.logging import RichHandler
 
+# Libraries that log every request at INFO; their warnings still come through.
+NOISY_LOGGERS = (
+    "httpx",
+    "httpx2",
+    "httpcore",
+    "openai",
+    "primp",
+    "ddgs",
+    "trafilatura",
+    "htmldate",
+    "uvicorn",
+)
+
 
 def setup_logging(data_dir: Path, *, verbose: bool = False) -> Path:
     log_dir = data_dir / "logs"
@@ -27,7 +40,7 @@ def setup_logging(data_dir: Path, *, verbose: bool = False) -> Path:
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
     root.addHandler(file_handler)
     root.addHandler(console_handler)
-    for noisy in ("httpx", "httpcore", "openai", "primp", "ddgs", "trafilatura", "htmldate"):
+    for noisy in NOISY_LOGGERS:
         logging.getLogger(noisy).setLevel(logging.WARNING)
     # yfinance logs its own errors ("possibly delisted") that Jarvis reports in plain words.
     logging.getLogger("yfinance").setLevel(logging.CRITICAL)

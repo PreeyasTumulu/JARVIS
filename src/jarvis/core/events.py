@@ -44,6 +44,14 @@ class ConfirmationRequested:
 
 
 @dataclass(frozen=True)
+class ConfirmationResolved:
+    turn_id: str
+    request_id: str
+    decision: str  # confirmed, denied, timeout, or cancelled
+    via: str | None = None  # the channel that answered
+
+
+@dataclass(frozen=True)
 class ToolCallFinished:
     turn_id: str
     call_id: str
@@ -93,6 +101,7 @@ Event = (
     | ModelReplied
     | ToolCallStarted
     | ConfirmationRequested
+    | ConfirmationResolved
     | ToolCallFinished
     | AssistantMessage
     | TurnFinished

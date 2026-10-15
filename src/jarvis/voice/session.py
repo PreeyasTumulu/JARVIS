@@ -193,7 +193,13 @@ class VoiceSession:
         await self._speak(text)
 
     async def ask_and_listen(self, prompt: str) -> str:
-        """Speak a question and return the next thing the user says (used for confirmations)."""
+        """Speak a question and return the next thing the user says (used for confirmations).
+
+        The question may belong to a command typed in the web UI, and the page may answer
+        first; either way the session goes back to the state it was in before asking.
+        """
+        before = self._state
+        resume = before if before in (VoiceState.IDLE, VoiceState.THINKING) else VoiceState.THINKING
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
         self._pending_answer = future
         try:
@@ -207,12 +213,15 @@ class VoiceSession:
                     await self._start_listening()
             return await future
         finally:
+            answered_here = future.done() and not future.cancelled()
             if self._pending_answer is future:
                 self._pending_answer = None
             if not future.done():
                 future.cancel()
-            if self._state is VoiceState.AWAITING_ANSWER:
-                await self._set_state(VoiceState.THINKING)
+            if not answered_here and self._capture is Capture.ENDPOINT:
+                self._end_capture()  # another channel answered: stop recording the answer
+            if self._state is not resume and self._state is not VoiceState.SPEAKING:
+                await self._set_state(resume)
 
     # Push-to-talk
 

@@ -8,11 +8,11 @@ import time
 from rich.console import Console
 from rich.markup import escape
 
-from jarvis.app import build_app
+from jarvis.app import App, build_app
 from jarvis.config import Settings
 from jarvis.console import ConsoleChannel, ConsoleRenderer
 from jarvis.core.channel import FirstAnswerChannel
-from jarvis.platform.hotkeys import HotkeyListener, parse_hotkey
+from jarvis.platform.hotkeys import Hotkey, HotkeyListener, parse_hotkey
 from jarvis.voice.audio import (
     SILENT_RMS,
     AudioPlayer,
@@ -32,7 +32,7 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
     cfg = settings.voice
     wake_enabled = wake or cfg.wake_word_enabled
     try:
-        bindings = {"ptt": parse_hotkey(cfg.ptt_hotkey), "stop": parse_hotkey(cfg.stop_hotkey)}
+        hotkey_bindings(settings)
     except ValueError as exc:
         console.print(f"[red]{escape(str(exc))}. Fix [voice] in config/local.toml.[/red]")
         return 2
@@ -42,54 +42,82 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
     with asyncio.Runner() as runner:
         app = build_app(settings, channel)
         app.bus.subscribe(ConsoleRenderer(console, verbose=verbose))
-        session = VoiceSession(
-            agent=app.agent,
-            bus=app.bus,
-            settings=settings,
-            mic=MicStream(cfg.input_device),
-            stt=Transcriber(cfg, settings.models_dir),
-            tts=app.services.tts,
-            cues=Earcons(AudioPlayer(), enabled=cfg.earcons),
-            wake=WakeWordDetector(cfg.wake_word, settings.models_dir) if wake_enabled else None,
-            vad=SileroVAD(settings.models_dir, cfg.wake_word) if wake_enabled else None,
-        )
+        session = create_session(settings, app, wake_enabled=wake_enabled)
         voice_channel.attach(session)
-        loop = runner.get_loop()
-
-        def on_hotkey(name: str, phase: str) -> None:  # runs on the hotkey thread
-            loop.call_soon_threadsafe(session.on_hotkey, name, phase)
-
-        hotkeys = HotkeyListener(bindings, on_hotkey, hold={"ptt"})
+        hotkeys: HotkeyListener | None = None
         try:
             warning = runner.run(app.llm.check())
             if warning:
                 console.print(f"[yellow]{escape(warning)}[/yellow]")
-            started = time.perf_counter()
-            with console.status("Loading speech models (the first run downloads them)..."):
-                runner.run(session.load())
-            console.print(f"[dim]Models ready in {time.perf_counter() - started:.1f}s[/dim]")
-            runner.run(_check_microphone(settings, console))
-
-            hotkeys.start()
-            for name in hotkeys.failed:
-                console.print(
-                    f"[yellow]Could not register {escape(bindings[name].text)} "
-                    f"({name}); another app may own it. Change it under [voice] in "
-                    "config/local.toml.[/yellow]"
-                )
+            runner.run(prepare(session, settings, console))
+            hotkeys = start_hotkeys(settings, session, runner.get_loop(), console)
             _print_banner(console, settings, wake_enabled)
             runner.run(app.start_reminders(session.announce))
             runner.run(session.run())
         except KeyboardInterrupt:
             pass
         finally:
-            hotkeys.stop()
+            if hotkeys is not None:
+                hotkeys.stop()
             runner.run(session.close())
             summary = session.latency_summary()
             if summary:
                 console.print(f"[dim]{summary}[/dim]")
             runner.run(app.aclose())
     return 0
+
+
+def hotkey_bindings(settings: Settings) -> dict[str, Hotkey]:
+    """The push-to-talk and stop hotkeys from config. Raises ValueError for a bad one."""
+    cfg = settings.voice
+    return {"ptt": parse_hotkey(cfg.ptt_hotkey), "stop": parse_hotkey(cfg.stop_hotkey)}
+
+
+def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> VoiceSession:
+    cfg = settings.voice
+    return VoiceSession(
+        agent=app.agent,
+        bus=app.bus,
+        settings=settings,
+        mic=MicStream(cfg.input_device),
+        stt=Transcriber(cfg, settings.models_dir),
+        tts=app.services.tts,
+        cues=Earcons(AudioPlayer(), enabled=cfg.earcons),
+        wake=WakeWordDetector(cfg.wake_word, settings.models_dir) if wake_enabled else None,
+        vad=SileroVAD(settings.models_dir, cfg.wake_word) if wake_enabled else None,
+    )
+
+
+async def prepare(session: VoiceSession, settings: Settings, console: Console) -> None:
+    """Load every speech model up front and warn about a silent microphone."""
+    started = time.perf_counter()
+    with console.status("Loading speech models (the first run downloads them)..."):
+        await session.load()
+    console.print(f"[dim]Models ready in {time.perf_counter() - started:.1f}s[/dim]")
+    await _check_microphone(settings, console)
+
+
+def start_hotkeys(
+    settings: Settings,
+    session: VoiceSession,
+    loop: asyncio.AbstractEventLoop,
+    console: Console,
+) -> HotkeyListener:
+    """Register push-to-talk and stop system wide; events reach the session on its loop."""
+    bindings = hotkey_bindings(settings)
+
+    def on_hotkey(name: str, phase: str) -> None:  # runs on the hotkey thread
+        loop.call_soon_threadsafe(session.on_hotkey, name, phase)
+
+    hotkeys = HotkeyListener(bindings, on_hotkey, hold={"ptt"})
+    hotkeys.start()
+    for name in hotkeys.failed:
+        console.print(
+            f"[yellow]Could not register {escape(bindings[name].text)} "
+            f"({name}); another app may own it. Change it under [voice] in "
+            "config/local.toml.[/yellow]"
+        )
+    return hotkeys
 
 
 def _print_banner(console: Console, settings: Settings, wake_enabled: bool) -> None:

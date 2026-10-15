@@ -310,3 +310,31 @@ async def test_announcements_wait_until_jarvis_is_idle(make_app: MakeApp) -> Non
     await session.stop()
     await until(lambda: tts.spoken == ["Reminder: stretch."])
     await announcing
+
+
+class SlowNo:
+    name = "web"
+
+    async def confirm(self, request: Any) -> bool:
+        await asyncio.sleep(0.05)
+        return False
+
+    async def ask(self, question: str, options: Any = None) -> str:
+        await asyncio.sleep(0.05)
+        return ""
+
+
+async def test_a_page_answer_puts_voice_back_to_idle(make_app: MakeApp) -> None:
+    from jarvis.core.channel import FirstAnswerChannel
+
+    voice = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Not opened.")],
+        channel=FirstAnswerChannel(voice, SlowNo()),  # type: ignore[arg-type]
+    )
+    session, _, _, tts = make_session(h, FakeSTT())
+    voice.attach(session)
+    await h.app.agent.run_turn("open spotify", source="web")  # typed in the page
+    assert tts.spoken == ["Should I open Spotify? Say yes or no."]
+    assert h.audit()[0]["decision"] == "denied"
+    assert session.state is VoiceState.IDLE  # not stuck waiting for a spoken answer

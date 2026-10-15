@@ -96,6 +96,7 @@ class Agent:
         self._call_flags: dict[str, ContextFlags] = {}  # tool_call_id to what its result added
         self._task: asyncio.Task[Any] | None = None
         self._task_loop: asyncio.AbstractEventLoop | None = None
+        self._turn_lock = asyncio.Lock()  # one turn at a time, whichever channel started it
 
     @property
     def messages(self) -> list[dict[str, Any]]:
@@ -116,7 +117,15 @@ class Agent:
     async def run_turn(
         self, text: str, source: str = "cli", timings: dict[str, int] | None = None
     ) -> TurnResult:
-        """Run one command. `timings` carries stage times measured before the turn (e.g. STT)."""
+        """Run one command. `timings` carries stage times measured before the turn (e.g. STT).
+
+        Voice, the web UI, and the CLI share one agent, so turns are serialized: a turn that
+        arrives while another runs waits for it (callers cancel the old one first if they want).
+        """
+        async with self._turn_lock:
+            return await self._run_turn(text, source, timings)
+
+    async def _run_turn(self, text: str, source: str, timings: dict[str, int] | None) -> TurnResult:
         turn_id = uuid.uuid4().hex[:12]
         started = time.perf_counter()
         self._task = asyncio.current_task()

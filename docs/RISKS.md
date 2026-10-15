@@ -9,7 +9,7 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R1 | Hermes 3 8B does not fit in 4 GB VRAM, replies are slow | High | Medium | KV cache quantization, keep-alive, stable prompt prefix, benchmark against `hermes3:3b`, fast path for "stop" | 1 |
 | R2 | A small model picks the wrong tool or wrong arguments | Medium | Medium | Policy gate, confirmations, argument validation, benchmark suite, tool retrieval if accuracy drops | 1, 4 |
 | R3 | 16 GB RAM is tight with LLM, Whisper, Playwright, Docker Desktop, and your own apps | Medium | Medium | STT on CPU with a small model, DuckDuckGo instead of SearXNG, lazy-load voice and browser components | 2, 6 |
-| R4 | Notification listener does not work from unpackaged Python | Spike passed | High for Phase 7 | Spike done (reading and polling work, events do not); poll and diff by id, app allowlist, WhatsApp Web polling only as a fallback | 7 |
+| R4 | Notification listener does not work from unpackaged Python | Spike passed | High for Phase 7 | Reading and polling work, events do not: a 2 s poll, an app allowlist, text kept 7 days (ADR-044) | 7 |
 | R5 | WhatsApp automation breaks or risks the account | Medium | High | You accepted the risk (ADR-037); read back and explicit yes on every send, low volume, WhatsApp's own click-to-chat links, selectors in one file, desktop fallback, never two sends | 6 |
 | R6 | UI automation is flaky on some apps | High | Medium | Prefer CLI adapters, UIA only where needed, paced typing read back afterwards, focus checked before every burst, clear failure messages | 6 |
 | R7 | Prompt injection from web pages, files, or notifications | Medium | High | Untrusted-data wrapping, policy gate in code, confirmations cannot be answered by tool content | All |
@@ -33,6 +33,8 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R25 | An 8B model does not chain browser steps, and claims steps it did not do | Happened | Medium | Open and search in one call (ADR-038), a hint after each step, the tool log shows what really ran | 6 |
 | R26 | Websites block or challenge automated browsers | Medium | Low | Jarvis reports the page as it is and never tries to get past a bot check or CAPTCHA | 6 |
 | R27 | A WhatsApp Web update breaks sending | High | Medium | Selectors in one file, nothing is sent unless the message is seen in the box first, desktop fallback | 6 |
+| R28 | A small model fills optional arguments with the examples from their description | Happened | Medium | No example names in argument text, filler values ignored, fewer optional arguments (ADR-044) | 7 |
+| R29 | Notifications are missed or arrive without text | Medium | Medium | Poll every 2 s while Jarvis runs, store what is seen; WhatsApp desktop running with previews on | 7 |
 
 ## Details
 
@@ -74,7 +76,7 @@ If the spike fails: options are an MSIX "sparse package" to give the Python proc
 | WhatsApp desktop | its notifications carry two text lines (chat or sender, then the message), so previews are on; app id `5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App` |
 | Removing a notification | works for the spike's own toasts |
 
-The spike printed only counts per app and text lengths, never other apps' text. What it means: reading works from plain Python and polling is fast enough, so no MSIX package is needed; the event subscription is not available, so changes must be found by polling. Notifications stay in the center for days (the oldest here was three days old), so the first poll after a start sees a backlog, which Jarvis must treat as "already there", not new.
+The spike printed only counts per app and text lengths, never other apps' text. After the build, a live check with the real allowlist kept 8 Claude and 3 WhatsApp notifications (all with text) and ignored Armoury Crate and Windows Security; the watcher stored a new notification within about 2 s without being asked. What it means: reading works from plain Python and polling is fast enough, so no MSIX package is needed; the event subscription is not available, so changes must be found by polling. Notifications stay in the center for days (the oldest here was three days old), so the first poll after a start sees a backlog, which Jarvis must treat as "already there", not new.
 
 ### R5. WhatsApp automation
 
@@ -137,6 +139,14 @@ Jarvis's browser is visibly automated (Playwright marks it, and it starts with a
 ### R27. WhatsApp Web updates
 
 WhatsApp Web changes without notice. When sending breaks, Jarvis says it did not send (it never presses Send without first seeing the message in the box), and `[whatsapp] method = "desktop"` switches to the desktop app until the selectors in `tools/messaging/selectors.py` are fixed.
+
+### R28. Small models and optional arguments
+
+When a tool's argument text has examples, Hermes 3 8B tends to copy them into the call: for "read my notifications" it called `read_notifications(app="WhatsApp", person="Ravi", include_read=true)`, the examples from the argument descriptions, and found nothing. Argument text now says "leave empty unless the user named one" without example names, the tool has one optional argument instead of three, and values like "any", "everyone", or an app name are ignored as a person. Other tools still have examples in their argument text; the benchmark has not shown the same problem there, but it is worth watching.
+
+### R29. Notifications that are missed or empty
+
+Jarvis sees only what is in the notification center when it looks: while chat, voice, or the web UI runs it looks every 2 s; otherwise only when you ask. A notification dismissed in between (or removed by WhatsApp because you read the message on your phone) is missed. WhatsApp's desktop app must be running with notifications and message previews on (WhatsApp settings, Notifications); with previews off, its notifications carry no text. Focus assist (Do not disturb) does not matter: notifications still reach the notification center.
 
 ### R11. Cancellation
 

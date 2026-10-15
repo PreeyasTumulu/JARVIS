@@ -200,12 +200,31 @@ uv run jarvis whatsapp login      # scan the QR code: phone, WhatsApp, Settings,
 
 Then say "message Mom that I'll be late". Jarvis reads the message back with the contact's name and the last digits of the number, and sends only after you say or click yes. Silence or "no" sends nothing. To force one way, set `[whatsapp] method = "web"` or `"desktop"`.
 
+## 5g. Notifications (Phase 7)
+
+Nothing to install. Windows must allow apps to read notifications: Settings > Privacy & security > Notifications (on this laptop it already was). Jarvis reads only the apps you list, and keeps their text for a week:
+
+```toml
+[notifications]
+apps = ["WhatsApp", "Claude"]   # display names, as the notification center shows them
+keep_days = 7
+```
+
+```powershell
+uv run jarvis notifications test    # shows a test notification Jarvis can read back
+uv run jarvis ask "read my notifications"
+uv run jarvis ask "anything new from Ravi"
+uv run jarvis notifications         # what Jarvis has kept, newest first
+```
+
+While `jarvis chat`, `jarvis voice`, or `jarvis serve` runs, Jarvis checks every 2 s, so a WhatsApp notification that disappears when you read the message on your phone is still kept. Keep the WhatsApp desktop app running with notifications and message previews on, or there is nothing to read. Jarvis does not announce notifications; ask for them.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |
 |---|---|---|
 | Microphone for desktop apps | Privacy and security, Microphone, "Let desktop apps access your microphone" | Phase 2 |
-| Notification access | Privacy and security, Notifications, allow apps to access notifications | Phase 7 |
+| Notification access | Privacy and security, Notifications, allow apps to access notifications (already on here) | Phase 7 |
 
 Run Jarvis as your normal user, not as administrator. Windows blocks a normal process from automating elevated windows (Task Manager, admin terminals). That is intended.
 
@@ -250,4 +269,6 @@ None of this is inside the repository.
 | Typed text comes out wrong in an app | Jarvis says so when it can read the field back. Type in smaller pieces, or tell the app's name exactly. |
 | `click` cannot find a button you can see | Some apps (Electron, WebView2) hide their controls from UI Automation. `what does <app> say` lists what Jarvis can see. |
 | WhatsApp says "not sent" | `uv run jarvis whatsapp login` again if the phone unlinked it; if WhatsApp Web changed, set `[whatsapp] method = "desktop"` (RISKS.md R27). |
+| "Windows does not let Jarvis read notifications" | Settings > Privacy & security > Notifications: turn notification access on. |
+| WhatsApp messages never show up | The WhatsApp desktop app must be running, with notifications and message previews on, and "WhatsApp" must be in `[notifications] apps`. |
 | "Jarvis's database was damaged" | The old file was kept as `jarvis.db.corrupt-<time>` and a fresh one started. Indexes rebuild themselves; history and audit restart. |

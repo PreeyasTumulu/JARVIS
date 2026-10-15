@@ -266,7 +266,7 @@ The prompt says this content is data. The real protection is structural: nothing
 | `read_window_text(app)` | 6 | safe (blocked for the apps above) | private, untrusted |
 | `browser_open(url, search?)`, `browser_read()`, `browser_click(target)`, `browser_type(text, target?, submit?)` | 6 | safe; submits, purchases, and deletes confirm (search boxes do not); passwords, card numbers, one-time codes, local addresses, and WhatsApp sites blocked; open and type are `egress` | private, untrusted |
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
-| `read_notifications(app?, person?)` | 7 | safe | private, untrusted |
+| `read_notifications(person?)` | 7 | safe; only apps on `notifications.apps` | private, untrusted |
 | `remember(fact)`, `forget(fact)` | 8 | safe | private |
 
 ## 6. Safety model
@@ -422,7 +422,7 @@ SQLite in WAL mode at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with
 | `app_index` | display name, normalized name, kind (shortcut or packaged app), launch target or AppID, executable name |
 | `file_index` | path, name, normalized name, folder flag, size, modified time (only used when Everything is not installed) |
 | `index_meta` | when each index was last built and how many items it has |
-| `notifications` | app, title, body, Windows notification id, read_at |
+| `notifications` | Windows id, app id, app name, title, body, created_at, seen_at, read_at (allowed apps only; deleted after `keep_days`) |
 | `reminders` | kind (timer or reminder), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at |
 | `memories` | Phase 8 facts, optional embedding |
 
@@ -441,6 +441,7 @@ At every start Jarvis runs SQLite's quick check. A damaged database is renamed t
 | Synthetic keys (`SendInput`) | Thread pool, in bursts of 24 characters with a foreground check before each, so a stop or a focus change ends typing between bursts |
 | Global hotkeys | Dedicated thread with a Win32 message loop (`RegisterHotKey`), handing events to asyncio with `call_soon_threadsafe` |
 | Wake word, VAD | Thread pool via `asyncio.to_thread`, one frame at a time (a few milliseconds each) |
+| Notification watcher | Main asyncio loop: pywinrt awaitables, one poll every `notifications.poll_s` seconds |
 | Tray icon | pystray's own thread |
 
 ## 12. Configuration
@@ -469,6 +470,10 @@ default_country_code = "91"         # for numbers saved without one
 
 [whatsapp]
 method = "auto"                     # Web once linked, else the desktop app
+
+[notifications]
+apps = ["WhatsApp", "Claude"]       # nothing else is read or stored
+keep_days = 7
 
 [files]
 allowed_folders = ["{documents}", "{desktop}", "{downloads}"]
@@ -500,7 +505,7 @@ jarvis/
   src/jarvis/
     __main__.py               python -m jarvis
     cli.py                    jarvis chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,
-                              audit, version
+                              notifications, audit, version
     console.py                terminal channel: live tool log, y/n confirmations, questions
     app.py                    wires settings, storage, model, tools, and agent together
     services.py               shared helpers tools use (TTS, app index, search backend)
@@ -524,7 +529,7 @@ jarvis/
                               crypto, spoken number formatting
       messaging/              contact book and vCard import, send_whatsapp, WhatsApp Web and desktop,
                               WhatsApp Web selectors
-      notifications/          listener, queue, reader
+      notifications/          store and allowlist, watcher (polling), read_notifications
       system/                 volume, brightness, lock, screenshot, clipboard, timers and reminders
     voice/
       audio.py                microphone stream, player, earcons, device resolution, mic check
@@ -539,7 +544,8 @@ jarvis/
                               (requests from tabs), serve.py (uvicorn, voice, reminders), static/
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
                               COM thread, volume, display (brightness, lock, screenshot), clipboard,
-                              UI Automation (uia.py), synthetic keys and clicks (sendinput.py)
+                              UI Automation (uia.py), synthetic keys and clicks (sendinput.py),
+                              the notification center (notifications.py)
   tests/
     unit/                     tools with mocks, policy, router, registry
     integration/              sqlite, real Ollama (marked, optional)

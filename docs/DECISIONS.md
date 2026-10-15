@@ -262,12 +262,17 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** during Phase 6 testing the database was found damaged: the file had lost the pages holding the file index, history, and audit rows (the cause could not be pinned down; RISKS.md R24). Jarvis kept running but could no longer write the audit log, which must never fail quietly.
 - **Cost:** a check of a few milliseconds at every start. Rows on damaged pages are lost; the indexes rebuild themselves.
 
+### ADR-044: Notifications by polling the notification center, allowlisted, kept a week
+
+- **Decision (yours, after the spike):** Jarvis reads notifications through `UserNotificationListener` by polling, from apps on `[notifications] apps` only (WhatsApp and Claude), says nothing until asked, and keeps notification text for 7 days. A watcher polls every 2 s while chat, voice, or the web UI runs, and `read_notifications` polls once more when you ask, so one-shot `jarvis ask` works too. Notifications from other apps are never read past their app name and never stored. New ones are stored with an unread mark; reading them out marks them read. Notifications older than `keep_days` are deleted, and old ones still sitting in the notification center are not stored again. `jarvis notifications test` posts a toast as Windows PowerShell titled "Jarvis test", which is let through without allowing PowerShell's other notifications. `read_notifications` takes one optional argument, `person`, matched against the notification title (a WhatsApp chat or person) and the "Name:" prefix of group messages, with the names and aliases of matching contacts ("Mom" finds Amma). When nothing is new from a named person, it repeats their last message.
+- **Why:** the spike (RISKS.md R4) showed reading works from plain Python, a 0.5 s poll sees a new notification in 0.6 s, and the change event is not available without package identity, so polling is the whole design. Storing matters because WhatsApp removes its notification once you read the message on your phone. Live, the model invented filters (`app="WhatsApp"`, `person="any"`) copied from the examples in the tool's argument text, which hid the test notification, so the app filter was dropped and empty words are ignored.
+- **Cost:** a notification dismissed before the next poll while Jarvis is not running is never seen. WhatsApp notifications only come while the desktop app runs with previews on. Notification text is private and untrusted: it stays local, and after it is read, web requests ask first (ADR-029).
+
 ## Open decisions
 
 These are asked when the phase starts, not before.
 
 | Phase | Decision | Options |
 |---|---|---|
-| 7 | Notification source | Windows listener vs WhatsApp Web polling, after the spike |
 | 8 | Cloud provider and budget | DeepSeek or another OpenAI-compatible API, monthly cap |
 | 8 | Packaging | uv-based launcher vs PyInstaller build |

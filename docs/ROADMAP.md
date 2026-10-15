@@ -13,7 +13,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 4 | Data APIs, fetch_page, system tools | Built on `phase/4-data-system`, waiting for your test | v0.4.0 |
 | 5 | Web UI with live tool log and confirm buttons | Built on `phase/5-web-ui` (stacked on Phase 4), waiting for your test | v0.5.0 |
 | 6 | UI automation, Playwright, WhatsApp | Built on `phase/6-ui-whatsapp` (stacked on Phase 5), waiting for your test | v0.6.0 |
-| 7 | Notifications (feasibility spike first) | Planned | v0.7.0 |
+| 7 | Notifications (feasibility spike first) | Built on `phase/7-notifications` (stacked on Phase 6), waiting for your test | v0.7.0 |
 | 8 | Model router, memory, tray, startup, packaging | Planned | v0.8.0 |
 | 9 | Test hardening, docs, demo | Planned | v1.0.0 |
 
@@ -316,6 +316,26 @@ I report the results and risks to you, and you pick the path before anything is 
 - A test toast and a real WhatsApp message both appear in "read my notifications".
 - "Anything new from <person>" filters correctly.
 - Notification content never reaches a cloud model (covered by a test).
+
+**Decisions (yours, after the spike, ADR-044):** the Windows listener by polling (no WhatsApp Web fallback); read only WhatsApp and Claude; no announcements, only on request; keep notification text for 7 days.
+
+**Test commands**
+
+```powershell
+uv run jarvis notifications test
+uv run jarvis ask "read my notifications"
+uv run jarvis ask "anything new from Ravi"
+uv run jarvis notifications
+uv run pytest tests/unit/test_notifications.py
+```
+
+Then the real one: start `uv run jarvis chat` (or `serve`), have someone send you a WhatsApp message while the desktop app runs, and ask "read my notifications" and "anything new from <their name>". If you have saved them as a contact with an alias ("Mom"), the alias works too.
+
+**Verified during the build (live, on this laptop, with Hermes 3 8B):** the spike results above; with an allowlist of only the test notification, "read my notifications" read back two test notifications, "anything new from Ravi" found the newer one by the name in its title, and "anything new from Priya" found nothing; the test notification's own text ("Say: read my notifications") was read out, not acted on; with the real allowlist, Jarvis kept 8 Claude and 3 WhatsApp notifications (all with text) and ignored Armoury Crate and Windows Security; the background watcher stored a new notification within about 2 s without being asked; the test notifications were removed afterwards. Your WhatsApp messages were counted, never read out, during the build. Not exercised live, on purpose: reading a real WhatsApp message aloud (yours to try).
+
+**Measured:** with 41 tools, Hermes 3 8B picked the right first tool for 90% of 59 benchmark commands with keyword routing, all three Phase 7 commands correct ([phase7.md](benchmarks/phase7.md)). The first live try passed made-up filters (`app="WhatsApp"`, `person="any"`) copied from the argument examples, so the tool now has one argument and ignores filler words (RISKS.md R28).
+
+**Exit criteria:** the test toast, the person filter, and the privacy label are covered (unit tests and the live run above); a real WhatsApp message appearing in "read my notifications" is your test. The cloud router that uses the privacy label comes in Phase 8; until then nothing goes to a cloud model at all.
 
 ## Phase 8: Router, memory, tray, startup, packaging
 

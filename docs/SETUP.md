@@ -65,7 +65,7 @@ Check where the model runs with `ollama ps`. A split like `30%/70% CPU/GPU` is e
 Copy-Item .env.example .env
 ```
 
-Fill in only the keys you use. `.env` is gitignored and must never be committed.
+Fill in only the keys you use. `.env` is gitignored and must never be committed. Phase 4 works with no keys at all; a key adds a faster or more complete source and is picked up automatically.
 
 | Service | Needed from | Key | Free tier (check current limits on signup) |
 |---|---|---|---|
@@ -88,7 +88,7 @@ Set your app allowlist, model choice, app aliases, microphone, hotkeys, and voic
 
 ```powershell
 uv run jarvis chat                     # interactive; Ctrl+C stops a command, /quit exits
-uv run jarvis chat --speak             # also speak every reply aloud (Windows SAPI voice)
+uv run jarvis chat --speak             # also speak every reply aloud (Piper, or SAPI without it)
 uv run jarvis ask "open notepad"       # one command, then exit
 uv run jarvis audit --last 20          # recent tool calls with arguments and decisions
 uv run pytest                          # unit tests (no Ollama needed)
@@ -129,6 +129,23 @@ uv run jarvis index                    # rebuild the app and file indexes now (o
 - Optional: set VS Code's `window.title` to include `${activeEditorLong}` so "this file" always resolves to the exact path. Without it Jarvis looks the name up in the file index.
 - Docker tools need the Docker engine running; Jarvis says so if it is not. Starting and stopping containers always asks first.
 
+## 5d. Data and system tools (Phase 4)
+
+```powershell
+uv run jarvis ask "what's Reliance trading at"
+uv run jarvis ask "bitcoin in rupees"
+uv run jarvis ask "convert 100 dollars to rupees"
+uv run jarvis ask "weather tomorrow"            # needs weather.home, see below
+uv run jarvis ask "summarize https://www.python.org/about/"
+uv run jarvis ask "set the volume to 30"
+uv run jarvis chat                              # timers and reminders sound while chat or voice runs
+```
+
+- Put your city in `config/local.toml` under `[weather]` as `home = "Hyderabad"` (any city name Open-Meteo knows; "London, UK" style works for ambiguous names).
+- `[market.aliases]` maps spoken names to tickers, for example `"reliance" = "RELIANCE.NS"`. `market.prefer_listings` picks NSE over a company's US share. Crypto prices default to `market.crypto_currency` (USD); say "in rupees" or set it to `"INR"`.
+- Brightness works only for the laptop's own screen. Screenshots go to `Pictures\Screenshots` (`[system] screenshot_folder`).
+- Reminders that came due while Jarvis was closed are announced as missed the next time it starts.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |
@@ -154,7 +171,7 @@ Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of
 
 | Path | Contents |
 |---|---|
-| `jarvis.db` | Preferences, contacts, history, audit log, caches |
+| `jarvis.db` | Preferences, contacts, history, audit log, app and file indexes, API cache, reminders |
 | `logs\` | Rotating log files |
 | `models\` | Downloaded voice and wake word models |
 | `browser-profile\` | Playwright profile with your WhatsApp Web login (treat as sensitive) |

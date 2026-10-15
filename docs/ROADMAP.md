@@ -7,10 +7,10 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | Phase | Name | Status | Version |
 |---|---|---|---|
 | 0 | Planning, docs, repository | Done | v0.0.1 |
-| 1 | Skeleton: config, model client, agent loop, registry, audit, CLI | Built, waiting for your test | v0.1.0 |
-| 2 | Voice: push-to-talk, then wake word | Built on `phase/2-voice` (stacked on Phase 1), waiting for your test | v0.2.0 |
-| 3 | App index, VS Code, Docker, files | Built on `phase/3-apps-files` (stacked on Phase 2), waiting for your test | v0.3.0 |
-| 4 | Data APIs, fetch_page, system tools | Planned | v0.4.0 |
+| 1 | Skeleton: config, model client, agent loop, registry, audit, CLI | On `main` | v0.1.0 |
+| 2 | Voice: push-to-talk, then wake word | On `main` | v0.2.0 |
+| 3 | App index, VS Code, Docker, files | On `main` | v0.3.0 |
+| 4 | Data APIs, fetch_page, system tools | Built on `phase/4-data-system`, waiting for your test | v0.4.0 |
 | 5 | Web UI with live tool log and confirm buttons | Planned | v0.5.0 |
 | 6 | UI automation, Playwright, WhatsApp | Planned | v0.6.0 |
 | 7 | Notifications (feasibility spike first) | Planned | v0.7.0 |
@@ -181,7 +181,34 @@ uv run python scripts/benchmark_tools.py --models jarvis-hermes3 --out docs/benc
 - A second identical question within the cache window makes no network call (visible in logs).
 - "Volume to 30", "lock my laptop", "take a screenshot", "remind me in 10 minutes to stretch" work.
 
-**Decisions:** which API keys you want to register (all have free tiers).
+**Decisions:** which API keys you want to register (all have free tiers). Resolved: none are required. Without keys Jarvis uses yfinance, CoinGecko's public API, Frankfurter, and Open-Meteo; any key you add to `.env` is picked up automatically (ADR-028). The exfiltration rule (ADR-029) tightens safety and was added during the build.
+
+**Test commands**
+
+```powershell
+uv sync
+uv run jarvis ask "what's Reliance trading at"
+uv run jarvis ask "price of Apple"
+uv run jarvis ask "bitcoin in rupees"
+uv run jarvis ask "convert 100 dollars to rupees"
+uv run jarvis ask "what's the weather tomorrow in Hyderabad"
+uv run jarvis ask "summarize https://www.python.org/about/"
+uv run jarvis ask "set the volume to 30"
+uv run jarvis ask "take a screenshot"
+uv run jarvis chat        # then: "set a timer for 1 minute", and wait for it
+uv run python scripts/benchmark_tools.py --models jarvis-hermes3 --out docs/benchmarks/phase4.md
+```
+
+Set your city once in `config/local.toml` so "weather tomorrow" works without naming it:
+
+```toml
+[weather]
+home = "Hyderabad"
+```
+
+**Verified during the build (live, on this laptop):** "what's Reliance trading at" (Reliance Industries at 1,174.60 rupees, up 0.7 percent), "price of Apple", "how is the nifty doing" (spoken in points, not rupees), "bitcoin in rupees" (in lakh rupees), "convert 100 dollars to rupees", and "weather tomorrow in Hyderabad" each answered in one or two sentences, 9 to 11 s end to end; asking for Apple twice within a minute answered the second time from the cache in 1 ms (`cache hit quote:AAPL` in the log, no network request); with the network blocked (a dead proxy) the stock, currency, and weather questions all said the internet is unreachable instead of failing; a page summary came back in three sentences in 6.5 s; `localhost` was blocked; volume to 30, "a bit louder", and brightness to 70 worked and were restored; clipboard round trip with non-English text; a screenshot in 0.19 s; a reminder set, listed, and cancelled by name; a 5 second timer announced itself while `jarvis chat` waited for input. Not exercised live, on purpose: locking the screen (covered by tests).
+
+**Measured:** with 31 tools, Hermes 3 8B picked the right first tool for 89% of 45 benchmark commands with keyword routing (all 15 Phase 4 commands correct) and 67% when it saw every tool ([phase4.md](benchmarks/phase4.md), [phase4-all-tools.md](benchmarks/phase4-all-tools.md)). The remaining misses are older vague commands ("bring up the calculator", "start docker"). "Close the calculator" makes the model return an empty reply; the agent now asks once more and recovers it (ADR-034).
 
 ## Phase 5: Web UI
 

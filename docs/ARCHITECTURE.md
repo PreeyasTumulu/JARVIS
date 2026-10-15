@@ -252,16 +252,16 @@ The prompt says this content is data. The real protection is structural: nothing
 | `open_file(path)` | 3 | safe inside allowlist; confirm for programs and scripts; blocked outside, for secrets, and for .reg | private |
 | `read_file(path)` | 3 | safe inside allowlist; blocked outside and for secret-looking files | private, untrusted |
 | `get_selected_file()` | 3 | safe | private |
-| `open_url(url)` | 3 | safe for http and https, blocked for any other scheme | public |
+| `open_url(url)` | 3 | safe for http and https, blocked for any other scheme; confirm under the egress rule (6.1, step 4a) | public |
 | `market_data(query)` | 4 | safe | public |
-| `weather(location, when?)` | 4 | safe | public |
-| `convert_currency(amount, from, to)` | 4 | safe | public |
-| `crypto_price(coin, vs?)` | 4 | safe | public |
-| `fetch_page(url)` | 4 | safe | public, untrusted |
-| `set_volume`, `set_brightness`, `lock_screen` | 4 | safe | public |
+| `weather(place?, day?)` | 4 | safe | public |
+| `convert_currency(amount, from_currency, to_currency)` | 4 | safe | public |
+| `crypto_price(coin, currency?)` | 4 | safe | public |
+| `fetch_page(url)` | 4 | safe; blocked for local addresses; confirm when private data and outside content are in context (egress) | public, untrusted |
+| `set_volume(level?, change?, mute?)`, `set_brightness(level?, change?)`, `lock_screen()` | 4 | safe | public |
 | `screenshot()` | 4 | safe | private |
 | `clipboard_read()` / `clipboard_write(text)` | 4 | safe | private, untrusted / public |
-| `set_timer`, `set_reminder` | 4 | safe | private |
+| `set_timer`, `set_reminder`, `list_reminders`, `cancel_reminder(which)` | 4 | safe; cancelling more than one confirms | private |
 | `click(element)`, `type_text(text)`, `press_keys(keys)` | 6 | confirm, or safe inside trusted apps except destructive targets | public |
 | `read_window_text(app?)` | 6 | safe | private, untrusted |
 | `browser_task(goal)` | 6 | sub-steps gated individually; submits and purchases confirm | private, untrusted |
@@ -277,6 +277,7 @@ The prompt says this content is data. The real protection is structural: nothing
 2. Arguments validate against the schema. Otherwise the model gets the validation error.
 3. Static risk `blocked`: deny.
 4. Dynamic `risk_for(args)`: for example a path outside the folder allowlist becomes `blocked`, an app outside the app allowlist becomes `confirm` (or `blocked`, by config).
+4a. Context rule: a tool marked `egress` (it sends a request to an address the model picks) becomes at least `confirm` when the model's context holds both private tool output and untrusted outside content (ADR-029). The agent computes these flags from the messages it will send, so trimmed history drops out.
 5. Global blocked patterns: registry tools, disk tools, credential stores, password fields.
 6. `confirm`: run the confirmation protocol.
 7. `safe`: run.
@@ -416,12 +417,12 @@ SQLite in WAL mode at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with
 | `contact_aliases` | alias to contact (many to many, so "Mom" can be ambiguous on purpose) |
 | `command_history` | input text, source, final reply, status, model, latency |
 | `audit_log` | see 6.5 |
-| `api_cache` | cache key, JSON value, expires_at |
+| `api_cache` | cache key, JSON value, fetched_at, expires_at (quotes, rates, weather, places, symbols) |
 | `app_index` | display name, normalized name, kind (shortcut or packaged app), launch target or AppID, executable name |
 | `file_index` | path, name, normalized name, folder flag, size, modified time (only used when Everything is not installed) |
 | `index_meta` | when each index was last built and how many items it has |
 | `notifications` | app, title, body, Windows notification id, read_at |
-| `reminders` | due_at, text, status |
+| `reminders` | kind (timer or reminder), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at |
 | `memories` | Phase 8 facts, optional embedding |
 
 Everything that is personal (database, logs, the Playwright browser profile, downloaded voice models) lives under `%LOCALAPPDATA%\Jarvis\`, outside the repo, so it can never be committed by accident.
@@ -502,11 +503,12 @@ jarvis/
       ui/                     pywinauto tools, PyAutoGUI fallback, vision (flagged)
       files/                  guard (allowlist, secrets), index and search (Everything or SQLite),
                               readers (text, PDF, docx), "this file" from Explorer or VS Code
-      web/                    search, open_url; fetch_page (Phase 4); Playwright browser_task (Phase 6)
-      data/                   market_data chain, weather, currency, crypto, cache, rate limits
+      web/                    search, open_url, fetch_page; Playwright browser_task (Phase 6)
+      data/                   http (cache, token buckets, breakers), market chain, weather, currency,
+                              crypto, spoken number formatting
       messaging/              contacts, WhatsApp Web, WhatsApp desktop fallback
       notifications/          listener, queue, reader
-      system/                 volume, brightness, lock, screenshot, clipboard, timers
+      system/                 volume, brightness, lock, screenshot, clipboard, timers and reminders
     voice/
       audio.py                microphone stream, player, earcons, device resolution, mic check
       session.py              the voice loop (states, frame routing, turns, confirmations)
@@ -517,7 +519,8 @@ jarvis/
       tts/                    TTS interface, Piper, SAPI, engine factory
     storage/                  sqlite connection, migrations, repositories
     server/                   FastAPI app, WebSocket, static UI (Phase 5)
-    platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close
+    platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
+                              COM thread, volume, display (brightness, lock, screenshot), clipboard
   tests/
     unit/                     tools with mocks, policy, router, registry
     integration/              sqlite, real Ollama (marked, optional)
@@ -532,6 +535,6 @@ jarvis/
 
 ## 15. Testing approach
 
-- **Unit:** every tool with its Windows or network dependency mocked (respx for HTTP, fakes for pywinauto and Playwright). Policy, router, and registry have their own tests, including "private data never reaches the cloud client".
+- **Unit:** every tool with its Windows or network dependency mocked (httpx's MockTransport for HTTP, where anything unrouted fails like a dead network; fakes for yfinance, system controls, pywinauto, and Playwright). Policy, router, and registry have their own tests, including "private data never reaches the cloud client".
 - **Scripted e2e:** YAML scenarios of utterance to expected tool calls. They run against a scripted fake LLM in CI, and optionally against real Ollama locally (`pytest -m llm`) to measure tool-choice accuracy.
 - **CI:** GitHub Actions on `windows-latest`: ruff, mypy, unit tests, and a check that no em or en dashes appear in docs or comments.

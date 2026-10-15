@@ -2,7 +2,7 @@
 
 A local-first, voice-controlled desktop assistant for Windows 11. Say (or type) a command, and Jarvis plans it with a local LLM, calls typed tools to operate your laptop, and answers out loud.
 
-> **Status: Phase 3 (apps, files, Docker) built.** Talk to Jarvis with push-to-talk or "Hey Jarvis", or type. It opens, switches to, and closes apps; finds, opens, and reads files in folders you allow (text, PDF, Word); opens projects in VS Code; lists and controls Docker containers; searches the web; and answers in short spoken sentences. Risky actions wait for your yes, and every tool call is audited. Phases 1 to 3 are waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
+> **Status: Phase 4 (data and system tools) built.** Talk to Jarvis with push-to-talk or "Hey Jarvis", or type. It opens, switches to, and closes apps; finds, opens, and reads files in folders you allow; opens projects in VS Code; controls Docker containers; searches the web and reads pages; answers stock, index, crypto, currency, and weather questions from free APIs; sets volume and brightness, locks the laptop, takes screenshots, reads and writes the clipboard; and runs timers and reminders. Risky actions wait for your yes, and every tool call is audited. Phase 4 is waiting for hands-on testing. See the [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 

@@ -21,7 +21,11 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R13 | Microsoft Store Python hides Jarvis's data (AppData redirection) | Happened | Medium | uv-managed Python only (ADR-019), CLI warning, data moved | 2 |
 | R14 | Wrong or silent microphone, hotkeys owned by other apps | Happened | Medium | Startup mic silence check, `--list-devices`, name-based device selection, hotkey conflict warnings | 2 |
 | R15 | The model misreads tool data in its answer (said a stopped container was running) | Medium | Low | Short summaries computed in code, ask for details when it matters; revisit with a larger or cloud model | 3 |
-| R16 | Tool choice degrades as tools are added (80% first-call accuracy with 16 tools) | Happened | Medium | Keyword routing (87%), clear tool descriptions, errors that guide a retry, benchmark per phase | 3, 4 |
+| R16 | Tool choice degrades as tools are added (80% with 16 tools, 67% with 31) | Happened | Medium | Keyword routing (87% in Phase 3, 89% in Phase 4), clear tool descriptions, errors that guide a retry, a retry for empty replies, benchmark per phase | 3, 4 |
+| R17 | Prompt injection leaks private data through a web request | Low | High | `egress` tools confirm when private data and outside content are both in context (ADR-029), local addresses blocked | 4 |
+| R18 | Brightness control only reaches the built-in screen | Certain | Low | WMI covers laptop panels; external monitors get a clear message instead of a fake success | 4 |
+| R19 | Reminders do not sound when Jarvis is not running | Certain | Medium | Missed reminders are announced at the next start; start at login in Phase 8 | 4, 8 |
+| R20 | Market data is delayed, or wrong for an ambiguous name | Medium | Low | Providers report the latest price they have; the spoken name says which company was used; aliases in config | 4 |
 
 ## Details
 
@@ -74,8 +78,11 @@ Any text Jarvis reads (web pages, files, window text, notifications, clipboard) 
 
 1. Side effects need a confirmation that only you can give, through a UI button, the CLI, or your voice.
 2. Blocked actions cannot be unblocked by anything the model says.
-3. Untrusted results are wrapped and tag-escaped, and the system prompt says they are data.
-4. Cloud turns never see private content.
+3. When private data and outside content are both in the conversation, requests to addresses the model picks (`fetch_page`, `open_url`) need your confirmation (ADR-029).
+4. Untrusted results are wrapped and tag-escaped, and the system prompt says they are data.
+5. Cloud turns never see private content.
+
+What is not covered: an injected instruction can still trigger `safe` actions that leak nothing, such as opening an allowlisted app, changing the volume, or putting text on the clipboard (`clipboard_write`). Pasting something you did not copy yourself into a terminal is the realistic danger there, so look before you paste.
 
 ### R8. Audio
 

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from jarvis import __version__
 from jarvis.app import App
+from jarvis.core.agent import TurnStatus
 from jarvis.server.hub import Client, Message, WebHub
 from jarvis.tools.messaging.contacts import ContactError
 
@@ -105,9 +106,22 @@ class Runtime:
         if self.busy:
             client.send({"type": "error", "message": BUSY})
             return
-        self._web_turn = asyncio.create_task(
-            self.app.agent.run_turn(text, source="web"), name="web-turn"
-        )
+        self._web_turn = asyncio.create_task(self._typed_turn(text), name="web-turn")
+
+    async def _typed_turn(self, text: str) -> None:
+        """A command typed on the page. With server.speak_replies the answer is said too."""
+        result = await self.app.agent.run_turn(text, source="web")
+        if not (self.app.settings.server.speak_replies and result.text):
+            return
+        if result.status is TurnStatus.CANCELLED:
+            return
+        try:
+            if self.voice is not None:
+                await self.voice.announce(result.text)
+            else:
+                await self.app.services.tts.speak(result.text)
+        except Exception:
+            log.warning("Could not speak the reply", exc_info=True)
 
     def contacts_message(self, note: str = "", error: bool = False, added: bool = False) -> Message:
         book = self.app.services.contacts

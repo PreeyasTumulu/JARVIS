@@ -198,6 +198,7 @@ max_read = 5                 # how many are read out at once
 [server]
 port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachable from the network)
 open_browser = true          # open the page when `jarvis serve` starts
+speak_replies = false        # also say the answers to commands typed on the page
 
 [bridge]
 # Claude Code asks you through Jarvis (install once with: uv run jarvis claude-hook install).

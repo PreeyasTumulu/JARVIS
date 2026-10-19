@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -244,3 +245,24 @@ def test_contact_requests_are_size_limited(make_app: MakeApp) -> None:
         ws.send_json({"type": "contact_import", "text": "x" * 2_000_001})
         assert until(ws, "contacts")[-1]["note"] == "That file is too large."
         assert h.app.services.contacts.all() == []
+
+
+@pytest.mark.parametrize("speak", [True, False])
+def test_typed_replies_are_spoken_when_asked(make_app: MakeApp, speak: bool) -> None:
+    hub = WebHub()
+    h = make_app(
+        [reply("Hello there.")],
+        channel=FirstAnswerChannel(WebChannel(hub)),
+        overrides={"server": {"speak_replies": speak}},
+    )
+    runtime = Runtime(h.app, hub)
+    server = create_server(runtime, token=TOKEN, port=PORT, hosts=HOSTS)
+    with TestClient(server) as client, tab(client) as ws:
+        ws.receive_json()
+        ws.send_json({"type": "command", "text": "say hi"})
+        until(ws, "turn_finished")
+        for _ in range(50):
+            if h.tts.spoken or not speak:
+                break
+            time.sleep(0.02)
+    assert h.tts.spoken == (["Hello there."] if speak else [])

@@ -190,6 +190,7 @@ class NotificationsSettings(_Section):
 class ServerSettings(_Section):
     port: int = Field(default=8765, ge=1024, le=65535)  # always on 127.0.0.1, never the network
     open_browser: bool = True
+    speak_replies: bool = False  # also say the answers to commands typed on the page
 
 
 class BridgeSettings(_Section):

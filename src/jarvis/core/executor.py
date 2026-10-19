@@ -47,6 +47,10 @@ TEXT_REPLY_HINT = (
     "(Reply in two or three short spoken sentences with the main point, unless the user asked "
     "for more. No lists.)"
 )
+SUMMARY_REPLY_HINT = (
+    "(The summary is the answer: say it in one or two spoken sentences. Do not read out the "
+    "data fields, codes, or units unless the user asked for them.)"
+)
 LONG_TEXT_CHARS = 400
 
 
@@ -104,6 +108,10 @@ class CallOutcome:
         elif isinstance(data, dict) and len(str(data.get("text") or "")) > LONG_TEXT_CHARS:
             # A page or file read in full otherwise comes back as a minute-long summary.
             text += f"\n{TEXT_REPLY_HINT}"
+        elif isinstance(data, dict) and self.result.speech and not self.result.hint:
+            # Weather came back as a recital of every field (humidity, wind, "weather code 3")
+            # that took 14 seconds to generate; the summary already says what matters.
+            text += f"\n{SUMMARY_REPLY_HINT}"
         return text
 
     def summary(self) -> str:

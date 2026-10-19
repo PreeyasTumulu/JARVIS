@@ -8,6 +8,7 @@ from typing import Any
 from jarvis.platform import clipboard
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolError, ToolResult
 from jarvis.tools.registry import tool
+from jarvis.tools.secrets import hide_secrets
 
 
 @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PRIVATE, untrusted=True, timeout_s=5)
@@ -23,7 +24,7 @@ async def clipboard_read(ctx: ToolContext) -> ToolResult:
     data: dict[str, Any] = {"text": text[:limit], "chars": len(text)}
     if len(text) > limit:
         data["truncated"] = True
-    return ToolResult.success(data=data)
+    return ToolResult.success(data=hide_secrets(data, "text"))
 
 
 @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PUBLIC, timeout_s=5)

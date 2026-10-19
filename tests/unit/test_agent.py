@@ -40,7 +40,7 @@ async def test_tool_call_then_answer_is_audited(make_app: MakeApp, launched: lis
 
     tool_message = h.llm.requests[1][-1]
     assert tool_message["role"] == "tool"
-    assert json.loads(tool_message["content"])["ok"] is True
+    assert json.loads(tool_message["content"].splitlines()[0])["ok"] is True
 
     kinds = [type(e) for e in h.events]
     assert kinds.index(ToolCallStarted) < kinds.index(ToolCallFinished)
@@ -250,3 +250,11 @@ async def test_turns_from_different_channels_wait_for_each_other(make_app: MakeA
     assert (await second).text == "Second."
     roles = [m["role"] for m in h.app.agent.messages]
     assert roles == ["user", "assistant", "user", "assistant"]
+
+
+async def test_a_result_with_a_summary_asks_for_a_short_reply(make_app: MakeApp) -> None:
+    # Weather was read out field by field ("the weather code is 3") in 14 seconds.
+    h = make_app([reply("", ("set_volume", {"level": 30})), reply("Volume is at 30.")])
+    await h.app.agent.run_turn("set the volume to 30")
+    tool_message = next(m for m in h.llm.requests[1] if m["role"] == "tool")
+    assert "The summary is the answer" in tool_message["content"]

@@ -22,6 +22,7 @@ from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolErro
 from jarvis.tools.naming import pick
 from jarvis.tools.policy import app_risk
 from jarvis.tools.registry import tool
+from jarvis.tools.secrets import hide_secrets
 from jarvis.tools.ui import guard
 from jarvis.tools.ui.keys import describe, parse_keys
 
@@ -300,7 +301,7 @@ async def read_window_text(ctx: ToolContext, app: str) -> ToolResult:
         data["truncated"] = True
     if not content.lines and not content.controls:
         data["note"] = "The window shows no readable text (some apps do not expose any)."
-    return ToolResult.success(data=data)
+    return ToolResult.success(data=hide_secrets(data, "text"))
 
 
 @read_window_text.preparer

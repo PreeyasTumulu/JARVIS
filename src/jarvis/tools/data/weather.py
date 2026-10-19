@@ -69,14 +69,50 @@ def describe(code: Any) -> str:
         return "mixed weather"
 
 
+# Former or everyday names the geocoder does not know. Open-Meteo lists Bengaluru only as
+# "Bengaluru", so "Bangalore" matched a neighbourhood of Karachi.
+CITY_ALIASES = {
+    "bangalore": "Bengaluru",
+    "bombay": "Mumbai",
+    "madras": "Chennai",
+    "calcutta": "Kolkata",
+    "gurgaon": "Gurugram",
+    "poona": "Pune",
+    "mysore": "Mysuru",
+    "mangalore": "Mangaluru",
+    "trivandrum": "Thiruvananthapuram",
+    "cochin": "Kochi",
+    "baroda": "Vadodara",
+    "benares": "Varanasi",
+    "banaras": "Varanasi",
+    "pondicherry": "Puducherry",
+    "simla": "Shimla",
+    "belgaum": "Belagavi",
+    "hubli": "Hubballi",
+    "vizag": "Visakhapatnam",
+    "peking": "Beijing",
+    "saigon": "Ho Chi Minh City",
+    "kiev": "Kyiv",
+    "nyc": "New York",
+    "sf": "San Francisco",
+}
+
+
+def _rank(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Real cities first (not PPLX, a part of a city), then the most populous."""
+    cities = [r for r in results if r.get("feature_code") != "PPLX"] or results
+    return sorted(cities, key=lambda r: -int(r.get("population") or 0))
+
+
 async def find_place(api: ApiClient, text: str) -> Place:
     """Geocode "Hyderabad" or "London, UK". The part after a comma narrows by country or state."""
     query = " ".join(text.split())
-    key = f"place:{query.casefold()}"
+    key = f"place2:{query.casefold()}"  # place2: lookups before the city aliases were wrong
     hit = api.cache.get(key)
     if hit is not None:
         return Place(**hit)
     name, _, qualifier = query.partition(",")
+    name = CITY_ALIASES.get(name.strip().casefold(), name)
     try:
         data = await api.get_json(
             "open-meteo",
@@ -90,7 +126,7 @@ async def find_place(api: ApiClient, text: str) -> Place:
         results = [r for r in results if _matches(r, qualifier.strip().casefold())]
     if not results:
         raise ToolError(f"I couldn't find a place called {query}.")
-    best = results[0]
+    best = _rank(results)[0]
     place = Place(
         name=str(best.get("name", name)),
         region=str(best.get("admin1", "")),

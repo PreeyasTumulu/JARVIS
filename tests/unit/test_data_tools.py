@@ -48,7 +48,7 @@ FORECAST_DATA = {
 
 def summary(h: Harness) -> str:
     message = [m for m in h.app.agent.messages if m["role"] == "tool"][-1]
-    payload: dict[str, Any] = json.loads(message["content"])
+    payload: dict[str, Any] = json.loads(message["content"].splitlines()[0])
     assert payload["ok"], payload
     return str(payload["summary"])
 
@@ -214,3 +214,31 @@ async def test_weather_without_a_city_asks(make_app: MakeApp) -> None:
     h = make_app([reply("", ("weather", {"place": "here"})), reply("Which city?")])
     await h.app.agent.run_turn("is it going to rain")
     assert "no home city is set" in h.audit()[0]["error"]
+
+
+async def test_old_city_names_and_neighbourhoods(make_app: MakeApp, web: FakeWeb) -> None:
+    # "Bangalore" only matched Bangalore Town, a part of Karachi.
+    bengaluru = {
+        "name": "Bengaluru",
+        "latitude": 12.97,
+        "longitude": 77.59,
+        "country": "India",
+        "feature_code": "PPLA",
+        "population": 8443675,
+    }
+    web.route(GEOCODE, {"results": [bengaluru]})
+    web.route(FORECAST, FORECAST_DATA)
+    h = make_app([reply("", ("weather", {"place": "Bangalore"})), reply("ok")])
+    await h.app.agent.run_turn("weather in bangalore")
+    geocode = next(r for r in web.requests if r.url.host.startswith("geocoding"))
+    assert geocode.url.params["name"] == "Bengaluru"
+
+
+def test_real_cities_rank_above_neighbourhoods_and_small_towns() -> None:
+    from jarvis.tools.data.weather import _rank
+
+    town = {"name": "Bangalore Town", "feature_code": "PPLX"}
+    small = {"name": "Hyderabad", "feature_code": "PPL", "population": 1000}
+    big = {"name": "Hyderabad", "feature_code": "PPLA", "population": 6800000}
+    assert _rank([town, small, big]) == [big, small]
+    assert _rank([town]) == [town]  # nothing better: keep it

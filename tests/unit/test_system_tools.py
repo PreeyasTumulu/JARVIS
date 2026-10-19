@@ -19,7 +19,7 @@ async def run(h: Harness, *calls: tuple[str, dict[str, Any]]) -> list[dict[str, 
 
 def spoken(h: Harness) -> str:
     message = [m for m in h.app.agent.messages if m["role"] == "tool"][-1]
-    return str(json.loads(message["content"])["summary"])
+    return str(json.loads(message["content"].splitlines()[0])["summary"])
 
 
 @pytest.mark.parametrize(

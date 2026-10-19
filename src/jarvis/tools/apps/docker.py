@@ -12,6 +12,7 @@ from rapidfuzz import fuzz
 
 from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolError, ToolResult
 from jarvis.tools.registry import tool
+from jarvis.tools.secrets import hide_secrets
 
 _ENGINE_DOWN = ("error during connect", "cannot connect to the docker daemon", "pipe/docker")
 ENGINE_DOWN_MESSAGE = (
@@ -138,7 +139,8 @@ async def docker_logs(ctx: ToolContext, container: str, lines: int = 30) -> Tool
     """
     count = max(1, min(200, lines))
     output = await run_docker("logs", "--tail", str(count), container)
-    return ToolResult.success(data={"container": container, "logs": output[-8000:]})
+    data: dict[str, object] = {"container": container, "logs": output[-8000:]}
+    return ToolResult.success(data=hide_secrets(data, "logs"))
 
 
 @docker_logs.preparer

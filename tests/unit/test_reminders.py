@@ -65,7 +65,7 @@ def test_spoken_times() -> None:
 
 def spoken(h: Harness) -> str:
     message = [m for m in h.app.agent.messages if m["role"] == "tool"][-1]
-    payload: dict[str, Any] = json.loads(message["content"])
+    payload: dict[str, Any] = json.loads(message["content"].splitlines()[0])
     return str(payload.get("summary") or payload.get("error"))
 
 

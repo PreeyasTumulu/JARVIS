@@ -20,6 +20,7 @@ from importlib.resources import files
 from typing import TYPE_CHECKING, Any, Literal
 
 from jarvis.config import Settings
+from jarvis.platform.browsers import resolve_browser
 from jarvis.tools.base import ToolError
 
 if TYPE_CHECKING:
@@ -29,8 +30,9 @@ log = logging.getLogger(__name__)
 
 Profile = Literal["browser", "whatsapp"]
 INSTALL_HINT = (
-    "Jarvis's browser is not installed. It uses Microsoft Edge by default; with [browser] "
-    'channel = "chromium" in config/local.toml, run `uv run playwright install chromium` once.'
+    "Jarvis's browser is not installed. It follows your default browser (Brave, Chrome, or "
+    "Edge); set [browser] channel or executable in config/local.toml, or with "
+    'channel = "chromium" run `uv run playwright install chromium` once.'
 )
 SNAPSHOT_JS = files("jarvis.tools.browser").joinpath("snapshot.js").read_text(encoding="utf-8")
 ACTION_TIMEOUT_MS = 8000
@@ -200,12 +202,17 @@ class BrowserManager:
             self._playwright = await async_playwright().start()
         folder = self.profile_dir(profile)
         folder.mkdir(parents=True, exist_ok=True)
-        channel = self._settings.browser.channel
+        cfg = self._settings.browser
+        try:
+            choice = resolve_browser(cfg.channel, cfg.executable)
+        except FileNotFoundError as exc:
+            raise ToolError(str(exc)) from exc
         try:
             context = await self._playwright.chromium.launch_persistent_context(
                 str(folder),
                 headless=self._headless,
-                channel=channel,  # "chromium" is the full build, also when headless
+                channel=choice.channel,  # "chromium" is the full build, also when headless
+                executable_path=str(choice.executable) if choice.executable else None,
                 no_viewport=True,  # the page follows the window size
                 args=["--start-maximized"] if profile == "browser" else [],
             )
@@ -220,7 +227,7 @@ class BrowserManager:
                 ) from exc
             raise ToolError(f"Jarvis's browser did not start ({_short(exc)}).") from exc
         context.set_default_navigation_timeout(self._settings.browser.navigation_timeout_s * 1000)
-        log.info("Started the %s browser profile", profile)
+        log.info("Started the %s browser profile in %s", profile, choice.name)
         return context
 
     async def close(self, profile: Profile) -> None:

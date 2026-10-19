@@ -49,7 +49,9 @@
 # method = "desktop"                  # "auto" (Web once linked, else the app), "web", or "desktop"
 
 # [browser]
-# channel = "chromium"                # Playwright's Chromium instead of Edge (uv run playwright install chromium)
+# channel = "brave"                   # auto (default) follows your Windows default: Brave, Chrome, or Edge
+# executable = "C:/path/to/browser.exe" # any Chromium-based browser, wins over channel
+# channel = "chromium"                # Playwright's Chromium (uv run playwright install chromium)
 
 # [notifications]
 # apps = ["WhatsApp"]                 # only these apps' notifications are read and kept

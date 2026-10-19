@@ -169,7 +169,9 @@ window_wait_s = 10           # how long type_text waits for an app it had to sta
 [browser]
 # Jarvis's own browser for browser_open, browser_click, and browser_type. Its profile lives in
 # %LOCALAPPDATA%\Jarvis\browser-profile, apart from your everyday browser.
-channel = "msedge"           # the Edge in Windows 11; or "chromium" (uv run playwright install chromium)
+channel = "auto"             # your Windows default if it is Brave, Chrome, or Edge; else Edge.
+                             # Or "brave", "chrome", "msedge", "chromium" (playwright install chromium)
+executable = ""              # full path to a Chromium-based browser; wins over channel
 read_max_chars = 6000        # page text the model gets to see
 max_elements = 60            # links, buttons, and fields listed for the model
 navigation_timeout_s = 30

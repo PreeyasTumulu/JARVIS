@@ -150,9 +150,11 @@ class UISettings(_Section):
 
 
 class BrowserSettings(_Section):
-    # msedge: the Edge that ships with Windows 11 (ADR-040). chromium: Playwright's own build,
-    # after `uv run playwright install chromium`. chrome: an installed Google Chrome.
-    channel: Literal["msedge", "chromium", "chrome"] = "msedge"
+    # auto: your Windows default browser when it is Brave, Chrome, or Edge, else Edge (ADR-049).
+    # brave, chrome, msedge: that browser. chromium: Playwright's own build, after
+    # `uv run playwright install chromium`. executable: a full path, which wins over channel.
+    channel: Literal["auto", "brave", "msedge", "chromium", "chrome"] = "auto"
+    executable: str = ""
     read_max_chars: int = Field(default=6000, ge=500)  # page text the model gets to see
     max_elements: int = Field(default=60, ge=10, le=300)  # links, buttons, and fields listed
     navigation_timeout_s: float = Field(default=30, gt=0)

@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 
+import pytest
+
 from jarvis.core.events import NotificationsArrived
-from jarvis.platform.notifications import TEST_APP_ID, RawNotification
+from jarvis.platform.notifications import TEST_APP_ID, NotificationAccessError, RawNotification
 from jarvis.storage.db import Database
 from jarvis.tools.base import Sensitivity
 from jarvis.tools.notifications.store import (
@@ -223,3 +225,20 @@ def test_ago_reads_naturally() -> None:
     assert ago(NOW - timedelta(minutes=70), NOW) == "an hour ago"
     assert ago(NOW - timedelta(hours=3), NOW) == "3 hours ago"
     assert " at " in ago(NOW - timedelta(days=2), NOW)
+
+
+async def test_an_app_taken_off_the_list_takes_its_kept_notifications_along(
+    make_app: MakeApp, notification_center: FakeNotificationCenter
+) -> None:
+    # Config only tightens: what was kept from Claude must not be read after Claude is removed.
+    notification_center.add("Claude", "Session", "Phase 9 is done")
+    h = make_app()
+    await h.app.services.notifications.refresh()
+    assert h.app.services.notifications.store.recent(include_read=True)
+    h.app.services.notifications._settings = h.app.settings.notifications.model_copy(
+        update={"apps": []}
+    )
+    notification_center.denied = True  # even when Windows refuses the next read
+    with pytest.raises(NotificationAccessError):
+        await h.app.services.notifications.refresh()
+    assert h.app.services.notifications.store.recent(include_read=True) == []

@@ -100,6 +100,14 @@ class NotificationStore:
     def prune(self, before: datetime) -> None:
         self._db.execute("DELETE FROM notifications WHERE created_at < ?", (before.isoformat(),))
 
+    def keep_only(self, allowed: Callable[[str, str, str], bool]) -> int:
+        """Delete what came from apps that are no longer allowed (app, app_id, title)."""
+        rows = self._db.execute("SELECT id, app, app_id, title FROM notifications")
+        gone = [(r["id"],) for r in rows if not allowed(r["app"], r["app_id"], r["title"])]
+        if gone:
+            self._db.executemany("DELETE FROM notifications WHERE id = ?", gone)
+        return len(gone)
+
 
 class Notifications:
     """The allowlist, the store, and one refresh at a time."""
@@ -122,15 +130,21 @@ class Notifications:
         return self._clock()
 
     def allowed(self, item: RawNotification) -> bool:
-        if item.app_id == platform.TEST_APP_ID and item.title.startswith(TEST_TITLE):
+        return self._allowed(item.app, item.app_id, item.title)
+
+    def _allowed(self, app: str, app_id: str, title: str) -> bool:
+        if app_id == platform.TEST_APP_ID and title.startswith(TEST_TITLE):
             return True
         wanted = {name.casefold() for name in self._settings.apps}
-        return item.app.casefold() in wanted or item.app_id.casefold() in wanted
+        return app.casefold() in wanted or app_id.casefold() in wanted
 
     async def refresh(self) -> list[Stored]:
         """Read the notification center once; store and return what is new. Raises
         NotificationAccessError when Windows does not allow reading."""
         async with self._lock:
+            # An app taken off notifications.apps takes what was kept from it along, first,
+            # so it is gone even when Windows refuses the read below.
+            self.store.keep_only(self._allowed)
             read = self._reader or platform.read_all
             now = self.now()
             cutoff = now - timedelta(days=self._settings.keep_days)

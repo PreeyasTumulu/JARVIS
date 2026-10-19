@@ -266,6 +266,25 @@
     - text: I don't have a contact called zork.
   expect: {ok: [false], sent: [], prompts: 0}
 
+# Phase 9: phone calls through Phone Link
+- name: a call is placed only after yes
+  say: call mom
+  setup: [contacts]
+  confirm: yes
+  script:
+    - call: {call_contact: {contact: mom}}
+    - text: Calling Amma on your phone.
+  expect: {decisions: [confirmed], dialed: ["+919876543210"], prompts: 1}
+
+- name: no means no call
+  say: call mom
+  setup: [contacts]
+  confirm: no
+  script:
+    - call: {call_contact: {contact: mom}}
+    - text: Okay, I won't call.
+  expect: {decisions: [denied], dialed: [], prompts: 1}
+
 # Phase 7: notifications
 - name: read notifications from allowed apps only
   say: read my notifications

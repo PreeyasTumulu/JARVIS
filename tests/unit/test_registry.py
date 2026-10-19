@@ -99,7 +99,8 @@ ALL_TOOLS = {
     "convert_currency", "weather", "set_volume", "set_brightness", "lock_screen", "screenshot",
     "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
     "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "browser_open",
-    "browser_read", "browser_click", "browser_type", "send_whatsapp", "read_notifications",
+    "browser_read", "browser_click", "browser_type", "send_whatsapp", "call_contact",
+    "read_notifications",
     "remember", "list_memories", "forget",
     "speak", "ask_user",
 }  # fmt: skip

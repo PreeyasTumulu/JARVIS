@@ -109,6 +109,11 @@ CASES = [
     case("remember that my manager is Ravi", "remember", arg=("fact", "ravi")),
     case("what do you remember about me", "list_memories"),
     case("forget that my manager is Ravi", "forget", arg=("what", "manager")),
+    case("search youtube for lofi music", "search_site", arg=("site", "youtube")),
+    case("open wikipedia and search for alan turing", "search_site", arg=("site", "wiki")),
+    case("find running shoes on amazon", "search_site", arg=("site", "amazon")),
+    case("call mom", "call_contact", arg=("contact", "mom")),
+    case("phone ravi please", "call_contact", arg=("contact", "ravi")),
 ]
 
 

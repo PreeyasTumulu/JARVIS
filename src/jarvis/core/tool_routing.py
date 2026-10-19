@@ -123,6 +123,10 @@ GROUPS: dict[str, Group] = {
             r"let \w+ know|send .+ to \w+|reply to)\b"
         ),
     ),
+    "calls": Group(
+        ("call_contact",),
+        re.compile(r"\b(call|phone|dial|ring)\b(?! (me|him|her|them) (back|later))"),
+    ),
     "notifications": Group(
         ("read_notifications",),
         re.compile(

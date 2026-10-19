@@ -174,6 +174,7 @@ class Database:
     def __init__(self, path: Path | str) -> None:
         self.path = path
         self.recovered_from: Path | None = None  # set when a damaged file was moved aside
+        self.journal_mode = "memory"
         if isinstance(path, Path):
             path.parent.mkdir(parents=True, exist_ok=True)
             if path.exists() and not healthy(path):
@@ -183,7 +184,7 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.lock = threading.RLock()
         if str(path) != ":memory:":
-            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.journal_mode = self._set_journal_mode()
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.migrate()
         if self.recovered_from is not None:
@@ -194,6 +195,21 @@ class Database:
                 self.recovered_from,
                 sum(saved.values()),
             )
+
+    def _set_journal_mode(self) -> str:
+        """WAL where it is safe, the rollback journal where SQLite has the WAL-reset bug.
+
+        SQLite 3.7.0 to 3.51.2 can corrupt a WAL database when two connections (here, two
+        Jarvis processes, such as the one started at login and `jarvis ask`) write or
+        checkpoint at the same instant. That damaged jarvis.db twice (ADR-048). The rollback
+        journal is not affected. Switching needs the file to itself, so if another Jarvis
+        holds it open, the mode it has stays until the next start.
+        """
+        wanted = "wal" if wal_is_safe(sqlite3.sqlite_version_info) else "delete"
+        mode = str(self.conn.execute(f"PRAGMA journal_mode={wanted}").fetchone()[0]).lower()
+        if mode != wanted:
+            log.warning("Could not switch the database to %s mode; it stays in %s", wanted, mode)
+        return mode
 
     @property
     def version(self) -> int:
@@ -227,6 +243,15 @@ class Database:
     def close(self) -> None:
         with self.lock:
             self.conn.close()
+
+
+def wal_is_safe(version: tuple[int, int, int]) -> bool:
+    """Whether this SQLite has the WAL-reset fix (3.51.3, or the backports 3.50.7 and 3.44.6)."""
+    return (
+        version >= (3, 51, 3)
+        or (3, 50, 7) <= version < (3, 51, 0)
+        or (3, 44, 6) <= version < (3, 45, 0)
+    )
 
 
 # What is worth copying out of a damaged database. Indexes and the API cache rebuild themselves.

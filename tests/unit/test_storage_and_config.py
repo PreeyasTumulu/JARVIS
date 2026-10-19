@@ -133,3 +133,37 @@ def test_a_healthy_database_is_left_alone(tmp_path: Path) -> None:
     assert db.recovered_from is None
     db.close()
     assert sorted(p.name for p in tmp_path.iterdir() if "corrupt" in p.name) == []
+
+
+def test_wal_is_only_used_where_sqlite_has_the_wal_reset_fix(tmp_path: Path) -> None:
+    from jarvis.storage.db import wal_is_safe
+
+    assert not wal_is_safe((3, 50, 4))  # what Python 3.12.13 bundles
+    assert not wal_is_safe((3, 51, 2))
+    assert wal_is_safe((3, 51, 3))
+    assert wal_is_safe((3, 53, 0))
+    assert wal_is_safe((3, 50, 7))
+    assert wal_is_safe((3, 44, 6))
+    assert not wal_is_safe((3, 45, 0))
+
+    db = Database(tmp_path / "jarvis.db")
+    import sqlite3
+
+    expected = "wal" if wal_is_safe(sqlite3.sqlite_version_info) else "delete"
+    assert db.journal_mode == expected
+    db.close()
+
+
+def test_an_old_wal_database_is_switched_to_the_rollback_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sqlite3
+
+    path = tmp_path / "jarvis.db"
+    old = sqlite3.connect(path)
+    old.execute("PRAGMA journal_mode=WAL")
+    old.close()
+    monkeypatch.setattr("jarvis.storage.db.wal_is_safe", lambda version: False)
+    db = Database(path)
+    assert db.journal_mode == "delete"
+    db.close()

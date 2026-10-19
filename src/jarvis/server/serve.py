@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import secrets
 import socket
 import webbrowser
@@ -29,10 +30,12 @@ from jarvis.server.runtime import Runtime
 
 if TYPE_CHECKING:
     from jarvis.platform.hotkeys import HotkeyListener
+    from jarvis.tray import Tray
     from jarvis.voice.channel import VoiceChannel
     from jarvis.voice.session import VoiceSession
 
 HOST = "127.0.0.1"
+log = logging.getLogger(__name__)
 
 
 def port_free(port: int) -> bool:
@@ -53,6 +56,7 @@ def run_serve(
     voice: bool,
     wake: bool,
     verbose: bool,
+    tray: bool = False,
 ) -> int:
     if not port_free(port):
         console.print(
@@ -96,6 +100,7 @@ def run_serve(
                 token=token,
                 open_browser=open_browser,
                 wake=wake or settings.voice.wake_word_enabled,
+                tray=tray,
             )
         )
     console.print("[dim]Jarvis stopped.[/dim]")
@@ -111,10 +116,12 @@ async def _serve(
     token: str,
     open_browser: bool,
     wake: bool,
+    tray: bool = False,
 ) -> None:
     app = runtime.app
     session: VoiceSession | None = None
     hotkeys: HotkeyListener | None = None
+    icon: Tray | None = None
     background: list[asyncio.Task[Any]] = []
     try:
         warning = await app.llm.check()
@@ -137,11 +144,15 @@ async def _serve(
         )
         server = uvicorn.Server(config)
         url = f"http://{HOST}:{port}/?token={token}"
+        if tray:
+            icon = _start_tray(runtime, server, url, session)
         background.append(
             asyncio.create_task(_when_ready(server, url, console, open_browser, runtime))
         )
         await server.serve()
     finally:
+        if icon is not None:
+            icon.close()
         if hotkeys is not None:
             hotkeys.stop()
         for task in background:
@@ -169,6 +180,35 @@ async def _start_voice(
     channel.attach(session)
     hotkeys = runner.start_hotkeys(app.settings, session, asyncio.get_running_loop(), console)
     return session, hotkeys
+
+
+def _start_tray(
+    runtime: Runtime, server: uvicorn.Server, url: str, session: VoiceSession | None
+) -> Tray | None:
+    try:
+        from jarvis.tray import Tray
+    except ImportError:
+        return None
+
+    def quit_jarvis() -> None:
+        server.should_exit = True
+
+    icon = Tray(
+        loop=asyncio.get_running_loop(),
+        url=lambda: url,
+        stop=runtime.stop,
+        quit=quit_jarvis,
+        set_muted=session.set_muted if session is not None else None,
+    )
+    try:
+        icon.start()
+    except Exception as exc:  # no tray (a session without a desktop) must not stop Jarvis
+        log.warning("The tray icon could not start: %s", exc)
+        return None
+    runtime.app.bus.subscribe(icon.on_event)
+    if session is not None:
+        icon.show(session.state)
+    return icon
 
 
 def _speaker(app: App, console: Console) -> Any:

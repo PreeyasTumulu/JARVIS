@@ -12,6 +12,7 @@ from jarvis.core.channel import UserChannel
 from jarvis.core.events import EventBus
 from jarvis.core.executor import ToolExecutor
 from jarvis.llm.client import LLMClient
+from jarvis.llm.router import Router
 from jarvis.llm.types import ChatModel
 from jarvis.services import Services, build_services
 from jarvis.storage.db import Database
@@ -34,6 +35,7 @@ class App:
     llm: ChatModel
     services: Services
     agent: Agent
+    router: Router
     background: list[asyncio.Task[None]] = field(default_factory=list)
 
     async def start_background(self, announce: Callable[[str], Awaitable[None]]) -> None:
@@ -52,6 +54,7 @@ class App:
         await asyncio.gather(*self.background, return_exceptions=True)
         await self.services.aclose()
         await self.llm.aclose()
+        await self.router.aclose()
         self.db.close()
 
 
@@ -60,6 +63,7 @@ def build_app(
     channel: UserChannel,
     *,
     llm: ChatModel | None = None,
+    router: Router | None = None,
     services: Services | None = None,
     registry: Registry | None = None,
     db: Database | None = None,
@@ -71,6 +75,7 @@ def build_app(
     registry = registry or build_registry()
     services = services or build_services(settings, db)
     llm = llm or LLMClient(settings.llm.active())
+    router = router or Router(settings, db)
     executor = ToolExecutor(
         settings=settings,
         registry=registry,
@@ -87,5 +92,6 @@ def build_app(
         bus=bus,
         channel=channel,
         services=services,
+        router=router,
     )
-    return App(settings, db, audit, history, bus, registry, llm, services, agent)
+    return App(settings, db, audit, history, bus, registry, llm, services, agent, router)

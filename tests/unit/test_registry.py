@@ -99,6 +99,7 @@ ALL_TOOLS = {
     "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
     "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "browser_open",
     "browser_read", "browser_click", "browser_type", "send_whatsapp", "read_notifications",
+    "remember", "list_memories", "forget",
     "speak", "ask_user",
 }  # fmt: skip
 
@@ -121,7 +122,7 @@ def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
     assert send.risk is Risk.CONFIRM
     assert send.sensitivity is Sensitivity.PRIVATE
     egress = {tool.name for tool in registry if tool.egress}
-    assert egress == {"fetch_page", "browser_open", "browser_type"}
+    assert egress == {"fetch_page", "browser_open", "browser_type", "web_search", "open_url"}
     read = registry.get("read_window_text")
     assert read is not None
     assert read.untrusted

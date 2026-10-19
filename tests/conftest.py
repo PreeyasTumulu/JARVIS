@@ -17,6 +17,7 @@ import pytest
 from jarvis.app import App, build_app
 from jarvis.config import Settings, load_settings
 from jarvis.core.channel import ConfirmationRequest
+from jarvis.llm.router import Router
 from jarvis.llm.types import LLMReply, ToolCall
 from jarvis.platform.notifications import NotificationAccessError, RawNotification
 from jarvis.platform.uia import Control, WindowContent
@@ -30,6 +31,7 @@ from jarvis.tools.data.hub import DataHub
 from jarvis.tools.data.market import Listing, Price
 from jarvis.tools.files.guard import FileGuard
 from jarvis.tools.files.index import FileIndex
+from jarvis.tools.memory import MemoryStore
 from jarvis.tools.messaging.contacts import ContactBook
 from jarvis.tools.messaging.whatsapp import SendStatus, Sent
 from jarvis.tools.notifications.store import Notifications
@@ -545,6 +547,7 @@ def make_app(
         registry: Registry | None = None,
         overrides: dict[str, Any] | None = None,
         env: dict[str, str] | None = None,
+        cloud: dict[str, Any] | None = None,
     ) -> Harness:
         cfg = settings
         if overrides:
@@ -554,6 +557,9 @@ def make_app(
                 env_file=settings.data_dir / "missing.env",
                 overrides={"data_dir": str(settings.data_dir), **overrides},
             )
+        # Only fake cloud models, ever: a real API key in the environment must not matter.
+        cfg = cfg.model_copy(deep=True)
+        cfg.router.cloud = list(cloud or {})
         llm = FakeLLM(script)
         tts = FakeTTS()
         chan = channel or FakeChannel()
@@ -584,8 +590,12 @@ def make_app(
                 reader=notification_center.read,
                 clock=lambda: FakeNotificationCenter.NOW,
             ),
+            memory=MemoryStore(db),
         )
-        app = build_app(cfg, chan, llm=llm, services=services, registry=registry, db=db)
+        router = Router(cfg, db, clients=cloud or {}, clock=lambda: FakeNotificationCenter.NOW)
+        app = build_app(
+            cfg, chan, llm=llm, services=services, registry=registry, db=db, router=router
+        )
         harness = Harness(app, llm, chan, tts)
         harness.files_root = files_root
         return harness

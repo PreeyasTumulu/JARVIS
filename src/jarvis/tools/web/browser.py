@@ -21,7 +21,7 @@ def normalize_url(text: str) -> str:
     return url
 
 
-@tool(risk=Risk.SAFE, sensitivity=Sensitivity.PUBLIC, timeout_s=15)
+@tool(risk=Risk.SAFE, sensitivity=Sensitivity.PUBLIC, timeout_s=15, egress=True)
 async def open_url(ctx: ToolContext, url: str) -> ToolResult:
     """Open a web page in the default browser.
 

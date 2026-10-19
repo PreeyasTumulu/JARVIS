@@ -48,7 +48,7 @@ class DuckDuckGoSearch:
         ]
 
 
-@tool(risk=Risk.SAFE, sensitivity=Sensitivity.PUBLIC, untrusted=True, timeout_s=20)
+@tool(risk=Risk.SAFE, sensitivity=Sensitivity.PUBLIC, untrusted=True, timeout_s=20, egress=True)
 async def web_search(ctx: ToolContext, query: str) -> ToolResult:
     """Search the web and get the top results with titles, links and snippets.
 

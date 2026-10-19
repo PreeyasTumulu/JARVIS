@@ -40,6 +40,10 @@ class VoiceState(StrEnum):
     THINKING = "thinking"
     SPEAKING = "speaking"
     AWAITING_ANSWER = "awaiting_answer"
+    MUTED = "muted"  # the microphone is off (tray): no push-to-talk, no wake word
+
+
+RESTING = (VoiceState.IDLE, VoiceState.MUTED)  # nothing going on; a reminder may speak
 
 
 class Capture(StrEnum):
@@ -104,6 +108,7 @@ class VoiceSession:
         self._wake = wake
         self._vad = vad
         self._state = VoiceState.IDLE
+        self._muted = False
         self._idle = asyncio.Event()
         self._idle.set()
         self._capture = Capture.NONE
@@ -125,6 +130,25 @@ class VoiceSession:
     @property
     def wake_enabled(self) -> bool:
         return self._wake is not None
+
+    @property
+    def muted(self) -> bool:
+        return self._muted
+
+    async def set_muted(self, muted: bool) -> None:
+        """Turn the microphone off or on (the tray's Microphone item). Speaking still works."""
+        if muted == self._muted:
+            return
+        self._muted = muted
+        if muted:
+            if self._capture is not Capture.NONE:
+                self._end_capture()
+            await self._close_mic()
+            await self._set_state(VoiceState.MUTED, "microphone off")
+        else:
+            if self.wake_enabled:
+                await self._open_mic()
+            await self._set_state(VoiceState.IDLE)
 
     # Lifecycle
 
@@ -184,11 +208,11 @@ class VoiceSession:
         if self._pending_answer is not None and not self._pending_answer.done():
             self._pending_answer.set_result("")
         await self._cues.cancelled()
-        await self._set_state(VoiceState.IDLE, "stopped")
+        await self._set_state(self._rest_state, "stopped")
 
     async def announce(self, text: str) -> None:
         """Say something Jarvis brings up on its own (a reminder) without talking over anyone."""
-        while self._state is not VoiceState.IDLE:
+        while self._state not in RESTING:
             await self._idle.wait()
         await self._speak(text)
 
@@ -198,6 +222,9 @@ class VoiceSession:
         The question may belong to a command typed in the web UI, and the page may answer
         first; either way the session goes back to the state it was in before asking.
         """
+        if self._muted:
+            # Voice drops out of the race; the page or the terminal answers instead.
+            raise RuntimeError("The microphone is off.")
         before = self._state
         resume = before if before in (VoiceState.IDLE, VoiceState.THINKING) else VoiceState.THINKING
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
@@ -226,6 +253,8 @@ class VoiceSession:
     # Push-to-talk
 
     async def _ptt_down(self) -> None:
+        if self._muted:
+            return
         async with self._ptt_lock:
             await self._interrupt()
             await self._open_mic()
@@ -372,7 +401,7 @@ class VoiceSession:
             if result.text:
                 await self._speak(result.text)
         if self._state in (VoiceState.THINKING, VoiceState.SPEAKING):
-            await self._set_state(VoiceState.IDLE)
+            await self._set_state(self._rest_state)
 
     async def _finish_previous_turn(self) -> None:
         task = self._turn_task
@@ -409,6 +438,10 @@ class VoiceSession:
             if self._state is VoiceState.SPEAKING and previous is not VoiceState.SPEAKING:
                 await self._set_state(previous)
 
+    @property
+    def _rest_state(self) -> VoiceState:
+        return VoiceState.MUTED if self._muted else VoiceState.IDLE
+
     async def _nothing_heard(self) -> None:
         await self._cues.cancelled()
         await self._set_state(VoiceState.IDLE, "nothing heard")
@@ -417,7 +450,7 @@ class VoiceSession:
 
     async def _set_state(self, state: VoiceState, detail: str = "") -> None:
         self._state = state
-        if state is VoiceState.IDLE:
+        if state in RESTING:
             self._idle.set()
         else:
             self._idle.clear()

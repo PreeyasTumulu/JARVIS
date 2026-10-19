@@ -151,6 +151,11 @@ class Runtime:
         if self.voice is None:
             client.send({"type": "error", "message": "Voice is off in this session."})
             return
+        if self.voice.muted:
+            client.send(
+                {"type": "error", "message": "The microphone is off. Turn it on from the tray."}
+            )
+            return
         self.voice.on_hotkey("ptt", "down" if on else "up")
 
     async def stop(self) -> None:

@@ -124,6 +124,13 @@ GROUPS: dict[str, Group] = {
             r"(message|text|write|reply|call)|what did \w+ (say|send|write))\b"
         ),
     ),
+    "memory": Group(
+        ("remember", "list_memories", "forget"),
+        re.compile(
+            r"\b(remember|forget|memory|memories|keep in mind|what do you know about me|"
+            r"note that)\b"
+        ),
+    ),
     "speech": Group(
         ("speak",),
         re.compile(r"\b(say|announce|aloud|out loud|read out|pronounce)\b"),
@@ -134,6 +141,14 @@ GROUPS: dict[str, Group] = {
         fallback=True,
     ),
 }
+
+
+def matched_groups(text: str) -> list[str]:
+    """Names of the groups a request is about (fallback groups only when nothing else matched)."""
+    lowered = text.casefold()
+    matched = [name for name, group in GROUPS.items() if group.pattern.search(lowered)]
+    specific = [name for name in matched if not GROUPS[name].fallback]
+    return specific or matched
 
 
 def select_tools(text: str, registry: Registry) -> list[Tool]:

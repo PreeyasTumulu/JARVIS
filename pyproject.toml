@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "0.7.0"
+version = "0.8.0"
 description = "Local-first voice-controlled desktop assistant for Windows 11"
 readme = "README.md"
 license = "MIT"
@@ -30,6 +30,8 @@ dependencies = [
     "winrt-windows-foundation-collections>=3.2.1",
     "winrt-windows-data-xml-dom>=3.2.1",
     "winrt-windows-applicationmodel>=3.2.1",
+    "pystray>=0.19.5",
+    "pillow>=13.0.0",
 ]
 
 [project.scripts]
@@ -87,7 +89,8 @@ packages = ["jarvis"]
 [[tool.mypy.overrides]]
 module = [
     "ddgs", "ddgs.*", "faster_whisper", "openwakeword.*", "sounddevice", "piper", "piper.*",
-    "yfinance", "yfinance.*", "pycaw", "pycaw.*", "comtypes", "comtypes.*",
+    "yfinance", "yfinance.*", "pycaw", "pycaw.*", "comtypes", "comtypes.*", "pystray",
+    "pystray.*",
 ]
 ignore_missing_imports = true
 

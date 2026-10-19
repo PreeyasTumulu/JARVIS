@@ -54,3 +54,7 @@
 # [notifications]
 # apps = ["WhatsApp"]                 # only these apps' notifications are read and kept
 # keep_days = 3
+
+# [router]
+# escalate = "explicit"               # the cloud only when you say "think harder"; "never" turns it off
+# cloud = ["groq"]                    # or [] to keep everything local

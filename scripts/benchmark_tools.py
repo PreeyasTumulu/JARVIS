@@ -105,6 +105,10 @@ CASES = [
     case("read my notifications", "read_notifications"),
     case("anything new from Ravi", "read_notifications", arg=("person", "ravi")),
     case("did mom message me", "read_notifications", arg=("person", "mom")),
+    # Phase 8
+    case("remember that my manager is Ravi", "remember", arg=("fact", "ravi")),
+    case("what do you remember about me", "list_memories"),
+    case("forget that my manager is Ravi", "forget", arg=("what", "manager")),
 ]
 
 

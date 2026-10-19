@@ -338,3 +338,43 @@ async def test_a_page_answer_puts_voice_back_to_idle(make_app: MakeApp) -> None:
     assert tts.spoken == ["Should I open Spotify? Say yes or no."]
     assert h.audit()[0]["decision"] == "denied"
     assert session.state is VoiceState.IDLE  # not stuck waiting for a spoken answer
+
+
+async def test_muting_closes_the_microphone_and_ignores_push_to_talk(make_app: MakeApp) -> None:
+    h = make_app()
+    session, mic, _, _ = make_session(
+        h, FakeSTT("open notepad"), wake=Scripted([]), vad=Scripted([])
+    )
+    await session._open_mic()
+    await session.set_muted(True)
+    assert (session.state, session.muted, mic.active) == (VoiceState.MUTED, True, False)
+    session.on_hotkey("ptt", "down")
+    await asyncio.sleep(0.05)
+    assert session.state is VoiceState.MUTED
+    await session.set_muted(False)
+    assert (session.state, mic.active) == (VoiceState.IDLE, True)  # wake word listens again
+
+
+async def test_a_muted_voice_lets_the_page_answer(make_app: MakeApp) -> None:
+    from jarvis.core.channel import FirstAnswerChannel
+
+    voice = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Not opened.")],
+        channel=FirstAnswerChannel(voice, SlowNo()),  # type: ignore[arg-type]
+    )
+    session, _, _, tts = make_session(h, FakeSTT())
+    voice.attach(session)
+    await session.set_muted(True)
+    await h.app.agent.run_turn("open spotify", source="web")
+    assert tts.spoken == []  # muted voice does not ask aloud
+    assert h.audit()[0]["decision"] == "denied"
+
+
+async def test_reminders_still_speak_while_muted(make_app: MakeApp) -> None:
+    h = make_app()
+    session, _, _, tts = make_session(h, FakeSTT())
+    await session.set_muted(True)
+    await session.announce("Reminder: stretch.")
+    assert tts.spoken == ["Reminder: stretch."]
+    assert session.state is VoiceState.MUTED

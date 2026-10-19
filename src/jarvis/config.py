@@ -71,6 +71,15 @@ class LLMSettings(_Section):
             ) from None
 
 
+class RouterSettings(_Section):
+    # Cloud providers from [llm.providers], tried in order for heavy questions that touch only
+    # public data. A provider without its API key in .env is skipped; empty means local only.
+    cloud: list[str] = []
+    escalate: Literal["auto", "explicit", "never"] = "auto"
+    daily_requests: dict[str, int] = {}  # per provider, to stay inside a free tier's daily limit
+    cooldown_s: float = Field(default=300, gt=0)  # a provider that failed is skipped this long
+
+
 class SafetySettings(_Section):
     app_allowlist: list[str] = []
     unlisted_apps: Literal["confirm", "block"] = "confirm"
@@ -216,6 +225,7 @@ def default_data_dir() -> Path:
 class Settings(_Section):
     agent: AgentSettings = AgentSettings()
     llm: LLMSettings
+    router: RouterSettings = RouterSettings()
     safety: SafetySettings = SafetySettings()
     apps: AppsSettings = AppsSettings()
     files: FilesSettings = FilesSettings()

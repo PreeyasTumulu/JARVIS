@@ -144,6 +144,23 @@ MIGRATIONS: list[str] = [
 
     CREATE INDEX idx_notifications_created ON notifications (created_at);
     """,
+    # 7: things the user asked Jarvis to remember, and cloud requests counted per day
+    """
+    CREATE TABLE memories (
+        id INTEGER PRIMARY KEY,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE cloud_usage (
+        day TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        requests INTEGER NOT NULL DEFAULT 0,
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (day, provider)
+    );
+    """,
 ]
 
 
@@ -221,6 +238,7 @@ SALVAGE_TABLES = (
     "contacts",
     "contact_aliases",
     "notifications",
+    "memories",
 )
 
 

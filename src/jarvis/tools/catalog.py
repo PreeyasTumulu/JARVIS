@@ -12,6 +12,7 @@ from jarvis.tools.data.market import market_data
 from jarvis.tools.data.weather import weather
 from jarvis.tools.files.tools import find_file, get_selected_file, open_file, read_file
 from jarvis.tools.interaction import ask_user, speak
+from jarvis.tools.memory import forget, list_memories, remember
 from jarvis.tools.messaging.tools import send_whatsapp
 from jarvis.tools.notifications.tools import read_notifications
 from jarvis.tools.registry import Registry
@@ -71,6 +72,9 @@ def build_registry() -> Registry:
             browser_type,
             send_whatsapp,
             read_notifications,
+            remember,
+            list_memories,
+            forget,
             speak,
             ask_user,
         ]

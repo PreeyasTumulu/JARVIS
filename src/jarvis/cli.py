@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import io
+import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from rich.console import Console
 from rich.markup import escape
@@ -47,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--no-voice", action="store_true", help="web page only, no microphone")
     serve.add_argument("--wake", action="store_true", help='also listen for "hey jarvis"')
     serve.add_argument("--model", help="use a different model for this session")
+    serve.add_argument("--tray", action="store_true", help="show a tray icon (used at login)")
 
     sub.add_parser("setup-voice", help="download the speech, voice, and wake word models")
 
@@ -79,6 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["list", "test"],
         default="list",
         help="list (the default), or test: show a test notification to read back",
+    )
+
+    startup = sub.add_parser("startup", help="start Jarvis at login (tray, voice, Hey Jarvis)")
+    startup.add_argument(
+        "action", nargs="?", choices=["status", "enable", "disable"], default="status"
     )
 
     whatsapp = sub.add_parser("whatsapp", help="link WhatsApp Web to Jarvis's own browser")
@@ -121,6 +129,8 @@ def main(argv: list[str] | None = None) -> int:
         return whatsapp_login(settings, console)
     if args.command == "notifications":
         return show_notifications(settings, args.action, console)
+    if args.command == "startup":
+        return manage_startup(args.action, console)
     if args.command == "serve":
         from jarvis.server.serve import run_serve
 
@@ -134,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             voice=not args.no_voice,
             wake=args.wake,
             verbose=args.verbose,
+            tray=args.tray,
         )
     if args.command in ("voice", "setup-voice"):
         try:
@@ -244,8 +255,6 @@ def rebuild_indexes(settings: Settings, console: Console) -> int:
 
 
 def manage_contacts(settings: Settings, args: argparse.Namespace, console: Console) -> int:
-    from pathlib import Path
-
     from jarvis.tools.messaging.contacts import ContactBook, ContactError
 
     db = Database(settings.data_dir / "jarvis.db")
@@ -317,6 +326,37 @@ def show_notifications(settings: Settings, action: str, console: Console) -> int
     return 0
 
 
+def manage_startup(action: str, console: Console, folder: Path | None = None) -> int:
+    from jarvis.platform import startup
+
+    path = startup.shortcut_path(folder)
+    if action == "enable":
+        launch = startup.launcher()
+        startup.write_shortcut(path, launch)
+        console.print(
+            f'Jarvis will start at login: tray icon, voice, and "Hey Jarvis".\n'
+            f"[dim]{escape(str(path))}\n{escape(launch.target)} {escape(launch.arguments)}[/dim]"
+        )
+    elif action == "disable":
+        if path.exists():
+            path.unlink()
+            console.print("Jarvis will no longer start at login.")
+        else:
+            console.print("Jarvis was not set to start at login.")
+    else:
+        current = startup.read_shortcut(path)
+        if current is None:
+            console.print(
+                "Jarvis does not start at login. Turn it on: uv run jarvis startup enable"
+            )
+        else:
+            console.print(
+                f"Jarvis starts at login.\n[dim]{escape(current.target)} "
+                f"{escape(current.arguments)}[/dim]"
+            )
+    return 0
+
+
 def whatsapp_login(settings: Settings, console: Console) -> int:
     from jarvis.storage.repositories import Preferences
     from jarvis.tools.base import ToolError
@@ -355,11 +395,18 @@ def whatsapp_login(settings: Settings, console: Console) -> int:
 
 
 def _utf8_output() -> None:
-    """Write UTF-8 when output goes to a pipe or file.
+    """Write UTF-8 when output goes to a pipe or file, and nowhere when there is no console.
+
+    Started at login through pythonw there is no console at all (sys.stdout is None); the log
+    file still records everything.
 
     A real console prints any character, but a redirected stream on Windows defaults to the
     ANSI code page (cp1252), where spinner and non-English characters crash the program.
     """
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115 (lives as long as Jarvis)
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
     for stream in (sys.stdout, sys.stderr):
         encoding = (getattr(stream, "encoding", None) or "").replace("-", "").lower()
         if encoding != "utf8" and isinstance(stream, io.TextIOWrapper):

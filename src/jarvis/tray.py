@@ -29,6 +29,7 @@ COLORS = {
     "speaking": "#18864b",
     "muted": "#646b7d",
     "off": "#4f5bd5",
+    "voice_retry": "#646b7d",
 }
 LABELS = {
     "idle": "Ready",
@@ -39,6 +40,7 @@ LABELS = {
     "speaking": "Speaking",
     "muted": "Microphone off",
     "off": "Ready (voice off)",
+    "voice_retry": "Voice is not ready yet, retrying",
 }
 
 
@@ -88,7 +90,7 @@ class Tray:
                 "Microphone",
                 self._on_mic,
                 checked=lambda _item: self._state != "muted",
-                visible=self._set_muted is not None,
+                visible=lambda _item: self._set_muted is not None,
             ),
             pystray.MenuItem("Stop", self._on_stop),
             pystray.Menu.SEPARATOR,
@@ -97,6 +99,10 @@ class Tray:
         self._icon = pystray.Icon("jarvis", icon_image(self._state), self._title(), menu)
         self._icon.run_detached()
         log.info("Tray icon shown")
+
+    def attach_voice(self, set_muted: Callable[[bool], Coroutine[Any, Any, None]]) -> None:
+        """Voice came up after the tray (it was retried): show the Microphone item."""
+        self._set_muted = set_muted
 
     def close(self) -> None:
         if self._icon is not None:

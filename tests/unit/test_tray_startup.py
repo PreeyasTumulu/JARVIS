@@ -105,3 +105,19 @@ def test_startup_enable_status_disable(tmp_path: Path, monkeypatch: pytest.Monke
     assert "will start at login" in text
     assert "Jarvis starts at login" in text
     assert "will no longer start" in text
+
+
+async def test_voice_that_starts_late_gets_the_mic_item(desktop: FakeDesktop) -> None:
+    calls: list[bool] = []
+
+    async def set_muted(muted: bool) -> None:
+        calls.append(muted)
+
+    tray = Tray(loop=asyncio.get_running_loop(), url=lambda: None, stop=None, quit=lambda: None)  # type: ignore[arg-type]
+    tray.show("voice_retry")
+    assert "retrying" in tray._title()
+    tray.attach_voice(set_muted)
+    tray.show("idle")
+    await asyncio.to_thread(tray._on_mic)
+    await asyncio.sleep(0.05)
+    assert calls == [True]

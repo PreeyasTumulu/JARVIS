@@ -20,6 +20,8 @@ from jarvis.voice.audio import (
     MicStream,
     list_input_devices,
     microphone_level,
+    resolve_input_device,
+    rms,
 )
 from jarvis.voice.channel import VoiceChannel
 from jarvis.voice.models import ensure_piper_voice, ensure_wake_models
@@ -89,7 +91,12 @@ def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> Voice
 
 
 async def prepare(session: VoiceSession, settings: Settings, console: Console) -> None:
-    """Load every speech model up front and warn about a silent microphone."""
+    """Load every speech model up front and warn about a silent microphone.
+
+    Raises ValueError first, before any model loads, when the configured microphone is not
+    there (at login it can show up late; `jarvis serve` then tries again).
+    """
+    await asyncio.to_thread(resolve_input_device, settings.voice.input_device)
     started = time.perf_counter()
     with console.status("Loading speech models (the first run downloads them)..."):
         await session.load()
@@ -145,6 +152,56 @@ def setup_voice(settings: Settings, console: Console) -> int:
         ensure_wake_models(settings.models_dir, cfg.wake_word)
     console.print(f"Voice models are ready in {escape(str(settings.models_dir))}")
     return 0
+
+
+def wake_test(settings: Settings, console: Console, *, seconds: float) -> int:
+    """Print the microphone level and the wake word score twice a second, nothing else.
+
+    Nothing is recorded or transcribed. Use it to check that "Hey Jarvis" scores above
+    wake_threshold from where you sit, and to pick a threshold for config/local.toml.
+    """
+    cfg = settings.voice
+    detector = WakeWordDetector(cfg.wake_word, settings.models_dir)
+    with console.status("Loading the wake word model..."):
+        detector.load()
+    console.print(
+        f'Say "Hey Jarvis" a few times. Threshold {cfg.wake_threshold:.2f} '
+        f"(wake_threshold under \\[voice]). "
+        f"Microphone: {escape(str(cfg.input_device or 'default'))}."
+    )
+
+    async def measure() -> int:
+        mic = MicStream(cfg.input_device)
+        await mic.start()
+        hits = 0
+        try:
+            end = time.monotonic() + seconds
+            window: list[float] = []
+            levels: list[float] = []
+            while time.monotonic() < end:
+                frame = await asyncio.wait_for(mic.read(), timeout=3)
+                if frame is None:
+                    break
+                window.append(await asyncio.to_thread(detector.score, frame))
+                levels.append(rms(frame))
+                if len(window) == 6:  # about half a second
+                    best, level = max(window), max(levels)
+                    bar = "#" * min(40, int(level / 50))
+                    mark = "  [bold green]WAKE[/bold green]" if best >= cfg.wake_threshold else ""
+                    console.print(f"level {level:6.0f} {bar:<40} score {best:.2f}{mark}")
+                    if best >= cfg.wake_threshold:
+                        hits += 1
+                        detector.reset()
+                    window, levels = [], []
+        except TimeoutError:
+            console.print("[red]The microphone sent no audio for 3 seconds.[/red]")
+            return 1
+        finally:
+            await mic.stop()
+        console.print(f"{hits} wake word detection(s) in {seconds:.0f} s.")
+        return 0
+
+    return asyncio.run(measure())
 
 
 def list_devices(console: Console) -> int:

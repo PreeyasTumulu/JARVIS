@@ -42,6 +42,14 @@ def build_parser() -> argparse.ArgumentParser:
     voice.add_argument("--wake", action="store_true", help='also listen for "hey jarvis"')
     voice.add_argument("--model", help="use a different model for this session")
     voice.add_argument("--list-devices", action="store_true", help="list microphones and exit")
+    voice.add_argument(
+        "--wake-test",
+        type=float,
+        nargs="?",
+        const=30.0,
+        metavar="SECONDS",
+        help='show the microphone level and the "hey jarvis" score live (default 30 s)',
+    )
 
     serve = sub.add_parser("serve", help="open the web UI (with voice, if installed)")
     serve.add_argument("--port", type=int, help="port on 127.0.0.1 (default from config)")
@@ -159,6 +167,8 @@ def main(argv: list[str] | None = None) -> int:
             return runner.setup_voice(settings, console)
         if args.list_devices:
             return runner.list_devices(console)
+        if args.wake_test is not None:
+            return runner.wake_test(settings, console, seconds=args.wake_test)
         if args.model:
             settings.llm.active().model = args.model
         return runner.run_voice(settings, console, wake=args.wake, verbose=args.verbose)

@@ -44,13 +44,19 @@ class Transcriber:
             from faster_whisper import WhisperModel
 
             started = time.perf_counter()
-            self._model = WhisperModel(
-                self._cfg.stt_model,
-                device=self._cfg.stt_device,
-                compute_type=self._cfg.stt_compute_type,
-                cpu_threads=self._cfg.stt_cpu_threads,
-                download_root=str(whisper_dir(self._models_dir)),
-            )
+            options: dict[str, Any] = {
+                "device": self._cfg.stt_device,
+                "compute_type": self._cfg.stt_compute_type,
+                "cpu_threads": self._cfg.stt_cpu_threads,
+                "download_root": str(whisper_dir(self._models_dir)),
+            }
+            try:
+                # The downloaded copy first: at login the network may not be up yet, and asking
+                # Hugging Face for updates on every start only adds delay.
+                self._model = WhisperModel(self._cfg.stt_model, local_files_only=True, **options)
+            except Exception:
+                log.info("Whisper %s is not downloaded yet; fetching it", self._cfg.stt_model)
+                self._model = WhisperModel(self._cfg.stt_model, **options)
             log.info(
                 "Whisper %s loaded in %.1fs", self._cfg.stt_model, time.perf_counter() - started
             )

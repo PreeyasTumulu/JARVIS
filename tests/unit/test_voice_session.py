@@ -21,6 +21,8 @@ class FakeMic:
     def __init__(self) -> None:
         self.active = False
         self.queue: asyncio.Queue[Any] = asyncio.Queue()
+        self.restarts = 0
+        self.restart_error: Exception | None = None
 
     async def start(self) -> None:
         self.active = True
@@ -31,6 +33,12 @@ class FakeMic:
 
     async def read(self) -> Any:
         return await self.queue.get()
+
+    async def restart(self) -> None:
+        self.restarts += 1
+        if self.restart_error is not None:
+            raise self.restart_error
+        self.active = True
 
     def drain(self) -> None:
         while not self.queue.empty():
@@ -378,3 +386,28 @@ async def test_reminders_still_speak_while_muted(make_app: MakeApp) -> None:
     await session.announce("Reminder: stretch.")
     assert tts.spoken == ["Reminder: stretch."]
     assert session.state is VoiceState.MUTED
+
+
+async def test_a_microphone_that_goes_silent_is_reopened(
+    make_app: MakeApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # After sleep and resume, or a device change, PortAudio keeps the stream "open" but sends
+    # nothing; the wake word then never fires. The session notices and reopens it.
+    monkeypatch.setattr("jarvis.voice.session.MIC_STALL_S", 0.05)
+    monkeypatch.setattr("jarvis.voice.session.MIC_RETRY_S", 0.01)
+    h = make_app([reply("Opened."), reply("Opened.")])
+    wake = Scripted([0.95], default=0.0)
+    session, mic, _, _ = make_session(
+        h, FakeSTT("hello"), wake=wake, vad=Scripted([0.9] * 3 + [0.0] * 12)
+    )
+    mic.restart_error = OSError("device unavailable")
+    runner = asyncio.create_task(session.run())
+    try:
+        await until(lambda: mic.restarts >= 2)  # keeps trying while the device is missing
+        mic.restart_error = None
+        await until(lambda: mic.restarts >= 3)
+        mic.push(1)  # audio flows again: the wake word works
+        await until(lambda: session.state is VoiceState.LISTENING)
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)

@@ -31,6 +31,8 @@ log = logging.getLogger(__name__)
 
 WAKE_COOLDOWN_S = 1.5  # ignore the wake word right after it fired
 ECHO_TAIL_S = 0.4  # ignore the wake word right after Jarvis stops speaking
+MIC_STALL_S = 3.0  # an open microphone that sends nothing this long has died; reopen it
+MIC_RETRY_S = 5.0  # wait between attempts while the microphone cannot be reopened
 
 
 class VoiceState(StrEnum):
@@ -58,6 +60,7 @@ class AudioIn(Protocol):
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
     async def read(self) -> Audio | None: ...
+    async def restart(self) -> None: ...
     def drain(self) -> None: ...
 
 
@@ -286,7 +289,12 @@ class VoiceSession:
 
     async def _frame_loop(self) -> None:
         while True:
-            frame = await self._mic.read()
+            try:
+                frame = await asyncio.wait_for(self._mic.read(), timeout=MIC_STALL_S)
+            except TimeoutError:
+                if self._mic.active:
+                    await self._recover_mic()
+                continue
             if frame is None:
                 if self._mic.active:
                     continue  # a stale end marker from before the microphone was reopened
@@ -295,6 +303,20 @@ class VoiceSession:
                 await self._route(frame)
             except Exception:
                 log.exception("Voice frame handling failed")
+
+    async def _recover_mic(self) -> None:
+        """The stream went quiet without closing (sleep, a device change): open it again."""
+        log.warning("The microphone sent no audio for %.0fs; reopening it", MIC_STALL_S)
+        if self._capture is not Capture.NONE:
+            self._end_capture()
+            await self._set_state(self._rest_state, "microphone reconnected")
+        try:
+            await self._mic.restart()
+        except Exception as exc:
+            log.warning("Could not reopen the microphone (%s); trying again shortly", exc)
+            await asyncio.sleep(MIC_RETRY_S)
+        else:
+            log.info("Microphone reopened")
 
     async def _route(self, frame: Audio) -> None:
         if self._capture is Capture.PUSH_TO_TALK:

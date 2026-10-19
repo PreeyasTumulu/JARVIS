@@ -61,6 +61,18 @@ class MicStream:
             await asyncio.to_thread(_close_stream, stream)
         self._put(None)  # wakes up any reader so it can exit
 
+    async def restart(self) -> None:
+        """Reopen a stream that stopped sending audio (sleep and resume, a device change).
+
+        PortAudio lists devices once, so the list is refreshed first: a microphone that came
+        back under a new index, or appeared after login, is found again.
+        """
+        stream, self._stream = self._stream, None
+        if stream is not None:
+            await asyncio.to_thread(_close_stream, stream)
+        await asyncio.to_thread(refresh_devices)
+        await self.start()
+
     async def read(self) -> Audio | None:
         """The next frame, or None once the stream has stopped."""
         return await self._queue.get()
@@ -178,6 +190,17 @@ def rms(audio: Audio) -> float:
 
 
 PREFERRED_HOST_API = "MME"  # resamples to 16 kHz for us; WASAPI often rejects that rate
+
+
+def refresh_devices() -> None:
+    """Make PortAudio list the audio devices again (it caches them when first loaded).
+
+    Only call this with no stream open: it closes PortAudio, and with it every stream.
+    """
+    import sounddevice as sd
+
+    sd._terminate()
+    sd._initialize()
 
 
 def list_input_devices() -> list[tuple[int, str, bool]]:

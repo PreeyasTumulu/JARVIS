@@ -100,6 +100,14 @@ GROUPS: dict[str, Group] = {
             r"into notepad)\b"
         ),
     ),
+    "sites": Group(
+        ("search_site", "open_url", "browser_open"),
+        re.compile(
+            r"\b(youtube|yt|wikipedia|wiki|amazon|flipkart|github|reddit|google maps|maps|"
+            r"stack ?overflow|spotify|twitter|linkedin|imdb|netflix|pypi|npm|hugging ?face|"
+            r"swiggy|zomato|duckduckgo)\b"
+        ),
+    ),
     "browser": Group(
         ("browser_open", "browser_read", "browser_click", "browser_type", "web_search"),
         re.compile(

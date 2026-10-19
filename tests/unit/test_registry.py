@@ -94,7 +94,8 @@ def test_parse_docstring_without_args() -> None:
 ALL_TOOLS = {
     "open_app", "focus_app", "close_app", "find_file", "open_file", "read_file",
     "get_selected_file", "vscode_open", "docker_list", "docker_logs", "docker_start",
-    "docker_stop", "web_search", "open_url", "fetch_page", "market_data", "crypto_price",
+    "docker_stop", "web_search", "search_site", "open_url", "fetch_page", "market_data",
+    "crypto_price",
     "convert_currency", "weather", "set_volume", "set_brightness", "lock_screen", "screenshot",
     "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
     "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "browser_open",
@@ -122,7 +123,14 @@ def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
     assert send.risk is Risk.CONFIRM
     assert send.sensitivity is Sensitivity.PRIVATE
     egress = {tool.name for tool in registry if tool.egress}
-    assert egress == {"fetch_page", "browser_open", "browser_type", "web_search", "open_url"}
+    assert egress == {
+        "fetch_page",
+        "browser_open",
+        "browser_type",
+        "web_search",
+        "open_url",
+        "search_site",
+    }
     read = registry.get("read_window_text")
     assert read is not None
     assert read.untrusted

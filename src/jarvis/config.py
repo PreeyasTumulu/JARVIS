@@ -113,6 +113,9 @@ class FilesSettings(_Section):
 class SearchSettings(_Section):
     max_results: int = Field(default=5, ge=1, le=10)
     region: str = "us-en"
+    # Extra or changed sites for search_site: name to a search address with {q} (the query,
+    # form encoded) or {p} (path encoded), e.g. {"amazon" = "https://www.amazon.com/s?k={q}"}.
+    sites: dict[str, str] = {}
 
 
 class WebSettings(_Section):

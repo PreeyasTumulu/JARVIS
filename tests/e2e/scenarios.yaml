@@ -192,12 +192,28 @@
   expect: {decisions: [denied], prompts: 1}
 
 # Phase 6: browser
-- name: open a site and search it in Jarvis's browser
+- name: search a named site
   say: search youtube for lofi music
-  setup: [page]
-  first: [browser_open, open_url, web_search]
+  first: [search_site]
   script:
-    - call: {browser_open: {url: "https://www.youtube.com", search: lofi music}}
+    - call: {search_site: {site: youtube, query: lofi music}}
+    - text: Here are the YouTube results for lofi music.
+  expect: {decisions: [auto], ok: [true]}
+
+- name: open a site and search it
+  say: open wikipedia and search for Alan Turing
+  first: [search_site]
+  script:
+    - call: {search_site: {site: wikipedia, query: Alan Turing}}
+    - text: Here are the Wikipedia results.
+  expect: {decisions: [auto], ok: [true]}
+
+- name: search a site in Jarvis's own browser to read the results
+  say: open amazon.in in your browser and search for usb c cable
+  setup: [page]
+  first: [browser_open, search_site]
+  script:
+    - call: {browser_open: {url: "https://www.youtube.com", search: usb c cable}}
     - text: Here are the results.
   expect: {decisions: [auto], ok: [true]}
 

@@ -28,6 +28,7 @@ from jarvis.tools.ui.tools import click, press_keys, read_window_text, type_text
 from jarvis.tools.web.browser import open_url
 from jarvis.tools.web.fetch import fetch_page
 from jarvis.tools.web.search import web_search
+from jarvis.tools.web.sites import search_site
 
 
 def build_registry() -> Registry:
@@ -46,6 +47,7 @@ def build_registry() -> Registry:
             docker_start,
             docker_stop,
             web_search,
+            search_site,
             open_url,
             fetch_page,
             market_data,

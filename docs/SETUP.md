@@ -248,6 +248,8 @@ The tray icon is blue when ready, red while listening, amber while thinking, gre
 
 **Brave.** Jarvis's own browser follows your Windows default when it is Brave, Chrome, or Edge (`[browser] channel = "auto"`); your `local.toml` pins `channel = "brave"`. Links and site searches ("search youtube for lofi music") open in your normal Brave, where you are signed in. Jarvis's automated windows use their own profiles in `%LOCALAPPDATA%\Jarvis`, never your everyday Brave profile.
 
+**Speech out for typed commands.** `[server] speak_replies = true` (set in your `local.toml`) makes Jarvis say the answer to anything typed on its page too, not only to what you said.
+
 **"Hey Jarvis" check.** With no other Jarvis running:
 
 ```powershell

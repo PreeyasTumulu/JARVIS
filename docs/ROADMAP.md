@@ -401,6 +401,7 @@ In the console, the line before each reply names the model that answered (`opena
 - The Claude Code bridge: questions and permissions by voice or on the page, notices aloud, phone escalation by ntfy or Twilio when you are away (ADR-051, ADR-052).
 - `call_contact`: "call mom" through Phone Link and your own phone, always after a yes (ADR-053).
 - Secret values hidden in what the clipboard, windows, files, and container logs show the model (R38).
+- `[server] speak_replies`: answers to typed commands are spoken too (on for you).
 - Docs: [TROUBLESHOOTING.md](TROUBLESHOOTING.md), [DEMO.md](DEMO.md), [RESEARCH.md](RESEARCH.md), CONTRIBUTING.md, SECURITY.md, and updated README, architecture, setup, decisions, and risks.
 
 **Test commands**

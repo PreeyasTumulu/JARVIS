@@ -125,11 +125,11 @@ What is not covered: an injected instruction can still trigger `safe` actions th
 
 ### R23. Playwright's Chromium on this Windows build
 
-Playwright's Chromium builds 1243 and 1248 fail to start on this laptop (Windows 11 build 26300) with "The application has failed to start because its side-by-side configuration is incorrect"; the Event Log says the private assembly named after the Chromium version "could not be found", though the manifest file is next to `chrome.exe`. It fails inside and outside the command sandbox, so it is the Windows build, not Jarvis. Edge, through Playwright's `msedge` channel, works, and is now the default (ADR-040). If a Windows update fixes this, `[browser] channel = "chromium"` brings Playwright's build back. The unused download sits in `%LOCALAPPDATA%\ms-playwright\chromium-1248` (about 440 MB) and can be deleted.
+Playwright's Chromium builds 1243 and 1248 fail to start on this laptop (Windows 11 build 26300) with "The application has failed to start because its side-by-side configuration is incorrect"; the Event Log says the private assembly named after the Chromium version "could not be found", though the manifest file is next to `chrome.exe`. It fails inside and outside the command sandbox, so it is the Windows build, not Jarvis. Edge, through Playwright's `msedge` channel, worked, and was the default until Jarvis followed your default browser (ADR-049, Brave works too). If a Windows update fixes this, `[browser] channel = "chromium"` brings Playwright's build back. The unused download sits in `%LOCALAPPDATA%\ms-playwright\chromium-1248` (about 440 MB) and can be deleted.
 
 ### R24. The database lost pages
 
-During Phase 6 testing, `jarvis.db` turned out damaged: SQLite could still list the tables, but the pages holding the file index (20,059 rows), the command history, and the audit log were gone from the file, and new audit entries failed with "database disk image is malformed". Jarvis kept answering but logged the failures only to its log file. The cause could not be pinned down: no Jarvis code path writes after closing, tests never touch the real data folder, and the history shows writes working until the last run before the error. The most likely explanation is the write-ahead log being lost while several Jarvis processes, started from different shells during development, used the database. Jarvis now checks the file at every start and moves a damaged one aside, keeping it untouched and copying every readable row into a fresh database (ADR-043). On this laptop that ran once: nothing was readable, so history and audit start fresh, and the damaged file is kept as `jarvis.db.corrupt-20261015-134134`.
+`jarvis.db` was damaged twice, on 2026-10-15 (Phase 6) and 2026-10-19 (Phase 8). Both times SQLite could no longer read it and new audit entries failed. The second copy's header records 1,575 pages while the file holds 47: the write-ahead log no longer matched the database. The cause is SQLite's WAL-reset bug (3.7.0 to 3.51.2): two connections on one WAL database that write or checkpoint at the same instant can corrupt it, and Jarvis runs several processes on the same file (the copy started at login, `jarvis ask`, scripts). The Python that uv provides bundles SQLite 3.50.4. Jarvis now uses the rollback journal on such versions (ADR-048), which the bug does not affect, and still checks the file at every start and moves a damaged one aside (ADR-043). Both damaged files are kept as `jarvis.db.corrupt-*` in the data folder; nothing in them was readable.
 
 ### R25. Small models and multi-step browsing
 
@@ -162,6 +162,30 @@ During Phase 8 testing, asked "who is my manager" with "The user's manager is Ra
 ### R32. Running at login
 
 `jarvis startup enable` starts Jarvis at every login with the wake word, so the microphone is open whenever you are logged in. Audio is processed on this laptop and never stored; the tray's Microphone item closes it until you turn it back on. If Ollama is not up yet, the first command says the model server cannot be reached; Ollama normally starts at login too. A Jarvis already running (the web port is busy) makes the second start exit quietly.
+
+### R33. Voice that did not start at login
+
+On 2026-10-20 the Jarvis started at login ran without voice: its memory (221 MB, against 673 MB with voice) shows Whisper never loaded, and nothing was logged, because voice errors were printed to a console that pythonw does not have. "Hey Jarvis" could not work. The exact failure at that login is unknown; the likely ones are a microphone or audio service not ready yet (PortAudio lists devices once, so a late device is never found) and a model check that needed the network. Voice failures are now logged, `jarvis serve` retries voice (10 s, 20 s, 40 s, 60 s, then every two minutes) with a fresh device list, a crashed voice loop starts again, Whisper loads its downloaded copy without the network, and a startup that never reaches the page writes every thread's stack to `logs/startup-hang.txt`. If "Hey Jarvis" still does not answer, `logs/jarvis.log` now says why, and `uv run jarvis voice --wake-test` shows the microphone level and the wake word score live.
+
+### R34. A microphone that goes quiet
+
+After sleep and resume, or when another audio app (Voicemeeter, FxSound, AudioRelay, a Bluetooth headset) changes the devices, PortAudio can keep a stream "open" that sends no audio, and the wake word then never fires. A stream that sends nothing for 3 seconds is now reopened with a fresh device list (`voice/session.py`). This laptop has many virtual audio devices; the Realtek "Microphone Array" is the one that hears you, and it reads near silence (RMS about 7) in a quiet room, which is normal.
+
+### R35. Phone escalation (ntfy and Twilio)
+
+Neither has been tried live. ntfy topics are public to anyone who knows the name: use a long random topic, and Jarvis sends permissions that way only with `NTFY_TOKEN`. ntfy allows three buttons, so a question with more options shows the first three. Twilio calls cost money; a trial account can only call numbers you verified and plays a trial notice first; calls from a foreign number to Indian mobiles may be filtered by carriers or show as spam. The Studio flow in `docs/twilio-ask-flow.json` must keep its gather widget named `ask`, because Jarvis reads `widgets.ask.Digits` and `widgets.ask.SpeechResult`.
+
+### R36. Calls through Phone Link
+
+`call_contact` depends on Phone Link being paired with an Android phone with calls allowed over Bluetooth. Windows has not picked an app for `tel:` links on this laptop, so the first call shows a picker. Whether Phone Link dials at once or shows its dialer for you to press Call depends on its version. Not tried live.
+
+### R37. The Claude Code bridge
+
+The bridge answers only while `jarvis serve` runs. Whisper can mishear option names, so numbers are the dependable answer ("two"). A misheard or unclear permission answer is no decision, never an approval. Only one question is asked at a time; a second Claude Code session waits for the first answer. If Jarvis was killed rather than stopped, its `bridge.json` stays behind; the hook then finds nothing listening and stays silent, and the next start replaces the file.
+
+### R38. Secrets in what Jarvis reads
+
+The clipboard, a window, a container log, or an ordinary file can hold a secret. Values with a known shape (API keys from OpenAI, Anthropic, Groq, OpenRouter, GitHub, AWS, Google, Slack; JWTs; private keys) and `NAME=value` lines whose name says key, token, secret, or password are replaced by `[hidden]` before the model or the audit log sees them (`tools/secrets.py`). A secret with no recognizable shape gets through. During live testing a copied `.env` reached the local model's context before this existed; nothing went to the cloud.
 
 ### R11. Cancellation
 

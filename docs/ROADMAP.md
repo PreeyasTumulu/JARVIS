@@ -15,7 +15,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 6 | UI automation, Playwright, WhatsApp | Built on `phase/6-ui-whatsapp` (stacked on Phase 5), waiting for your test | v0.6.0 |
 | 7 | Notifications (feasibility spike first) | Built on `phase/7-notifications` (stacked on Phase 6), waiting for your test | v0.7.0 |
 | 8 | Model router, memory, tray, startup, packaging | Built on `phase/8-router-tray` (stacked on Phase 7), waiting for your test | v0.8.0 |
-| 9 | Test hardening, docs, demo | Planned | v1.0.0 |
+| 9 | Test hardening, docs, demo (plus the Claude Code bridge, Brave, calls) | Built on `phase/9-hardening` (stacked on Phase 8), waiting for your test | v1.0.0 |
 
 ## How each phase runs
 
@@ -381,7 +381,76 @@ In the console, the line before each reply names the model that answered (`opena
 
 ## Phase 9: Hardening, docs, demo
 
+**Scope (as planned)**
+
 - Unit tests for every tool with mocks, and coverage reported in CI.
 - Scripted e2e command suite (YAML): fake LLM in CI, real Ollama locally.
 - Final pass on README, architecture, and setup. A troubleshooting guide.
 - `docs/DEMO.md` demo script and a recorded demo.
+
+**Also asked for during the phase (2026-10-20):** test every phase end to end and fix what fails; make "Hey Jarvis" work; Jarvis should use Brave only; research similar projects and new features; calling ("call my mom", "Jarvis calls me"); Claude Code asking you through Jarvis.
+
+**Built**
+
+- `tests/e2e/scenarios.yaml`: 41 commands across every phase with what must happen and what must never happen, run through the real pipeline with Windows, the network, WhatsApp, and the cloud faked. CI runs them scripted; `pytest tests/e2e -m llm` runs them with the real model.
+- Coverage in CI (76%), failing below 75%.
+- "Hey Jarvis" at login: voice failures are logged and retried, a crashed voice loop restarts, a silent microphone stream is reopened, Whisper loads offline, a hung startup dumps its stacks, and `jarvis voice --wake-test` shows the level and score live (R33, R34).
+- The database corruption found and fixed: SQLite's WAL-reset bug, avoided with the rollback journal (ADR-048).
+- Brave: the browser follows your default; yours is pinned to Brave (ADR-049).
+- `search_site` for "search YouTube for ...", "look up ... on Wikipedia" (ADR-050).
+- The Claude Code bridge: questions and permissions by voice or on the page, notices aloud, phone escalation by ntfy or Twilio when you are away (ADR-051, ADR-052).
+- `call_contact`: "call mom" through Phone Link and your own phone, always after a yes (ADR-053).
+- Secret values hidden in what the clipboard, windows, files, and container logs show the model (R38).
+- Docs: [TROUBLESHOOTING.md](TROUBLESHOOTING.md), [DEMO.md](DEMO.md), [RESEARCH.md](RESEARCH.md), CONTRIBUTING.md, SECURITY.md, and updated README, architecture, setup, decisions, and risks.
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper
+uv run pytest                                   # unit tests and the scripted e2e suite (about 550)
+uv run pytest tests/e2e -m llm                  # the same 41 scenarios with the real model (about 4 min)
+uv run pytest -m browser                        # real-browser tests, in Brave
+uv run python scripts/benchmark_tools.py        # tool-choice accuracy (docs/benchmarks/phase9.md)
+uv run jarvis voice --wake-test 30              # say "Hey Jarvis"; look for WAKE
+uv run jarvis ask "search youtube for lofi music"
+uv run jarvis ask "what's the weather tomorrow in Bangalore"
+uv run jarvis ask "call mom"                    # needs the contact and Phone Link; answer n to just see the question
+uv run jarvis claude-hook test                  # Jarvis asks a test question; answer by voice or on the page
+uv run jarvis claude-hook install               # then Claude Code asks you through Jarvis
+```
+
+**Verified during the build (live, on this laptop):** all unit and scripted e2e tests; the 41 scenarios with Hermes 3 8B (41 of 41, after the fixes below); real APIs for weather, currency, crypto, and NSE shares; timers and memory; opening and closing Notepad; typing into and reading a scratch Notepad file; a real Groq answer in 0.8 s; private turns staying local; the web UI over its WebSocket, including refusing a foreign origin; a test notification read back with other apps excluded; the real-browser tests in Brave; the voice pipeline on synthetic speech (wake word 0.99, text 2.4 s after the end of speech); the bridge end to end (the real hook, the real server, an answer from the page: a question answered "SQLite", a permission denied); the database switched to the rollback journal; the login shortcut starting Jarvis with voice and the bridge.
+
+**Measured:** with 46 tools, Hermes 3 8B picked the right first tool for 91% of 67 benchmark commands with keyword routing (89% of 62 in Phase 8), median 2.7 s ([phase9.md](benchmarks/phase9.md)).
+
+**Found and fixed during the build**
+
+| Found | Fix |
+|---|---|
+| Voice silently failed at login, so "Hey Jarvis" never worked | logged, retried, restarted, reopened (R33) |
+| `jarvis.db` damaged twice | the WAL-reset bug; rollback journal (ADR-048) |
+| "Who is my manager" saved the fact again instead of answering | questions about a memory only get `list_memories` |
+| Weather recited every field and took 14 s | results with a summary ask for one or two sentences (3.5 s now) |
+| "Bangalore" was a part of Karachi | old city names map to new ones; real cities rank first |
+| A copied `.env` reached the model's context with its keys | secret-looking values are hidden (R38) |
+| "Search youtube for ..." became a web search; "open wikipedia and search ..." dropped the search | `search_site`, and site names routed only to it |
+| A tool got the word "null" for an optional argument | null words mean None |
+| "What does Notepad say" recited every tab and button (35 s) | long lists ask for a short reply |
+| Notifications kept from an app stayed readable after it was removed from the list | they are deleted at the next read |
+
+**Not done, needs you:** the recorded demo video (the script is ready); a real WhatsApp send and a real WhatsApp notification (Phases 6 and 7); a real call through Phone Link; installing the Claude Code hooks; trying ntfy or Twilio (accounts). The open decisions are at the end of [DECISIONS.md](DECISIONS.md).
+
+**Exit criteria:** every tool has unit tests with mocks and CI reports coverage; the YAML suite runs scripted in CI and against Ollama locally; the docs and the troubleshooting guide are current; the demo script exists. The recorded demo is yours to make.
+
+## Beyond 1.0
+
+Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
+
+| Phase | Name | What |
+|---|---|---|
+| 10 | Dictation and media | hold a hotkey to dictate into any app; play, pause, next through the media keys |
+| 11 | Calendar and mail | read today's calendar and mail; draft replies that send only after your yes |
+| 12 | MCP client | Home Assistant, GitHub, and other MCP servers, each tool with a risk floor and a sensitivity label |
+| 13 | Faster and smaller | a 4B default model if the benchmark agrees, a fast intent model for routing, Whisper on the GPU |
+| 14 | Memory by meaning | semantic search over memories and past turns with `nomic-embed-text`; a morning briefing |
+| 15 | Screen reading | Windows OCR where UI Automation sees nothing |

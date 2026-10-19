@@ -30,6 +30,7 @@ flowchart LR
     PTT --> STT
     CLI[Text CLI]
     WEB[Web UI<br/>FastAPI + WebSocket]
+    HOOK[Claude Code hooks]
   end
 
   STT --> SES[Session]
@@ -53,6 +54,10 @@ flowchart LR
   BUS --> CLI
   BUS --> TTS[TTS<br/>Piper / SAPI]
   BUS --> DB[(SQLite<br/>audit, history,<br/>prefs, contacts)]
+  HOOK --> BR[Bridge<br/>no model in the loop]
+  BR --> WEB
+  BR --> TTS
+  BR -. off by default .-> PH[Phone<br/>ntfy or Twilio]
 ```
 
 | Component | Responsibility | Main libraries |
@@ -63,7 +68,8 @@ flowchart LR
 | Model router | Pick local or cloud model per turn, enforce the privacy guard | openai, httpx |
 | Policy gate | Decide safe / confirm / blocked for each call, run confirmations | pydantic |
 | Tool registry | Register typed tools, generate JSON schemas, execute with timeouts | pydantic, stdlib inspect |
-| Tools | Do the actual work on Windows and the web | UI Automation (comtypes), SendInput, Playwright (Edge), httpx, pywinrt |
+| Tools | Do the actual work on Windows and the web | UI Automation (comtypes), SendInput, Playwright (your default browser: Brave, Chrome, or Edge), httpx, pywinrt |
+| Bridge | Claude Code's questions and permissions, asked by voice, page, or phone | FastAPI route, httpx |
 | Event bus | Fan out typed events to UI, CLI, TTS, and the audit log | stdlib asyncio |
 | Storage | Preferences, contacts, history, audit log, caches | sqlite3 (WAL mode) |
 
@@ -234,6 +240,8 @@ Untrusted results are wrapped before they reach the model, and any closing tag i
 
 The prompt says this content is data. The real protection is structural: nothing the model reads can approve a `confirm` call or unblock a `blocked` one.
 
+Text read from the clipboard, a window, a file, or a container log has values that look like secrets replaced by `[hidden]` first (API keys and tokens by their shape, `NAME=value` lines whose name says key, token, secret, or password, private keys), so they reach neither the model nor the audit log (`tools/secrets.py`, RISKS.md R38).
+
 ### 5.6 Planned tool catalog
 
 | Tool | Phase | Risk | Sensitivity |
@@ -252,6 +260,7 @@ The prompt says this content is data. The real protection is structural: nothing
 | `open_file(path)` | 3 | safe inside allowlist; confirm for programs and scripts; blocked outside, for secrets, and for .reg | private |
 | `read_file(path)` | 3 | safe inside allowlist; blocked outside and for secret-looking files | private, untrusted |
 | `get_selected_file()` | 3 | safe | private |
+| `search_site(site, query)` | 9 | safe; `egress`; a named site's own search page in the default browser | public |
 | `open_url(url)` | 3 | safe for http and https, blocked for any other scheme; confirm under the egress rule (6.1, step 4a) | public |
 | `market_data(query)` | 4 | safe | public |
 | `weather(place?, day?)` | 4 | safe | public |
@@ -266,6 +275,7 @@ The prompt says this content is data. The real protection is structural: nothing
 | `read_window_text(app)` | 6 | safe (blocked for the apps above) | private, untrusted |
 | `browser_open(url, search?)`, `browser_read()`, `browser_click(target)`, `browser_type(text, target?, submit?)` | 6 | safe; submits, purchases, and deletes confirm (search boxes do not); passwords, card numbers, one-time codes, local addresses, and WhatsApp sites blocked; open and type are `egress` | private, untrusted |
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
+| `call_contact(contact)` | 9 | confirm (floor); dials a saved contact through Phone Link (`tel:`) | private |
 | `read_notifications(person?)` | 7 | safe; only apps on `notifications.apps` | private, untrusted |
 | `remember(fact)`, `list_memories()`, `forget(what)` | 8 | safe; remembering after outside content asks; forgetting always asks | private |
 
@@ -386,6 +396,7 @@ stateDiagram-v2
 - **Deterministic phrases** (`voice/phrases.py`): "stop" style commands and yes/no answers never go through the model.
 - **Confirmations by voice:** `VoiceChannel` speaks "Should I open Paint? Say yes or no." and waits for the next utterance. In voice mode the agent's channel is `FirstAnswerChannel(voice, keyboard)`, so typing y or n also works (ADR-022).
 - **Self-trigger:** without echo cancellation, speaker output can trigger the wake word. Wake word detection is paused while Jarvis speaks and for 0.4 s after. Barge-in uses the push-to-talk hotkey.
+- **Staying up (Phase 9):** voice that cannot start (no microphone yet at login, no network) is logged and retried by `jarvis serve` (10 s, 20 s, 40 s, 60 s, then every two minutes) with a fresh PortAudio device list; a crashed voice loop starts again; an open microphone that sends nothing for 3 s is reopened (sleep and resume, device changes); Whisper loads its downloaded copy without the network. `jarvis voice --wake-test` shows the level and the wake word score live (RISKS.md R33, R34).
 - **Timings:** every voice command stores `audio_ms`, `stt_ms`, `pre_turn_ms`, `llm_ms`, `first_tool_ms`, and `turn_ms` in `command_history.timings_json`; the session prints the median "end of speech to first action" when it exits.
 
 ## 9. Interfaces
@@ -419,9 +430,21 @@ FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) an
 
 `jarvis serve --tray` shows a pystray icon (its own thread) whose color and tooltip follow the voice state, with Open Jarvis (the page, with its token), Microphone (on or off), Stop, and Quit. Menu clicks are handed to the asyncio loop. `jarvis startup enable` starts `serve --tray --wake --no-browser` at login through uvw, with no console window (ADR-047).
 
+### 9.4 The Claude Code bridge (Phase 9)
+
+Claude Code runs `jarvis claude-hook` for three hook events (installed with `jarvis claude-hook install`, ADR-051):
+
+| Hook | Jarvis does | Back to Claude Code |
+|---|---|---|
+| `PreToolUse`, matcher `AskUserQuestion` | says the question with numbered options and shows it on every open page | `permissionDecision: "allow"` with `updatedInput.answers` (question to chosen label) |
+| `PermissionRequest` | "Claude in shop wants to run npm test. Allow it?" | `decision.behavior` allow or deny |
+| `Notification` (`idle_prompt`, `agent_completed`, `elicitation_dialog`) | says it | nothing |
+
+The hook posts to `http://127.0.0.1:<port>/bridge` with the bearer token from `%LOCALAPPDATA%\Jarvis\bridge.json`, which `jarvis serve` writes at start and removes at stop; a request with an `Origin` header (any browser) is refused. `BridgeService` (`bridge/service.py`) races its askers, voice and the page, and after `bridge.escalate_after_s` the phone (`bridge/phone.py`: ntfy or Twilio, off by default). An empty answer from one asker keeps the others waiting. Answers are matched by `bridge/answers.py` without any model: numbers ("two", "option two", "the second one"), names (exact, then fuzzy with a margin over the runner-up), "other: ..." for free text; a permission needs a clear yes or no. No decision within `bridge.answer_timeout_s` prints nothing, and Claude Code asks you itself.
+
 ## 10. Storage
 
-SQLite in WAL mode at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with `PRAGMA user_version`.
+SQLite at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with `PRAGMA user_version`. The journal is WAL on a SQLite with the WAL-reset fix and the rollback journal otherwise (Python 3.12's bundled SQLite 3.50.4 has the bug, which damaged the database twice when several Jarvis processes shared it; ADR-048).
 
 | Table | Contents |
 |---|---|
@@ -476,7 +499,7 @@ safe_to_close = ["Calculator", "Settings", "File Explorer"]
 trusted_ui_apps = ["Notepad"]       # Phase 6
 
 [browser]
-channel = "msedge"                  # or "chromium" (Playwright's build)
+channel = "auto"                    # your default if Brave, Chrome, or Edge; or "brave", "msedge", "chromium"
 
 [contacts]
 default_country_code = "91"         # for numbers saved without one
@@ -533,16 +556,17 @@ jarvis/
       catalog.py              the list of tools exposed to the model
       interaction.py          speak, ask_user
       memory.py               remember, list_memories, forget
+      secrets.py              hides secret-looking values in text tools read
       apps/                   app index (SQLite), open/focus/close, window matching, vscode, docker
       ui/                     type_text, click, press_keys, read_window_text; key parsing; risk rules
       files/                  guard (allowlist, secrets), index and search (Everything or SQLite),
                               readers (text, PDF, docx), "this file" from Explorer or VS Code
-      web/                    search, open_url, fetch_page
+      web/                    search, open_url, fetch_page, search_site (sites.py)
       browser/                Jarvis's browser (Playwright, two profiles), page snapshot script,
                               browser_open, browser_read, browser_click, browser_type
       data/                   http (cache, token buckets, breakers), market chain, weather, currency,
                               crypto, spoken number formatting
-      messaging/              contact book and vCard import, send_whatsapp, WhatsApp Web and desktop,
+      messaging/              contact book and vCard import, send_whatsapp, call_contact, WhatsApp Web and desktop,
                               WhatsApp Web selectors
       notifications/          store and allowlist, watcher (polling), read_notifications
       system/                 volume, brightness, lock, screenshot, clipboard, timers and reminders
@@ -555,6 +579,8 @@ jarvis/
       models.py, runner.py    model downloads; `jarvis voice` and `jarvis setup-voice`
       tts/                    TTS interface, Piper, SAPI, engine factory
     storage/                  sqlite connection, migrations, repositories
+    bridge/                   the Claude Code bridge: hook.py (the hook, install), service.py (asking),
+                              answers.py (matching what you said), phone.py (ntfy, Twilio)
     server/                   app.py (routes, security), hub.py (tabs, WebChannel), runtime.py
                               (requests from tabs), serve.py (uvicorn, voice, reminders), static/
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
@@ -562,9 +588,9 @@ jarvis/
                               UI Automation (uia.py), synthetic keys and clicks (sendinput.py),
                               the notification center (notifications.py), Startup shortcut (startup.py)
   tests/
-    unit/                     tools with mocks, policy, router, registry
+    unit/                     tools with mocks, policy, router, registry, bridge
     integration/              sqlite, real Ollama (marked, optional)
-    e2e/                      scripted command suite (YAML scenarios)
+    e2e/                      scenarios.yaml and its runner (scripted model, or -m llm)
 ```
 
 ## 14. Observability
@@ -575,6 +601,6 @@ jarvis/
 
 ## 15. Testing approach
 
-- **Unit:** every tool with its Windows or network dependency mocked (httpx's MockTransport for HTTP, where anything unrouted fails like a dead network; fakes for yfinance, system controls, UI Automation, keyboard input, the browser, and WhatsApp). Real-browser tests (`pytest -m browser`) run the page snapshot script and the WhatsApp Web send flow against local pages in Edge. Policy, router, and registry have their own tests, including "private data never reaches the cloud client".
-- **Scripted e2e:** YAML scenarios of utterance to expected tool calls. They run against a scripted fake LLM in CI, and optionally against real Ollama locally (`pytest -m llm`) to measure tool-choice accuracy.
-- **CI:** GitHub Actions on `windows-latest`: ruff, mypy, unit tests, and a check that no em or en dashes appear in docs or comments.
+- **Unit:** every tool with its Windows or network dependency mocked (httpx's MockTransport for HTTP, where anything unrouted fails like a dead network; fakes for yfinance, system controls, UI Automation, keyboard input, the browser, and WhatsApp). Real-browser tests (`pytest -m browser`) run the page snapshot script and the WhatsApp Web send flow against local pages in your default browser (Brave here). Policy, router, and registry have their own tests, including "private data never reaches the cloud client".
+- **Scripted e2e (Phase 9):** `tests/e2e/scenarios.yaml` holds 41 commands across every phase, each with what Jarvis must do (tool calls, policy decisions, reply, apps launched, messages sent, calls dialed, whether the cloud answered) and what it must never do (send or call without a yes, send private text to the cloud). They run through the real agent, router, policy gate, executor, and tools with Windows, the network, WhatsApp, and the cloud faked: scripted in CI, and with the real local model under `pytest -m llm`, which checks the first tool and every safety rule.
+- **CI:** GitHub Actions on `windows-latest`: ruff, ruff format, mypy, the unit and scripted e2e tests with coverage (failing below 75%), and a check that no em or en dashes appear anywhere.

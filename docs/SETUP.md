@@ -244,6 +244,46 @@ uv run jarvis startup disable
 
 The tray icon is blue when ready, red while listening, amber while thinking, green while speaking, and grey with the microphone off. Click it to open the page; right-click for Microphone, Stop, and Quit. At login Jarvis starts through uv's windowless launcher (`uvw`), so no console window opens; its log is in `%LOCALAPPDATA%\Jarvis\logs`.
 
+## 5i. Brave, the Claude Code bridge, your phone, and calls (Phase 9)
+
+**Brave.** Jarvis's own browser follows your Windows default when it is Brave, Chrome, or Edge (`[browser] channel = "auto"`); your `local.toml` pins `channel = "brave"`. Links and site searches ("search youtube for lofi music") open in your normal Brave, where you are signed in. Jarvis's automated windows use their own profiles in `%LOCALAPPDATA%\Jarvis`, never your everyday Brave profile.
+
+**"Hey Jarvis" check.** With no other Jarvis running:
+
+```powershell
+uv run jarvis voice --wake-test 30
+```
+
+It prints the microphone level and the wake word score every half second; say "Hey Jarvis" and look for `WAKE`. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if it does not fire.
+
+**Claude Code asks you through Jarvis.** While `jarvis serve` runs (it starts at login), Claude Code's multiple-choice questions and permission prompts can be answered by voice or on the Jarvis page, and Jarvis says when Claude is waiting or finished.
+
+```powershell
+uv run jarvis claude-hook test       # Jarvis asks a test question; answer by voice or on the page
+uv run jarvis claude-hook install    # adds the hooks to ~/.claude/settings.json (a backup is kept)
+uv run jarvis claude-hook status
+uv run jarvis claude-hook uninstall
+```
+
+Answer a question with its number ("two") or its name; "other: ..." gives your own answer. Permissions need a clear "yes" or "no"; anything else, or silence for two minutes, leaves Claude to ask in the terminal as usual. `[bridge]` in `config/local.toml` turns parts off (`questions`, `permissions`, `announce`).
+
+**Your phone (optional, off by default).** When nobody answers at the PC within `escalate_after_s` (45 s), the question can go to your phone. The question text then leaves this computer.
+
+- ntfy (free): install the ntfy app ([ntfy.sh](https://ntfy.sh)) and subscribe to a long random topic, for example `jarvis-7f3k9q2m4x`. In `config/local.toml`:
+
+  ```toml
+  [bridge]
+  phone = "ntfy"
+
+  [phone]
+  ntfy_topic = "jarvis-7f3k9q2m4x"
+  ```
+
+  You get an urgent notification with a button per option (up to three). Permissions go to the phone only with an access token in `.env` (`NTFY_TOKEN`), because anyone who knows a topic name can post to it.
+- Twilio (paid, a real call): create an account, buy or verify a number, import [docs/twilio-ask-flow.json](twilio-ask-flow.json) as a Studio flow (Studio, Create new Flow, Import from JSON), then set `phone = "twilio"`, `[phone] number`, `twilio_from`, `twilio_flow_sid`, and `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` in `.env`. Press the option's number on the keypad, or say it.
+
+**Calls through your phone.** Pair your Android phone in Phone Link with calls turned on (Bluetooth). Then "call mom" asks "Call Amma (number ending 3210) from your phone?" and, on yes, Phone Link dials. The first time, Windows asks which app opens phone links: pick Phone Link and "Always".
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |
@@ -258,7 +298,7 @@ Run Jarvis as your normal user, not as administrator. Windows blocks a normal pr
 | Phase | Command | What it does |
 |---|---|---|
 | 2 | `uv sync --extra voice --extra piper` | faster-whisper, openWakeWord, sounddevice, Piper |
-| 6 | `uv run playwright install chromium` | Only if you set `[browser] channel = "chromium"`; the default uses Edge (ADR-040) |
+| 6 | `uv run playwright install chromium` | Only if you set `[browser] channel = "chromium"`; the default follows your default browser, Brave here (ADR-049) |
 
 Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of time with `uv run jarvis setup-voice`, into `%LOCALAPPDATA%\Jarvis\models`.
 
@@ -273,28 +313,12 @@ Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of
 | `models\` | Downloaded voice and wake word models |
 | `browser-profile\` | Jarvis's browser profile (cookies of sites it visited) |
 | `whatsapp-profile\` | WhatsApp Web, linked to your phone (treat as sensitive; unlink from your phone and delete it to remove) |
+| `bridge.json` | While `jarvis serve` runs: the port and a random token the Claude Code hook uses (ADR-051) |
+| `logs\claude-hook.log`, `logs\startup-hang.txt` | The hook's own log; where startup was stuck, if it ever was |
 | `jarvis.db.corrupt-*` | Only after a damaged database was found at startup: the old file, kept untouched (ADR-043) |
 
 None of this is inside the repository.
 
 ## 9. Troubleshooting
 
-| Symptom | Check |
-|---|---|
-| "Connection refused" to the model | Is Ollama running? Open `http://localhost:11434` in a browser. |
-| Very slow replies | `ollama ps` shows the CPU/GPU split. Close GPU-heavy apps, try `hermes3:3b`. |
-| The model answers in text instead of calling a tool | Make sure you are using the `jarvis-hermes3` model and Ollama is up to date. |
-| "is sending pure silence" at voice startup | The selected mic is muted or virtual. `uv run jarvis voice --list-devices`, then set `input_device` in `config/local.toml`. |
-| Jarvis never hears you | Windows privacy setting "Let desktop apps access your microphone", and the device above. |
-| "Could not register" a hotkey | Another app owns that combination. Change `ptt_hotkey` or `stop_hotkey` under `[voice]`. |
-| Jarvis's data is not in `%LOCALAPPDATA%\Jarvis` | You ran it with the Microsoft Store Python. Use `uv run jarvis ...` from the project folder (ADR-019). |
-| Wake word triggers by itself | Raise `wake_threshold` under `[voice]` (default 0.5). |
-| "Jarvis's browser did not start" | Edge must be installed (it is part of Windows 11). With `channel = "chromium"`, run `uv run playwright install chromium`; on some Windows builds that Chromium fails with "side-by-side configuration is incorrect" (RISKS.md R23). |
-| Typed text comes out wrong in an app | Jarvis says so when it can read the field back. Type in smaller pieces, or tell the app's name exactly. |
-| `click` cannot find a button you can see | Some apps (Electron, WebView2) hide their controls from UI Automation. `what does <app> say` lists what Jarvis can see. |
-| WhatsApp says "not sent" | `uv run jarvis whatsapp login` again if the phone unlinked it; if WhatsApp Web changed, set `[whatsapp] method = "desktop"` (RISKS.md R27). |
-| Jarvis does not start at login | `uv run jarvis startup` shows the shortcut; check the log in `%LOCALAPPDATA%\Jarvis\logs`. Another Jarvis on the same port makes the second one exit. |
-| Every question stays on the local model | `GROQ_API_KEY` or `OPENROUTER_API_KEY` missing from `.env`, a daily cap reached, or the question touches a private topic; `[router] escalate` decides the rest. |
-| "Windows does not let Jarvis read notifications" | Settings > Privacy & security > Notifications: turn notification access on. |
-| WhatsApp messages never show up | The WhatsApp desktop app must be running, with notifications and message previews on, and "WhatsApp" must be in `[notifications] apps`. |
-| "Jarvis's database was damaged" | The old file was kept as `jarvis.db.corrupt-<time>` and a fresh one started. Indexes rebuild themselves; history and audit restart. |
+Moved to [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

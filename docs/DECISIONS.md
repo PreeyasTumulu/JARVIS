@@ -238,7 +238,7 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** WhatsApp's own links fill in the chat and the text without typing into the page, which is the most stable part of a page that changes often. The ticks are the only reliable way to tell delivered from sent. A second profile keeps a page the model opens from ever reaching your chats.
 - **Cost:** contacts need a phone number (groups are not supported yet). The desktop app cannot report delivery. A first WhatsApp Web load can take a minute, so the limit for one command went from 120 to 180 seconds. The selectors for a signed-in WhatsApp Web are written against a stand-in page and need your first real send to confirm them; the logged-out page (QR code) was checked against the real site.
 
-### ADR-040: Microsoft Edge as Jarvis's browser by default
+### ADR-040: Microsoft Edge as Jarvis's browser by default (superseded by ADR-049)
 
 - **Decision:** Playwright drives the Edge that ships with Windows 11 (`[browser] channel = "msedge"`). Playwright's own Chromium remains an option (`"chromium"`, after `uv run playwright install chromium`).
 - **Why:** on this laptop (Windows 11 build 26300, an Insider build), Playwright's Chromium builds 1243 and 1248 both fail to start with "side-by-side configuration is incorrect" (the Event Log names their private assembly), inside and outside the sandbox. Edge started first time, is kept up to date by Windows, and needs no 180 MB download.
@@ -286,6 +286,46 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** the exit criterion is "starts at login into the tray and is ready to listen", and you chose the uv launcher over PyInstaller and the wake word at login.
 - **Cost:** the laptop needs the repo, uv, and Ollama; the first start after a dependency change syncs before Jarvis appears. With the wake word on, the microphone is always open (processed locally, never stored); the tray's Microphone item turns it off.
 
+### ADR-048: The rollback journal while SQLite has the WAL-reset bug
+
+- **Decision:** Jarvis uses WAL mode only when the SQLite it runs has the fix for the WAL-reset bug (3.51.3 or later, or the backports 3.50.7 and 3.44.6), and the classic rollback journal (`journal_mode=DELETE`) otherwise. An existing WAL database is switched over the next time Jarvis has the file to itself.
+- **Why:** `jarvis.db` was damaged twice (2026-10-15 and 2026-10-19). The second damaged copy's header records 1,575 pages while the file holds 47, the mark of a WAL that no longer matched its database. SQLite 3.7.0 to 3.51.2 can corrupt a WAL database when two connections, in different threads or processes, write or checkpoint at the same instant ([sqlite.org news](https://www.sqlite.org/draft/news.html)), and Jarvis does exactly that: the copy started at login and every `jarvis ask` or script share the file. Python 3.12.13, the newest 3.12 build uv offers, still bundles SQLite 3.50.4, so upgrading Python does not help.
+- **Cost:** in rollback mode a reader waits while another process writes (up to Python's 5 second busy timeout); Jarvis's writes are small, so nobody notices. WAL comes back by itself with a fixed SQLite.
+
+### ADR-049: The browser follows your default (Brave here)
+
+- **Decision:** `[browser] channel` defaults to `"auto"`: the Windows default browser for https when it is Brave, Chrome, or Edge, else Edge. `"brave"` is a channel of its own; Playwright has no Brave channel, so `brave.exe` (per-user install, Program Files, or App Paths) is launched by path. `[browser] executable` takes any Chromium-based browser. Your `config/local.toml` pins `channel = "brave"`.
+- **Why:** you asked for Brave only. Links (`open_url`, `search_site`) and the Jarvis page already open in the Windows default browser; this makes Jarvis's automated browser (and WhatsApp Web) Brave too. Supersedes ADR-040.
+- **Cost:** Jarvis's two profiles are its own, never your everyday Brave profile (which is locked while Brave runs), so you sign in to sites there separately. Brave Shields may block parts of some pages the automation reads.
+
+### ADR-050: search_site for "search YouTube for ..."
+
+- **Decision:** a new safe, egress tool `search_site(site, query)` opens a named site's own search results in the default browser, from a table of search addresses (YouTube, Wikipedia, Google, Maps, Amazon India, Flipkart, GitHub, Reddit, Stack Overflow, Spotify, X, LinkedIn, IMDb, Netflix, PyPI, npm, Hugging Face, Swiggy, Zomato, DuckDuckGo). Names are fuzzy matched; `[search] sites` adds or changes entries.
+- **Why:** live, "search youtube for lofi music" became a general web search read aloud, and "open wikipedia and search for Alan Turing" opened Wikipedia and dropped the search. An address needs no chaining, and your signed-in browser shows the results.
+- **Cost:** a site missing from the table needs `browser_open` with a search, which still depends on finding the page's search box.
+
+### ADR-051: The Claude Code bridge
+
+- **Decision:** `jarvis claude-hook` is a Claude Code command hook for `PreToolUse` (matcher `AskUserQuestion`), `PermissionRequest`, and `Notification`. It reads the event from stdin and posts it to the running Jarvis at `127.0.0.1:<port>/bridge` with a bearer token from `%LOCALAPPDATA%\Jarvis\bridge.json` (written by `jarvis serve`, removed when it stops); a request that carries an `Origin` header is refused, so no web page can use the route. Jarvis asks you by voice ("Claude in shop asks: which framework? one, React. two, Vue.") and on every open page at once. A question's answer is matched by number or name (fuzzy names need a clear margin), never by a model, and goes back as `updatedInput.answers` with `permissionDecision: "allow"`, the documented way to answer `AskUserQuestion` from a hook. A permission needs a clear spoken yes (allow) or no (deny); anything else, or no answer within `bridge.answer_timeout_s`, is no decision and Claude Code asks you as usual. Plans (`ExitPlanMode`) are never approved by ear. Notices ("Claude is waiting for you in shop") are spoken. `jarvis claude-hook install` adds the hooks to `~/.claude/settings.json`, keeping everything else and writing a backup.
+- **Why:** you asked for Jarvis to bring you Claude's questions and options and pass your spoken choice back. Hooks are the supported way in (code.claude.com/docs/en/hooks), and keeping the model out of the answer path means a misheard answer can never become an approval.
+- **Cost:** Jarvis must be running (`jarvis serve`, which starts at login). Whisper can mishear a name; numbers are the reliable answer. Only one question is asked at a time, and Claude's own prompt still appears if the hook gives no decision.
+
+### ADR-052: Reaching your phone: ntfy pushes or Twilio calls, off by default
+
+- **Decision:** `bridge.phone` is `""` (off), `"ntfy"`, or `"twilio"`. When the PC has not answered within `escalate_after_s`, the phone joins the race. ntfy: an urgent push (priority 5) with up to three answer buttons; a button posts a nonce to a reply topic that Jarvis polls. Permissions go over ntfy only when `NTFY_TOKEN` protects the topics, because anyone who knows a topic name can post to it. Twilio: a Studio flow call (`docs/twilio-ask-flow.json`) says the question and gathers a digit or speech; Jarvis polls the execution's context, so no public address or tunnel is needed.
+- **Why:** you asked for Jarvis to call you. A real phone call needs a telephony provider (Twilio, paid); ntfy is free, open source, and self-hostable, and covers "ring my phone and let me tap an answer".
+- **Cost:** the question text leaves this computer (to ntfy.sh or Twilio), so it stays off until you choose. Twilio costs money per call, and calls from a foreign number to Indian mobiles can be filtered by carriers (RISKS.md R35). Neither has been tried live: both need your accounts.
+
+### ADR-053: Phone calls through Phone Link
+
+- **Decision:** `call_contact(contact)` opens `tel:<number>` for a saved contact, and Windows hands it to Phone Link, which dials from your paired Android phone; you talk through the PC. The risk floor is `confirm`, like `send_whatsapp`: the confirmation names the contact and the last digits, the number always comes from the contact book, and a name that fits several people is asked about.
+- **Why:** "call my mom" with no paid service. Phone Link is on this laptop (`Microsoft.YourPhone`), and `tel:` is how Windows routes calls to it.
+- **Cost:** Phone Link must be paired with calls turned on (Bluetooth). Windows has not chosen an app for `tel:` links yet, so the first call asks which app to use. Not tried live: placing a real call needs you.
+
 ## Open decisions
 
-None. Phase 9 (hardening, docs, demo) has no open choices planned; any that come up are asked when it starts.
+These need you; nothing is blocked on them.
+
+1. **Install the Claude Code hooks?** `uv run jarvis claude-hook install` edits `~/.claude/settings.json` for every Claude Code session. Recommended: yes, after `uv run jarvis claude-hook test`.
+2. **Phone escalation:** off, ntfy (free; install the ntfy app and pick a long random topic), or Twilio (paid; needs an account, a number, and the Studio flow). Recommended: ntfy for questions first.
+3. **The Ollama speed settings** offered in Phase 8 (flash attention and a q8_0 KV cache, set as user environment variables). Recommended: yes; it frees VRAM on the 4 GB GPU.

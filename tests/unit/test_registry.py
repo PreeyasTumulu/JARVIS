@@ -135,3 +135,14 @@ def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
     assert read is not None
     assert read.untrusted
     assert read.sensitivity is Sensitivity.PRIVATE
+
+
+def test_the_word_null_for_an_optional_argument_means_none() -> None:
+    from jarvis.tools.catalog import build_registry
+
+    registry = build_registry()
+    type_text = registry.get("type_text")
+    assert type_text is not None
+    args = type_text.validate({"app": "notepad", "text": "hi", "field": "null"})
+    assert args["field"] is None
+    assert type_text.validate({"app": "notepad", "text": "None", "field": "x"})["text"] == "None"

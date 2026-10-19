@@ -9,7 +9,7 @@ from jarvis.llm.types import LLMError
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolResult
 from jarvis.tools.registry import Registry, tool
 from jarvis.tools.web.search import SearchHit
-from tests.conftest import FakeChannel, FakeSearch, Hang, MakeApp, reply
+from tests.conftest import FakeChannel, FakeDesktop, FakeSearch, Hang, MakeApp, reply
 
 
 async def test_plain_answer_needs_no_tools(make_app: MakeApp) -> None:
@@ -258,3 +258,17 @@ async def test_a_result_with_a_summary_asks_for_a_short_reply(make_app: MakeApp)
     await h.app.agent.run_turn("set the volume to 30")
     tool_message = next(m for m in h.llm.requests[1] if m["role"] == "tool")
     assert "The summary is the answer" in tool_message["content"]
+
+
+async def test_a_result_with_a_long_list_asks_for_a_short_reply(
+    make_app: MakeApp, desktop: FakeDesktop
+) -> None:
+    from jarvis.platform.uia import Control
+
+    window = desktop.add("Untitled - Notepad", "notepad.exe")
+    desktop.controls[window.hwnd] = [Control("button", f"Button {i}") for i in range(12)]
+    desktop.lines[window.hwnd] = ["hello"]
+    h = make_app([reply("", ("read_window_text", {"app": "notepad"})), reply("It says hello.")])
+    await h.app.agent.run_turn("what does notepad say")
+    tool_message = next(m for m in h.llm.requests[1] if m["role"] == "tool")
+    assert "two or three short spoken sentences" in tool_message["content"]

@@ -52,6 +52,7 @@ SUMMARY_REPLY_HINT = (
     "data fields, codes, or units unless the user asked for them.)"
 )
 LONG_TEXT_CHARS = 400
+LONG_LIST = 8  # items in a result's list (controls, links) that small models start reciting
 
 
 class Decision(StrEnum):
@@ -105,8 +106,12 @@ class CallOutcome:
         if isinstance(data, list) and len(data) > 1:
             # Small models mirror list data as long markdown lists; the reply is spoken.
             text += f"\n{LIST_REPLY_HINT}"
-        elif isinstance(data, dict) and len(str(data.get("text") or "")) > LONG_TEXT_CHARS:
-            # A page or file read in full otherwise comes back as a minute-long summary.
+        elif isinstance(data, dict) and (
+            len(str(data.get("text") or "")) > LONG_TEXT_CHARS
+            or any(isinstance(v, list) and len(v) > LONG_LIST for v in data.values())
+        ):
+            # A page or file read in full otherwise comes back as a minute-long summary, and
+            # a window's controls were recited one by one (35 seconds for "what does it say").
             text += f"\n{TEXT_REPLY_HINT}"
         elif isinstance(data, dict) and self.result.speech and not self.result.hint:
             # Weather came back as a recital of every field (humidity, wind, "weather code 3")

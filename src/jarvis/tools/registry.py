@@ -55,8 +55,23 @@ class Tool:
         }
 
     def validate(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Validate model-supplied arguments. Raises pydantic.ValidationError."""
-        return self.args_model.model_validate(raw).model_dump()
+        """Validate model-supplied arguments. Raises pydantic.ValidationError.
+
+        Small models write the word "null" (or "none", or "") for an optional argument they
+        mean to leave out; type_text then looked for a field called "null". Optional
+        arguments get a real None instead.
+        """
+        cleaned = dict(raw)
+        for name, field in self.args_model.model_fields.items():
+            value = cleaned.get(name)
+            if (
+                isinstance(value, str)
+                and value.strip().casefold() in NULL_WORDS
+                and not field.is_required()
+                and _accepts_none(field.annotation)
+            ):
+                cleaned[name] = None
+        return self.args_model.model_validate(cleaned).model_dump()
 
     async def prepare(self, ctx: ToolContext, args: dict[str, Any]) -> Prepared:
         if self.prepare_fn is not None:
@@ -183,6 +198,13 @@ def _build_args_model(fn: ToolFn, arg_docs: dict[str, str]) -> type[BaseModel]:
         **fields,
     )
     return model
+
+
+NULL_WORDS = {"null", "none", "nil", "undefined", ""}
+
+
+def _accepts_none(annotation: Any) -> bool:
+    return annotation is None or type(None) in typing.get_args(annotation)
 
 
 def _clean_schema(node: Any) -> Any:

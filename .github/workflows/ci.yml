@@ -27,8 +27,15 @@ jobs:
       - name: Type check
         run: uv run mypy
 
-      - name: Tests
-        run: uv run pytest
+      - name: Tests, the scripted e2e suite, and coverage
+        run: uv run pytest --cov=jarvis --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=75
+
+      - name: Upload the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
 
       - name: No em or en dashes
         run: uv run python scripts/check_dashes.py

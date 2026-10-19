@@ -113,6 +113,7 @@ async def test_a_remembered_question_offers_memory_not_web_search(make_app: Make
     offered = {tool["function"]["name"] for tool in h.llm.tools_seen[0] or []}
     assert "web_search" not in offered
     assert "list_memories" in offered
+    assert {"remember", "forget"}.isdisjoint(offered)  # a question only reads memory
     assert "The user's manager is Ravi" in h.llm.requests[0][-1]["content"]
 
 

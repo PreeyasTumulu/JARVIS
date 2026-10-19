@@ -548,6 +548,7 @@ def make_app(
         overrides: dict[str, Any] | None = None,
         env: dict[str, str] | None = None,
         cloud: dict[str, Any] | None = None,
+        llm: Any = None,
     ) -> Harness:
         cfg = settings
         if overrides:
@@ -560,7 +561,7 @@ def make_app(
         # Only fake cloud models, ever: a real API key in the environment must not matter.
         cfg = cfg.model_copy(deep=True)
         cfg.router.cloud = list(cloud or {})
-        llm = FakeLLM(script)
+        model = llm if llm is not None else FakeLLM(script)
         tts = FakeTTS()
         chan = channel or FakeChannel()
         db = Database(":memory:")
@@ -594,9 +595,9 @@ def make_app(
         )
         router = Router(cfg, db, clients=cloud or {}, clock=lambda: FakeNotificationCenter.NOW)
         app = build_app(
-            cfg, chan, llm=llm, services=services, registry=registry, db=db, router=router
+            cfg, chan, llm=model, services=services, registry=registry, db=db, router=router
         )
-        harness = Harness(app, llm, chan, tts)
+        harness = Harness(app, model, chan, tts)
         harness.files_root = files_root
         return harness
 

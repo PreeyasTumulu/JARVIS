@@ -28,7 +28,7 @@ from jarvis.core.events import (
 )
 from jarvis.core.executor import CallOutcome, ToolExecutor
 from jarvis.core.prompts import related_memories, system_prompt
-from jarvis.core.tool_routing import ALWAYS, GROUPS, matched_groups, select_tools
+from jarvis.core.tool_routing import ALWAYS, matched_groups, select_tools
 from jarvis.llm.router import CLOUD_TOOLS, Router
 from jarvis.llm.types import ChatModel, LLMError
 from jarvis.services import Services
@@ -350,8 +350,9 @@ class Agent:
             matched_groups(request)
         ) <= {"questions"}:
             # "Who is my manager" when Jarvis remembers it: offer memory, not web search, which
-            # an 8B model otherwise picks over the answer it already has.
-            wanted = {*GROUPS["memory"].tools, *ALWAYS}
+            # an 8B model otherwise picks over the answer it already has. Only reading: given
+            # remember, the model saved the fact a second time instead of answering.
+            wanted = {"list_memories", *ALWAYS}
             return [tool.schema() for tool in self._registry if tool.name in wanted]
         return [tool.schema() for tool in select_tools(request, self._registry)]
 

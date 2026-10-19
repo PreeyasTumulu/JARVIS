@@ -55,6 +55,9 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "pre-commit>=3.8",
+    "pytest-cov>=7.1.0",
+    "pyyaml>=6.0.3",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [tool.uv]
@@ -103,3 +106,10 @@ markers = [
     "browser: needs Playwright's Chromium (uv run playwright install chromium; run with -m browser)",
 ]
 addopts = "-m 'not llm and not browser'"
+
+[tool.coverage.run]
+source = ["jarvis"]
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

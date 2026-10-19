@@ -47,3 +47,8 @@ Desktop.ini
 
 # Local editor and assistant settings
 /.claude/
+
+# coverage reports
+.coverage
+coverage.xml
+htmlcov/

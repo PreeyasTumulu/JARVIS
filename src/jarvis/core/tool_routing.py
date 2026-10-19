@@ -113,7 +113,7 @@ GROUPS: dict[str, Group] = {
         re.compile(
             r"\b(fill|form|sign up|add to cart|cart|checkout|book|log ?in to|"
             r"in (the|your|jarvis'?s?) browser|on (the )?(site|website|page)|"
-            r"search (it|on|for .+ on) \w*|amazon|flipkart|youtube|github)\b"
+            r"search (it|on|for .+ on) \w*)\b"  # site names are the "sites" group
         ),
     ),
     "messaging": Group(

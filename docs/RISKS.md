@@ -17,7 +17,7 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R9 | Unofficial data sources (yfinance, ddgs) change or rate limit | High | Low | Provider fallback chains, caching, circuit breakers | 1, 4 |
 | R10 | Other websites talking to the local UI | Low | High | 127.0.0.1 bind, Origin check, per-launch token, Host check, no framing (ADR-035); verified against the running server | 5 |
 | R11 | A stuck Windows call cannot be cancelled instantly | Medium | Low | Cooperative cancellation, per-tool timeouts, work isolated on worker threads | 1, 6 |
-| R12 | Private data reaches a cloud model | Low | High | Sensitivity labels, fresh public-only cloud context, guard that raises, dedicated tests | 8 |
+| R12 | Private data reaches a cloud model | Low | High | Fresh public-only cloud context, public read-only tools, a guard that raises, private topics stay local, tests with a fake cloud that records everything (ADR-045) | 8 |
 | R13 | Microsoft Store Python hides Jarvis's data (AppData redirection) | Happened | Medium | uv-managed Python only (ADR-019), CLI warning, data moved | 2 |
 | R14 | Wrong or silent microphone, hotkeys owned by other apps | Happened | Medium | Startup mic silence check, `--list-devices`, name-based device selection, hotkey conflict warnings | 2 |
 | R15 | The model misreads tool data in its answer (said a stopped container was running) | Medium | Low | Short summaries computed in code, ask for details when it matters; revisit with a larger or cloud model | 3 |
@@ -35,6 +35,9 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R27 | A WhatsApp Web update breaks sending | High | Medium | Selectors in one file, nothing is sent unless the message is seen in the box first, desktop fallback | 6 |
 | R28 | A small model fills optional arguments with the examples from their description | Happened | Medium | No example names in argument text, filler values ignored, fewer optional arguments (ADR-044) | 7 |
 | R29 | Notifications are missed or arrive without text | Medium | Medium | Poll every 2 s while Jarvis runs, store what is seen; WhatsApp desktop running with previews on | 7 |
+| R30 | Free cloud tiers change, throttle, or log prompts | High | Low | Two providers then local, daily caps under the limits, cooldown after errors, only public questions sent | 8 |
+| R31 | The local model leaks a private fact into a web search | Happened | Medium | Memories offered before web search, memories count as private, `web_search` and `open_url` are now egress tools (ADR-046) | 8 |
+| R32 | Starting at login: the microphone is always open, Ollama may not be up yet | Medium | Low | Tray Microphone switch, local-only audio, Jarvis falls back with a clear message until Ollama answers | 8 |
 
 ## Details
 
@@ -147,6 +150,18 @@ When a tool's argument text has examples, Hermes 3 8B tends to copy them into th
 ### R29. Notifications that are missed or empty
 
 Jarvis sees only what is in the notification center when it looks: while chat, voice, or the web UI runs it looks every 2 s; otherwise only when you ask. A notification dismissed in between (or removed by WhatsApp because you read the message on your phone) is missed. WhatsApp's desktop app must be running with notifications and message previews on (WhatsApp settings, Notifications); with previews off, its notifications carry no text. Focus assist (Do not disturb) does not matter: notifications still reach the notification center.
+
+### R30. Free cloud tiers
+
+Groq's free plan allows about 1,000 requests a day for gpt-oss-120b (its page labels the table as developer-plan limits, so the free plan may be lower); OpenRouter's free accounts get about 50 requests a day across its free models, and its free roster rotates (DeepSeek had free models until mid-2026). Either can throttle (HTTP 429) or retire a model. Jarvis counts its own requests and stops under `daily_requests`, skips a provider for five minutes after an error, and falls back to the next provider and then the local model, so the worst case is a slower, local answer. Free tiers may keep prompts; that is acceptable only because a cloud turn never contains private content (ADR-045). If OpenRouter retires the Nemotron model, change `[llm.providers.openrouter] model` to another free model with tools (`https://openrouter.ai/models`, price 0).
+
+### R31. Private facts in web searches
+
+During Phase 8 testing, asked "who is my manager" with "The user's manager is Ravi" remembered, Hermes 3 8B searched the web twice, once with the remembered sentence as the query, so a private fact went to DuckDuckGo. No prompt injection was involved: the local model chose to. Jarvis now offers the memory tools instead of web search when a question matches a memory, repeats the matching fact next to the question, and treats memories as private for the egress rule, so after outside content a search or an opened address asks first. A search the model writes from private files or messages in a conversation without outside content is still sent without asking; search queries are not checked for private words.
+
+### R32. Running at login
+
+`jarvis startup enable` starts Jarvis at every login with the wake word, so the microphone is open whenever you are logged in. Audio is processed on this laptop and never stored; the tray's Microphone item closes it until you turn it back on. If Ollama is not up yet, the first command says the model server cannot be reached; Ollama normally starts at login too. A Jarvis already running (the web port is busy) makes the second start exit quietly.
 
 ### R11. Cancellation
 

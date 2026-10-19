@@ -14,7 +14,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 5 | Web UI with live tool log and confirm buttons | Built on `phase/5-web-ui` (stacked on Phase 4), waiting for your test | v0.5.0 |
 | 6 | UI automation, Playwright, WhatsApp | Built on `phase/6-ui-whatsapp` (stacked on Phase 5), waiting for your test | v0.6.0 |
 | 7 | Notifications (feasibility spike first) | Built on `phase/7-notifications` (stacked on Phase 6), waiting for your test | v0.7.0 |
-| 8 | Model router, memory, tray, startup, packaging | Planned | v0.8.0 |
+| 8 | Model router, memory, tray, startup, packaging | Built on `phase/8-router-tray` (stacked on Phase 7), waiting for your test | v0.8.0 |
 | 9 | Test hardening, docs, demo | Planned | v1.0.0 |
 
 ## How each phase runs
@@ -352,7 +352,32 @@ Then the real one: start `uv run jarvis chat` (or `serve`), have someone send yo
 - A heavy reasoning question with only public context goes to the cloud (when enabled). Any turn with private content stays local, proven by tests.
 - Jarvis starts at login into the tray and is ready to listen.
 
-**Decisions:** cloud provider and budget, packaging approach.
+**Decisions (yours, ADR-045 and ADR-047):** the cloud must be free and open-weight, so Groq's gpt-oss-120b first, then OpenRouter's free Nemotron 3 Ultra, then local (DeepSeek, your first pick, is no longer free anywhere); packaging through the uv launcher (uvw), not PyInstaller; at login the tray, push-to-talk, and "Hey Jarvis".
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper
+# optional, for the cloud: GROQ_API_KEY and OPENROUTER_API_KEY in .env (SETUP.md 5h)
+uv run jarvis ask "think harder: why did the Roman empire fall in the west but not in the east"
+uv run jarvis ask "think harder and explain what is on my clipboard"   # stays local
+uv run jarvis ask "remember that my manager is Ravi"
+uv run jarvis ask "who is my manager"
+uv run jarvis ask "forget that my manager is Ravi"
+uv run jarvis serve --tray --wake --no-browser
+uv run jarvis startup enable        # then sign out and in: the tray icon appears, "Hey Jarvis" works
+uv run pytest tests/unit/test_router.py tests/unit/test_memory.py tests/unit/test_tray_startup.py
+```
+
+In the console, the line before each reply names the model that answered (`openai/gpt-oss-120b` for Groq, `jarvis-hermes3` for local).
+
+**Verified during the build (live, on this laptop, with Hermes 3 8B):** without cloud keys a "think harder" question was answered locally with no delay; "remember that my manager is Ravi" saved the fact, "what do you remember about me" listed it, and "forget that my manager is Ravi" asked first and kept it on "n" (all in a separate test data folder); "who is my manager" answered "Ravi" after the fix below; `uvw run ... pythonw -m jarvis serve --tray` started with no console window, served the page, and logged "Tray icon shown"; `jarvis startup enable`, `status`, and `disable` wrote, read, and removed a working shortcut (in a scratch folder; your Startup folder is untouched). Not exercised live: a real cloud call (it needs your free Groq and OpenRouter keys), clicking the tray menu (covered by tests), and the wake word at login (it would keep the microphone on).
+
+**Measured:** with 44 tools, Hermes 3 8B picked the right first tool for 89% of 62 benchmark commands with keyword routing, all three memory commands correct ([phase8.md](benchmarks/phase8.md)).
+
+**Found and fixed during the build:** asked "who is my manager", the local model searched the web, once with the remembered fact as the query, sending it to DuckDuckGo. Memories are now offered before web search and count as private content, and `web_search` and `open_url` are now `egress` tools, as ADR-029 always said `open_url` was (ADR-046, RISKS.md R31).
+
+**Exit criteria:** cloud routing for public questions and "private stays local" are proven by tests with a fake cloud that records everything it is sent (`test_router.py`); a real cloud answer needs your keys. "Starts at login into the tray and is ready to listen" is in place (`jarvis startup enable`); signing in once is your test.
 
 ## Phase 9: Hardening, docs, demo
 

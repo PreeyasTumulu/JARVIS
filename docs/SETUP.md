@@ -74,7 +74,8 @@ Fill in only the keys you use. `.env` is gitignored and must never be committed.
 | Alpha Vantage | Phase 4 | `ALPHAVANTAGE_API_KEY` | Free key, small daily limit |
 | CoinGecko | Phase 4 | `COINGECKO_API_KEY` | Free demo key recommended |
 | yfinance, Open-Meteo, Frankfurter | Phase 4 | none | No key needed |
-| DeepSeek (optional) | Phase 8 | `DEEPSEEK_API_KEY` | Paid, only used if cloud escalation is enabled |
+| Groq (optional) | Phase 8 | `GROQ_API_KEY` | Free plan, no card: about 1,000 requests a day for gpt-oss-120b |
+| OpenRouter (optional) | Phase 8 | `OPENROUTER_API_KEY` | Free account: about 50 requests a day on free models |
 
 ## 5. Your local config
 
@@ -219,6 +220,30 @@ uv run jarvis notifications         # what Jarvis has kept, newest first
 
 While `jarvis chat`, `jarvis voice`, or `jarvis serve` runs, Jarvis checks every 2 s, so a WhatsApp notification that disappears when you read the message on your phone is still kept. Keep the WhatsApp desktop app running with notifications and message previews on, or there is nothing to read. Jarvis does not announce notifications; ask for them.
 
+## 5h. Cloud model, memory, tray, and starting at login (Phase 8)
+
+**Free cloud model (optional).** For heavy questions about public topics ("think harder: why did...", "explain the difference between..."), Jarvis can ask a bigger free model. Create free accounts at [console.groq.com](https://console.groq.com) and [openrouter.ai](https://openrouter.ai) (no card needed), make an API key in each, and put them in `.env` (copy `.env.example` if you have no `.env` yet):
+
+```text
+GROQ_API_KEY=gsk_...
+OPENROUTER_API_KEY=sk-or-...
+```
+
+Without keys everything stays on the local model. Anything about your files, messages, notifications, clipboard, screen, apps, or memory always stays local. To use the cloud only when you say "think harder", set `[router] escalate = "explicit"`; `"never"` turns it off.
+
+**Memory.** "Remember that my manager is Ravi", "who is my manager", "what do you remember about me", "forget that my manager is Ravi" (forgetting asks first). Memories stay in `jarvis.db`.
+
+**Tray and login.**
+
+```powershell
+uv run jarvis serve --tray --wake --no-browser   # try the tray by hand
+uv run jarvis startup enable                     # start like that at every login
+uv run jarvis startup                            # is it on?
+uv run jarvis startup disable
+```
+
+The tray icon is blue when ready, red while listening, amber while thinking, green while speaking, and grey with the microphone off. Click it to open the page; right-click for Microphone, Stop, and Quit. At login Jarvis starts through uv's windowless launcher (`uvw`), so no console window opens; its log is in `%LOCALAPPDATA%\Jarvis\logs`.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |
@@ -234,7 +259,6 @@ Run Jarvis as your normal user, not as administrator. Windows blocks a normal pr
 |---|---|---|
 | 2 | `uv sync --extra voice --extra piper` | faster-whisper, openWakeWord, sounddevice, Piper |
 | 6 | `uv run playwright install chromium` | Only if you set `[browser] channel = "chromium"`; the default uses Edge (ADR-040) |
-| 8 | Kokoro extra | Bundle-safe voice for the packaged build (ADR-021) |
 
 Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of time with `uv run jarvis setup-voice`, into `%LOCALAPPDATA%\Jarvis\models`.
 
@@ -269,6 +293,8 @@ None of this is inside the repository.
 | Typed text comes out wrong in an app | Jarvis says so when it can read the field back. Type in smaller pieces, or tell the app's name exactly. |
 | `click` cannot find a button you can see | Some apps (Electron, WebView2) hide their controls from UI Automation. `what does <app> say` lists what Jarvis can see. |
 | WhatsApp says "not sent" | `uv run jarvis whatsapp login` again if the phone unlinked it; if WhatsApp Web changed, set `[whatsapp] method = "desktop"` (RISKS.md R27). |
+| Jarvis does not start at login | `uv run jarvis startup` shows the shortcut; check the log in `%LOCALAPPDATA%\Jarvis\logs`. Another Jarvis on the same port makes the second one exit. |
+| Every question stays on the local model | `GROQ_API_KEY` or `OPENROUTER_API_KEY` missing from `.env`, a daily cap reached, or the question touches a private topic; `[router] escalate` decides the rest. |
 | "Windows does not let Jarvis read notifications" | Settings > Privacy & security > Notifications: turn notification access on. |
 | WhatsApp messages never show up | The WhatsApp desktop app must be running, with notifications and message previews on, and "WhatsApp" must be in `[notifications] apps`. |
 | "Jarvis's database was damaged" | The old file was kept as `jarvis.db.corrupt-<time>` and a fresh one started. Indexes rebuild themselves; history and audit restart. |

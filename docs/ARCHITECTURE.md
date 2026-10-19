@@ -38,7 +38,7 @@ flowchart LR
   SES --> AG[Agent core<br/>tool-calling loop]
   AG <--> RT[Model router]
   RT --> LOC[Ollama<br/>Hermes 3 8B]
-  RT -. public context only .-> CLD[Cloud model<br/>e.g. DeepSeek]
+  RT -. public context only .-> CLD[Free cloud model<br/>Groq, OpenRouter]
   AG --> POL[Policy gate<br/>risk, allowlists, confirm]
   POL --> REG[Tool registry]
   REG --> TA[Apps and UI automation]
@@ -51,7 +51,7 @@ flowchart LR
   AG --> BUS[Event bus]
   BUS --> WEB
   BUS --> CLI
-  BUS --> TTS[TTS<br/>Piper / Kokoro / SAPI]
+  BUS --> TTS[TTS<br/>Piper / SAPI]
   BUS --> DB[(SQLite<br/>audit, history,<br/>prefs, contacts)]
 ```
 
@@ -241,7 +241,7 @@ The prompt says this content is data. The real protection is structural: nothing
 | `speak(text)` | 1 | safe | public |
 | `ask_user(question, options?)` | 1 | safe | private |
 | `open_app(name)` | 1 basic, 3 full index | safe if allowlisted, else confirm | public |
-| `web_search(query)` | 1 | safe | public, untrusted |
+| `web_search(query)` | 1 | safe; confirm under the egress rule (6.1, step 4a) since Phase 8 | public, untrusted |
 | `focus_app(name)` | 3 | safe (opening an app that is not running follows the app allowlist) | public |
 | `close_app(name)` | 3 | confirm, unless on `safety.safe_to_close` and no window title shows unsaved changes | public |
 | `vscode_open(path, line?)` | 3 | safe inside folder allowlist, else blocked | private |
@@ -267,7 +267,7 @@ The prompt says this content is data. The real protection is structural: nothing
 | `browser_open(url, search?)`, `browser_read()`, `browser_click(target)`, `browser_type(text, target?, submit?)` | 6 | safe; submits, purchases, and deletes confirm (search boxes do not); passwords, card numbers, one-time codes, local addresses, and WhatsApp sites blocked; open and type are `egress` | private, untrusted |
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
 | `read_notifications(person?)` | 7 | safe; only apps on `notifications.apps` | private, untrusted |
-| `remember(fact)`, `forget(fact)` | 8 | safe | private |
+| `remember(fact)`, `list_memories()`, `forget(what)` | 8 | safe; remembering after outside content asks; forgetting always asks | private |
 
 ## 6. Safety model
 
@@ -322,10 +322,19 @@ base_url = "http://localhost:11434/v1"
 model = "jarvis-hermes3"          # hermes3:8b plus config/ollama/hermes3-8b.Modelfile (num_ctx)
 api_key_env = ""                  # Ollama ignores the key
 
-[llm.providers.deepseek]
-base_url = "https://api.deepseek.com/v1"
-model = "deepseek-chat"
-api_key_env = "DEEPSEEK_API_KEY"
+[llm.providers.groq]                # free tier, gpt-oss-120b, fast
+base_url = "https://api.groq.com/openai/v1"
+model = "openai/gpt-oss-120b"
+api_key_env = "GROQ_API_KEY"
+
+[llm.providers.openrouter]          # free tier, about 50 requests a day
+base_url = "https://openrouter.ai/api/v1"
+model = "nvidia/nemotron-3-ultra-550b-a55b:free"
+api_key_env = "OPENROUTER_API_KEY"
+
+[router]
+cloud = ["groq", "openrouter"]      # tried in order, then local
+escalate = "auto"                   # or "explicit", or "never"
 ```
 
 Ollama's OpenAI-compatible endpoint does not accept a context length per request, so Jarvis ships a Modelfile (`num_ctx`, low temperature) and creates a local alias model from it. See SETUP.md.
@@ -335,19 +344,22 @@ Ollama's OpenAI-compatible endpoint does not accept a context length per request
 | Situation | Model |
 |---|---|
 | Default | local |
-| Cloud disabled (`router.cloud_enabled = false`, the default until Phase 8) | local, always |
-| Turn is heavy reasoning (explicit "think harder" or a heuristic) **and** context is all `public` | cloud allowed |
-| Context contains anything `private` | local, always |
-| Cloud provider down, slow, or over budget | local |
+| `router.cloud = []`, `escalate = "never"`, or no API key in `.env` | local, always |
+| "Think harder", "use the cloud model", and every matched routing group is public (web, questions, market, weather) | cloud |
+| `escalate = "auto"`: a reasoning question (why, explain, compare, plan, should I; 8 or more words) about public topics only | cloud |
+| The request touches apps, files, messages, notifications, the clipboard, the screen, UI, the browser, or memory | local, always |
+| The cloud model asks for a tool that is not public and read only | local, for the whole turn |
+| Provider errors (429, timeout, down), or its daily cap is reached | next provider, then local |
 
 ### 7.3 The privacy guard
 
 The guard is code, not a prompt:
 
 - A cloud turn gets a **fresh context**: system prompt, the current request, and `public` tool results only. Earlier private history is never forwarded.
-- A cloud turn sees only `public` tools (web search, fetch page, market data). If it needs a private tool, the turn falls back to local.
+- A cloud turn sees only public read-only tools (`web_search`, `fetch_page`, `market_data`, `crypto_price`, `convert_currency`, `weather`). If it asks for anything else, the turn falls back to local.
+- Memories are never added to a cloud turn's prompt.
 - The cloud client wrapper refuses any request whose state sensitivity is `private` and raises, so a router bug fails loudly instead of leaking.
-- Tests use a fake cloud client that fails the test if any private marker reaches it.
+- Tests use a fake cloud client that records everything it is sent; they check that private history, memories, and notification text never appear in it (`tests/unit/test_router.py`).
 
 ## 8. Voice pipeline
 
@@ -405,7 +417,7 @@ FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) an
 
 ### 9.3 Tray (Phase 8)
 
-pystray icon with status, mic toggle, open UI, and quit.
+`jarvis serve --tray` shows a pystray icon (its own thread) whose color and tooltip follow the voice state, with Open Jarvis (the page, with its token), Microphone (on or off), Stop, and Quit. Menu clicks are handed to the asyncio loop. `jarvis startup enable` starts `serve --tray --wake --no-browser` at login through uvw, with no console window (ADR-047).
 
 ## 10. Storage
 
@@ -424,7 +436,8 @@ SQLite in WAL mode at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with
 | `index_meta` | when each index was last built and how many items it has |
 | `notifications` | Windows id, app id, app name, title, body, created_at, seen_at, read_at (allowed apps only; deleted after `keep_days`) |
 | `reminders` | kind (timer or reminder), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at |
-| `memories` | Phase 8 facts, optional embedding |
+| `memories` | text, created_at (facts you asked Jarvis to remember) |
+| `cloud_usage` | day, provider, requests, prompt and completion tokens (free-tier daily caps) |
 
 Everything that is personal (database, logs, the two browser profiles `browser-profile` and `whatsapp-profile`, downloaded voice models) lives under `%LOCALAPPDATA%\Jarvis\`, outside the repo, so it can never be committed by accident.
 
@@ -442,7 +455,7 @@ At every start Jarvis runs SQLite's quick check. A damaged database is renamed t
 | Global hotkeys | Dedicated thread with a Win32 message loop (`RegisterHotKey`), handing events to asyncio with `call_soon_threadsafe` |
 | Wake word, VAD | Thread pool via `asyncio.to_thread`, one frame at a time (a few milliseconds each) |
 | Notification watcher | Main asyncio loop: pywinrt awaitables, one poll every `notifications.poll_s` seconds |
-| Tray icon | pystray's own thread |
+| Tray icon | pystray's own thread (Windows message loop); clicks go to asyncio with `run_coroutine_threadsafe` |
 
 ## 12. Configuration
 
@@ -481,7 +494,7 @@ allowed_folders = ["{documents}", "{desktop}", "{downloads}"]
 [voice]
 stt_model = "small.en"
 stt_device = "cpu"
-tts_engine = "piper"            # piper | kokoro | sapi
+tts_engine = "piper"            # piper | sapi
 wake_word = "hey_jarvis"
 
 [ui]
@@ -505,19 +518,21 @@ jarvis/
   src/jarvis/
     __main__.py               python -m jarvis
     cli.py                    jarvis chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,
-                              notifications, audit, version
+                              notifications, startup, audit, version
     console.py                terminal channel: live tool log, y/n confirmations, questions
-    app.py                    wires settings, storage, model, tools, and agent together
+    app.py                    wires settings, storage, model, router, tools, and agent together
+    tray.py                   the tray icon (pystray) and its menu
     services.py               shared helpers tools use (TTS, app index, search backend)
     config.py
     core/                     agent loop, executor (gate + confirm + audit), tool routing, events,
                               channel, prompts
-    llm/                      OpenAI-compatible client, tool-call text parser (router in Phase 8)
+    llm/                      OpenAI-compatible client, tool-call text parser, router and privacy guard
     tools/
       registry.py             @tool decorator, schema generation
       policy.py               risk evaluation, allowlists
       catalog.py              the list of tools exposed to the model
       interaction.py          speak, ask_user
+      memory.py               remember, list_memories, forget
       apps/                   app index (SQLite), open/focus/close, window matching, vscode, docker
       ui/                     type_text, click, press_keys, read_window_text; key parsing; risk rules
       files/                  guard (allowlist, secrets), index and search (Everything or SQLite),
@@ -545,7 +560,7 @@ jarvis/
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
                               COM thread, volume, display (brightness, lock, screenshot), clipboard,
                               UI Automation (uia.py), synthetic keys and clicks (sendinput.py),
-                              the notification center (notifications.py)
+                              the notification center (notifications.py), Startup shortcut (startup.py)
   tests/
     unit/                     tools with mocks, policy, router, registry
     integration/              sqlite, real Ollama (marked, optional)

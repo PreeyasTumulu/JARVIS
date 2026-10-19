@@ -199,6 +199,23 @@ max_read = 5                 # how many are read out at once
 port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachable from the network)
 open_browser = true          # open the page when `jarvis serve` starts
 
+[bridge]
+# Claude Code asks you through Jarvis (install once with: uv run jarvis claude-hook install).
+enabled = true
+answer_timeout_s = 120       # no answer by then: Claude Code asks you as usual
+questions = true             # Claude's multiple-choice questions, answered by voice or the page
+permissions = true           # tool permissions: a clear spoken yes allows, no denies, silence asks as usual
+announce = true              # say "Claude is waiting for you" and "Claude finished"
+phone = ""                   # "" (off), "ntfy" (a push with answer buttons), or "twilio" (a real call)
+escalate_after_s = 45        # how long the PC gets before the phone is tried
+
+[phone]
+number = ""                  # your own number, +91..., set it in local.toml
+ntfy_server = "https://ntfy.sh"
+ntfy_topic = ""              # a long random name, in local.toml; anyone who knows it can read it
+twilio_from = ""             # a Twilio number allowed to call yours
+twilio_flow_sid = ""         # the Studio flow imported from docs/twilio-ask-flow.json
+
 [tts]
 engine = "piper"             # "piper", or "sapi" (built-in Windows voice); falls back to sapi if Piper is not installed
 rate = 0                     # -10 (slow) to 10 (fast)

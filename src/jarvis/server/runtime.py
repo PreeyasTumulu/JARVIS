@@ -16,6 +16,7 @@ from jarvis.server.hub import Client, Message, WebHub
 from jarvis.tools.messaging.contacts import ContactError
 
 if TYPE_CHECKING:
+    from jarvis.bridge.service import BridgeService
     from jarvis.voice.session import VoiceSession
 
 log = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class Runtime:
         self.app = app
         self.hub = hub
         self.voice = voice
+        self.bridge: BridgeService | None = None
         self._web_turn: asyncio.Task[Any] | None = None
         app.bus.subscribe(hub.on_event)
 

@@ -22,6 +22,15 @@ from rich.markup import escape
 
 from jarvis import __version__
 from jarvis.app import App, build_app
+from jarvis.bridge.phone import phone_asker
+from jarvis.bridge.service import (
+    BridgeRequest,
+    BridgeService,
+    page_question,
+    publish_address,
+    spoken_question,
+    withdraw_address,
+)
 from jarvis.config import Settings
 from jarvis.console import ConsoleRenderer
 from jarvis.core.channel import FirstAnswerChannel, UserChannel
@@ -146,8 +155,12 @@ async def _serve(
         session = voice.session if voice is not None else None
         await app.start_background(session.announce if session else _speaker(app, console))
 
+        bridge_token = None
+        if app.settings.bridge.enabled:
+            bridge_token = publish_address(app.settings.data_dir, port)
+            runtime.bridge = _bridge(runtime, console)
         config = uvicorn.Config(
-            create_server(runtime, token=token, port=port),
+            create_server(runtime, token=token, port=port, bridge_token=bridge_token),
             host=HOST,
             port=port,
             log_config=None,  # Jarvis's own logging setup stays in charge
@@ -174,6 +187,7 @@ async def _serve(
         await asyncio.gather(*background, return_exceptions=True)
         if voice is not None:
             await voice.close()
+        withdraw_address(app.settings.data_dir)
         await app.aclose()
 
 
@@ -299,6 +313,36 @@ def _start_tray(
     if session is not None:
         icon.show(session.state)
     return icon
+
+
+def _bridge(runtime: Runtime, console: Console) -> BridgeService:
+    """Claude Code's questions reach you by voice and on every open page (ADR-051)."""
+    web = WebChannel(runtime.hub)
+    speak = _speaker(runtime.app, console)
+
+    async def on_page(request: BridgeRequest) -> str | None:
+        question, options = page_question(request)
+        return await web.ask(question, options)
+
+    async def by_voice(request: BridgeRequest) -> str | None:
+        session = runtime.voice
+        if session is None:
+            raise RuntimeError("voice is not running")
+        return await session.ask_and_listen(spoken_question(request))
+
+    async def announce(text: str) -> None:
+        log.info("Claude Code: %s", text)
+        if runtime.voice is not None:
+            await runtime.voice.announce(text)
+        else:
+            await speak(text)
+
+    return BridgeService(
+        runtime.app.settings.bridge,
+        [on_page, by_voice],
+        announce,
+        phone=phone_asker(runtime.app.settings),
+    )
 
 
 def _speaker(app: App, console: Console) -> Any:

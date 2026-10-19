@@ -192,6 +192,29 @@ class ServerSettings(_Section):
     open_browser: bool = True
 
 
+class BridgeSettings(_Section):
+    """Claude Code asks you through Jarvis: questions, permissions, notices (ADR-051)."""
+
+    enabled: bool = True
+    answer_timeout_s: float = Field(default=120, gt=0)  # then Claude Code asks as usual
+    questions: bool = True  # answer AskUserQuestion by voice or the page
+    permissions: bool = True  # allow or deny tool permissions by a clear spoken yes or no
+    announce: bool = True  # say "Claude is waiting for you" and "Claude finished"
+    # Reach your phone when nobody answers at the PC (ADR-052): "" (off), "ntfy", or "twilio".
+    phone: Literal["", "ntfy", "twilio"] = ""
+    escalate_after_s: float = Field(default=45, gt=0)
+
+
+class PhoneSettings(_Section):
+    """Your phone, for calls through Phone Link and for the bridge's phone escalation."""
+
+    number: str = ""  # your own number, e.g. "+919876543210" (local.toml only)
+    ntfy_server: str = "https://ntfy.sh"  # or your own ntfy server
+    ntfy_topic: str = ""  # a long random topic name; anyone who knows it can read it
+    twilio_from: str = ""  # a Twilio number that may call yours
+    twilio_flow_sid: str = ""  # the Studio flow from docs/twilio-ask-flow.json
+
+
 class TTSSettings(_Section):
     engine: Literal["piper", "sapi"] = "piper"
     piper_voice: str = "en_GB-alan-medium"
@@ -245,6 +268,8 @@ class Settings(_Section):
     whatsapp: WhatsAppSettings = WhatsAppSettings()
     notifications: NotificationsSettings = NotificationsSettings()
     server: ServerSettings = ServerSettings()
+    bridge: BridgeSettings = BridgeSettings()
+    phone: PhoneSettings = PhoneSettings()
     tts: TTSSettings = TTSSettings()
     voice: VoiceSettings = VoiceSettings()
     data_dir: Path = Field(default_factory=default_data_dir)

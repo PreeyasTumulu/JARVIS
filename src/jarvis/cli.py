@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import io
+import json
 import os
 import sys
 from datetime import datetime
@@ -17,7 +18,8 @@ from rich.table import Table
 
 from jarvis import __version__
 from jarvis.app import build_app
-from jarvis.config import ConfigError, Settings, load_settings
+from jarvis.bridge.service import bridge_running
+from jarvis.config import REPO_ROOT, ConfigError, Settings, load_settings
 from jarvis.console import ConsoleChannel, ConsoleRenderer, read_line
 from jarvis.core.agent import TurnStatus
 from jarvis.logging_setup import setup_logging
@@ -92,6 +94,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="list (the default), or test: show a test notification to read back",
     )
 
+    hook = sub.add_parser(
+        "claude-hook", help="answer Claude Code's questions through Jarvis (its hooks run this)"
+    )
+    hook.add_argument(
+        "action",
+        nargs="?",
+        default="run",
+        choices=["run", "install", "uninstall", "status", "test"],
+        help="run (what Claude Code calls), install or uninstall the hooks, status, or test",
+    )
     startup = sub.add_parser("startup", help="start Jarvis at login (tray, voice, Hey Jarvis)")
     startup.add_argument(
         "action", nargs="?", choices=["status", "enable", "disable"], default="status"
@@ -125,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         return 2
+    if args.command == "claude-hook":
+        return claude_hook(settings, args.action, console)
     log_file = setup_logging(settings.data_dir, verbose=args.verbose)
 
     if args.command == "audit":
@@ -334,6 +348,82 @@ def show_notifications(settings: Settings, action: str, console: Console) -> int
     finally:
         db.close()
     return 0
+
+
+def claude_hook(
+    settings: Settings, action: str, console: Console, claude_dir: Path | None = None
+) -> int:
+    """The Claude Code bridge (ADR-051). In "run" mode stdout carries only the hook's reply."""
+    from jarvis.bridge import hook
+
+    settings_path = (claude_dir or Path.home() / ".claude") / "settings.json"
+    if action == "run":
+        file_only_logging(settings.data_dir)
+        reply = hook.run_hook(sys.stdin.read(), settings.data_dir)
+        if reply:
+            sys.stdout.write(reply)
+        return 0
+    if action == "install":
+        hook.install(settings_path, REPO_ROOT)
+        console.print(
+            "Claude Code now asks you through Jarvis while `jarvis serve` runs "
+            "(questions, permissions, and when it is waiting).\n"
+            f"[dim]Hooks added to {escape(str(settings_path))}; a backup is next to it. "
+            "Undo with: uv run jarvis claude-hook uninstall[/dim]"
+        )
+        return 0
+    if action == "uninstall":
+        removed = hook.uninstall(settings_path)
+        console.print(
+            "Removed Jarvis's hooks." if removed else "Jarvis's hooks were not installed."
+        )
+        return 0
+    running = bridge_running(settings.data_dir)
+    if action == "status":
+        state = "installed" if hook.installed(settings_path) else "not installed"
+        console.print(
+            f"Hooks: {state} ({escape(str(settings_path))}). "
+            f"Jarvis: {'running' if running else 'not running (start it with jarvis serve)'}."
+        )
+        return 0
+    if not running:  # test
+        console.print("[red]Start Jarvis first: uv run jarvis serve[/red]")
+        return 2
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "AskUserQuestion",
+        "cwd": str(REPO_ROOT),
+        "tool_input": {
+            "questions": [
+                {
+                    "question": "This is a test from Jarvis. Which color do you like?",
+                    "header": "Test",
+                    "options": [{"label": "Blue"}, {"label": "Green"}, {"label": "Red"}],
+                    "multiSelect": False,
+                }
+            ]
+        },
+    }
+    console.print("Jarvis is asking now: answer by voice or on the page...")
+    reply = hook.run_hook(json.dumps(event), settings.data_dir)
+    answers = json.loads(reply)["hookSpecificOutput"]["updatedInput"]["answers"] if reply else {}
+    console.print(f"Claude would get: {answers or 'no answer (it would ask you itself)'}")
+    return 0
+
+
+def file_only_logging(data_dir: Path) -> None:
+    """Log to the file and nowhere else: Claude Code reads this process's stdout."""
+    import logging
+    from logging.handlers import RotatingFileHandler
+
+    (data_dir / "logs").mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(
+        data_dir / "logs" / "claude-hook.log", maxBytes=500_000, backupCount=1, encoding="utf-8"
+    )
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root = logging.getLogger()
+    root.handlers[:] = [handler]
+    root.setLevel(logging.INFO)
 
 
 def manage_startup(action: str, console: Console, folder: Path | None = None) -> int:

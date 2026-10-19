@@ -21,10 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from jarvis.bridge.service import BridgeRequest
 from jarvis.server.hub import Client
 from jarvis.server.runtime import Runtime
 
@@ -51,7 +52,12 @@ def security_headers(port: int, hosts: Sequence[str]) -> dict[str, str]:
 
 
 def create_server(
-    runtime: Runtime, *, token: str, port: int, hosts: Sequence[str] = LOCAL_HOSTS
+    runtime: Runtime,
+    *,
+    token: str,
+    port: int,
+    hosts: Sequence[str] = LOCAL_HOSTS,
+    bridge_token: str | None = None,
 ) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(hosts))
@@ -70,6 +76,23 @@ def create_server(
         response: Response = await call_next(request)
         response.headers.setdefault("Cache-Control", "no-cache")
         return response
+
+    @app.post("/bridge", include_in_schema=False)
+    async def bridge(request: Request) -> JSONResponse:
+        """Claude Code's hook asks you something (ADR-051). Not for browsers: a page can send
+        neither the bearer token nor a request without an Origin header."""
+        if request.headers.get("origin") is not None or bridge_token is None:
+            return JSONResponse({"error": "not allowed"}, status_code=403)
+        sent = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+        if not secrets.compare_digest(sent, bridge_token):
+            return JSONResponse({"error": "not allowed"}, status_code=403)
+        if runtime.bridge is None:
+            return JSONResponse({"error": "the bridge is off"}, status_code=503)
+        try:
+            ask = BridgeRequest.parse(await request.json())
+        except (ValueError, json.JSONDecodeError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(await runtime.bridge.handle(ask))
 
     @app.websocket("/ws")
     async def socket(ws: WebSocket) -> None:

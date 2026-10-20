@@ -119,6 +119,19 @@ CASES = [
     case("resume the song I was listening to", "media_control", arg=("action", "play")),
     case("pause the video in brave", "media_control", arg=("action", "pause")),
     case("which song is playing right now", "now_playing"),
+    # Phase 11
+    case("any new email", "read_mail"),
+    case("check my emails from ravi", "read_mail", arg=("sender", "ravi")),
+    case("read the email about the project update", "read_email", "read_mail"),
+    case(
+        "reply to ravi's email that I'll send the report tonight",
+        "reply_email",
+        "read_mail",
+        "read_email",
+    ),
+    case("what's on my calendar today", "calendar_events", arg=("day", "today")),
+    case("what's my next meeting", "calendar_events", arg=("day", "next")),
+    case("am I free on friday", "calendar_events", arg=("day", "friday")),
 ]
 
 

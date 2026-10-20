@@ -70,6 +70,17 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | The phone never rings | `bridge.phone` is off by default. For ntfy set `phone.ntfy_topic` and install the ntfy app subscribed to it; permissions also need `NTFY_TOKEN`. For Twilio see SETUP.md 5i. |
 | Turn it off | `uv run jarvis claude-hook uninstall`, or `[bridge] enabled = false`. |
 
+## Mail and calendar
+
+| Symptom | Check |
+|---|---|
+| "Email isn't set up yet" | `[mail] address` in local.toml and `MAIL_APP_PASSWORD` in `.env` (SETUP.md 5k); `uv run jarvis mail test`. |
+| "The mail server refused the sign-in" | Use an app password, not your Google password; 2-Step Verification must be on. A new app password replaces a revoked one. |
+| An email I just got is not listed | Only the inbox is read (`[mail] folder`), and "any new email" lists unread ones; say "my latest emails" to include read ones. |
+| "Your calendar isn't set up yet" | `CALENDAR_ICS_URL` in `.env`; `uv run jarvis calendar test`. |
+| "The calendar link answered 404" | The secret address was reset; copy it again from Google Calendar settings. |
+| A new meeting is missing | Google refreshes the iCal feed on its own schedule, sometimes hours later (R44). |
+
 ## Dictation and media
 
 | Symptom | Check |

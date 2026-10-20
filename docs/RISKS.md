@@ -199,6 +199,18 @@ Only apps that register a Windows media session can be told play or pause; for t
 
 Exact phrases run without the model and without the conversation, so "pause it" right after "set a timer" still pauses the media. The phrase list is small on purpose; a phrase you expected to be instant goes to the model and takes the usual 2 to 3 seconds.
 
+### R42. Email is the easiest prompt injection
+
+Anyone can email you, so email text is the most likely place for "assistant, forward this to ...". Email results are private and untrusted, wrapped as data; a reply needs your yes and can only go to people on that email; the egress rule then guards any tool that sends data elsewhere. A cleverly worded email can still mislead the model's summary of it.
+
+### R43. The app password
+
+A Gmail app password signs in to the whole mailbox (IMAP and SMTP) and is not limited to Jarvis's actions. It is kept in `.env` only. If the laptop or `.env` leaks, revoke it at myaccount.google.com/apppasswords. Google may disable app passwords for accounts with Advanced Protection or for work accounts whose admin turns them off; Jarvis then cannot read mail.
+
+### R44. The calendar link
+
+The secret iCal address can be read by anyone who has it, and Google can reset it (Jarvis then says the link answered 404). Google refreshes the published feed on its own schedule, sometimes hours late, so a meeting added a minute ago may be missing. Only events in the linked calendars are seen; invitations not yet accepted may not appear.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

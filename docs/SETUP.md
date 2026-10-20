@@ -305,6 +305,44 @@ remove_fillers = true
 
 **Media.** "Pause the music", "resume", "next song", "previous track", "skip this song", and "what's playing" run instantly, without the model. Anything else ("pause the video in Brave", "could you skip to the next track") goes to the model, which uses the same tools. It works with any app that shows up in the Windows volume flyout (Spotify, Media Player, YouTube in Brave); other apps get the keyboard's media keys.
 
+## 5k. Mail and calendar (Phase 11)
+
+**Mail (Gmail).** Jarvis signs in with an app password, not your real password.
+
+1. Turn on 2-Step Verification for your Google account if it is off.
+2. Open https://myaccount.google.com/apppasswords, create one named "Jarvis", and copy the 16 letters.
+3. Put it in `.env` and your address in `config/local.toml`:
+
+   ```
+   MAIL_APP_PASSWORD=abcd efgh ijkl mnop
+   ```
+
+   ```toml
+   [mail]
+   address = "you@gmail.com"
+   signature = "Preeyas"      # optional, added under replies
+   ```
+
+4. Check it (prints counts only):
+
+   ```powershell
+   uv run jarvis mail test
+   ```
+
+Then: "any new email?", "emails from Ravi", "read the second one", "reply that I'll send it tonight" (Jarvis reads the reply and the address back and sends only after your yes). Reading never marks anything as read. Outlook or Yahoo work too: set `imap_host` and `smtp_host` under `[mail]`.
+
+**Calendar (Google Calendar).** Open Google Calendar on the web, Settings, pick your calendar under "Settings for my calendars", "Integrate calendar", and copy "Secret address in iCal format". Put it in `.env` (several calendars: separate the links with spaces):
+
+```
+CALENDAR_ICS_URL=https://calendar.google.com/calendar/ical/.../private-.../basic.ics
+```
+
+```powershell
+uv run jarvis calendar test
+```
+
+Then: "what's on today", "my next meeting", "am I free on Friday", "what's on next week". Keep the link secret; "Reset" in the same place makes a new one.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

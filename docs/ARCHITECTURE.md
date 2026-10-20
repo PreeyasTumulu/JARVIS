@@ -281,6 +281,9 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
 | `call_contact(contact)` | 9 | confirm (floor); dials a saved contact through Phone Link (`tel:`) | private |
 | `read_notifications(person?)` | 7 | safe; only apps on `notifications.apps` | private, untrusted |
+| `read_mail(sender?, unread_only?)`, `read_email(message)` | 11 | safe; the folder is opened read-only and nothing is marked read | private, untrusted |
+| `reply_email(message, text, reply_all?)` | 11 | confirm (floor); only to the people on that email, addresses read out | private |
+| `calendar_events(day?)` | 11 | safe; from the secret iCal link, read-only | private, untrusted |
 | `remember(fact)`, `list_memories()`, `forget(what)` | 8 | safe; remembering after outside content asks; forgetting always asks | private |
 
 ## 6. Safety model
@@ -574,6 +577,8 @@ jarvis/
       messaging/              contact book and vCard import, send_whatsapp, call_contact, WhatsApp Web and desktop,
                               WhatsApp Web selectors
       notifications/          store and allowlist, watcher (polling), read_notifications
+      mail/                   mailbox.py (IMAP read-only, SMTP, parsing), read_mail, read_email, reply_email
+      calendar/               feed.py (iCal download, repeats, day ranges), calendar_events
       system/                 volume, brightness, lock, screenshot, clipboard, timers and reminders,
                               media (play, pause, next, now playing)
     voice/

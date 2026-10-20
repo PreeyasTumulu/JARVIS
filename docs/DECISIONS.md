@@ -340,6 +340,18 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** you chose exact phrases. A media command answered in about 30 ms instead of 2 to 3 seconds; anything longer still reaches the model, so nothing is lost.
 - **Cost:** a phrase list to maintain. The fast path never sees the conversation, so "pause it" always means the media.
 
+### ADR-057: Mail over IMAP and SMTP with an app password; the calendar from its iCal link
+
+- **Decision:** mail is read over IMAP (`imap.gmail.com`) and replies are sent over SMTP (`smtp.gmail.com`), signed in with your address (`[mail] address`, local.toml) and a Gmail app password (`MAIL_APP_PASSWORD` in `.env`), using only Python's standard library. The folder is opened read-only (EXAMINE) and messages are fetched with `BODY.PEEK`, so reading never marks, moves, or deletes anything. The calendar comes from its secret iCal address (`CALENDAR_ICS_URL` in `.env`, several allowed), downloaded at most every five minutes, kept in memory only, and expanded with `icalendar` and `recurring-ical-events` so repeating events land on the right days. `jarvis mail test` and `jarvis calendar test` check the setup and print counts only.
+- **Why:** you chose it over Google's APIs: five minutes of setup, no Google Cloud project, no sign-in that expires every seven days, and it works the same with Outlook or Yahoo.
+- **Cost:** an app password opens the whole mailbox, so it lives only in `.env`, never in the repository or the database; revoking it at myaccount.google.com/apppasswords cuts Jarvis off at once. The calendar is read-only (no "add a meeting"), and an iCal link shows changes with a delay of up to the server's refresh (Google's can lag by hours). Anyone with the secret link can read the calendar; Google can reset it.
+
+### ADR-058: Emails: headers first, the text on request, replies after yes
+
+- **Decision:** `read_mail(sender?, unread_only)` lists the newest emails (five by default) with sender, subject, and a 160-character preview; `read_email(message)` reads one email in full (up to `body_chars`, quoted history removed, secret-looking values hidden), found by its number in the last list, "the second one", a sender, or subject words. Both are private and untrusted. `reply_email(message, text, reply_all)` has the risk floor `confirm`: the confirmation shows every address and the exact text, the recipients always come from the email itself (Reply-To or the sender, plus the others on it for reply-all, never yourself), the model cannot name an address, and the approval is bound to the email and the text. Replies thread correctly (`In-Reply-To`, `References`, `Re:`). There is no tool for writing to new people.
+- **Why:** you chose headers first and sending after a yes. Less email text in the context means fewer chances for a message to try prompt injection and faster answers; replying only on the thread means a misheard name can never send mail to a stranger.
+- **Cost:** a summary of several emails needs one `read_email` each. An attacker who emails you controls its Reply-To, so the confirmation always reads the address out.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

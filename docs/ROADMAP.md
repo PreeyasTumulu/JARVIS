@@ -17,6 +17,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 8 | Model router, memory, tray, startup, packaging | Built on `phase/8-router-tray` (stacked on Phase 7), waiting for your test | v0.8.0 |
 | 9 | Test hardening, docs, demo (plus the Claude Code bridge, Brave, calls) | Built on `phase/9-hardening` (stacked on Phase 8), waiting for your test | v1.0.0 |
 | 10 | Dictation and media | Built on `phase/10-dictation-media` (stacked on Phase 9), waiting for your test | v1.1.0 |
+| 11 | Mail and calendar | Built on `phase/11-calendar-mail` (stacked on Phase 10), waiting for your test | v1.2.0 |
 
 ## How each phase runs
 
@@ -489,6 +490,54 @@ uv run jarvis ask "could you skip to the next track"
 
 **Exit criteria:** dictation lands in any normal app with the clipboard intact; media commands work in your player; exact phrases answer instantly.
 
+## Phase 11: Mail and calendar
+
+**Scope:** read your inbox and your calendar; reply to an email only after your yes.
+
+**Decisions (asked 2026-10-20, all as recommended):** IMAP and SMTP with a Gmail app password, and the calendar from its secret iCal link, instead of Google's APIs (ADR-057); replies are sent after your yes, only to the people on that email (ADR-058); headers first, an email's full text only when you ask for it (ADR-058).
+
+**Built**
+
+- `read_mail(sender?, unread_only?)`: the newest emails (five by default) with sender, subject, and a short preview; "emails from Mom" uses your contacts' aliases. The folder is opened read-only, so nothing is ever marked as read.
+- `read_email(message)`: one email in full, found by its number in the last list, "the second one", a sender, or subject words; quoted history removed, secret-looking values hidden, attachments named.
+- `reply_email(message, text, reply_all?)`: risk floor `confirm`. The confirmation reads every address and the exact text; recipients come only from the email itself (Reply-To or the sender, plus the others for reply-all, never you); threaded with `Re:`, `In-Reply-To`, and `References`; an optional `[mail] signature`. "Reply that ..." left in the text by the model is removed.
+- `calendar_events(day?)`: today, tomorrow, a weekday, this week, next week, a date, or the next event, with repeating events expanded and all-day events first; titles and places are private and untrusted.
+- `jarvis mail test` and `jarvis calendar test` check the setup and print counts only; `[mail]` and `[calendar]` settings; `MAIL_APP_PASSWORD` and `CALENDAR_ICS_URL` in `.env`.
+- 5 new end-to-end scenarios (49 in all), including an email that tries to get itself answered; 7 new benchmark commands (78).
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper
+uv run pytest                                   # about 680 tests
+uv run pytest tests/e2e -m llm                  # the 49 scenarios with the real model
+uv run jarvis mail test                         # after SETUP.md 5k: counts only
+uv run jarvis calendar test
+uv run jarvis ask "any new email?"
+uv run jarvis ask "read the second one"         # in chat or voice, right after the list
+uv run jarvis ask "reply to Ravi's email saying I'll send it tonight"   # answer n to just hear the question
+uv run jarvis ask "what's on my calendar today"
+uv run jarvis ask "what's my next meeting"
+```
+
+**Verified during the build:** all unit tests and scripted scenarios; the 5 new scenarios with Hermes 3 8B; IMAP parsing against canned server replies (read-only EXAMINE, `BODY.PEEK` only, flags before or after the literal, HTML mail, encoded names, attachments); the calendar against a real Google iCal feed (India's public holidays: today's holiday, next week's, and 8 November's Diwali found on the right days). Not verified live: your own inbox, sending a real reply, and your own calendar, which need your app password and link.
+
+**Measured:** Hermes 3 8B picked the right first tool for 92% of 78 commands, median 2.8 s, all seven mail and calendar commands right ([phase11.md](benchmarks/phase11.md)).
+
+**Found and fixed during the build**
+
+| Found | Fix |
+|---|---|
+| "Any new email" made up a sender (the description's example name) | the description says to leave the sender out unless the user names one |
+| Hermes sometimes wrapped arguments in the call itself (`{"function": ..., "arguments": {...}}`) | the registry unwraps them for every tool |
+| The reply text kept the instruction ("reply that I'll send ...") | a lead-in like "reply that" or "tell him" is removed; "Say hi to everyone" is kept |
+| "Announce that the meeting starts" offered calendar tools | the calendar keywords need "my meeting", "next meeting", "meetings tomorrow", and so on |
+| HTML mail came out one word per line | block tags end lines, inline tags do not |
+
+**Not done, needs you:** an app password and the calendar link (SETUP.md 5k), then the test commands above with your own inbox and calendar.
+
+**Exit criteria:** the inbox and calendar answer correctly by voice; nothing is marked read; a reply goes only after your yes, to the right people, in the right thread.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -496,7 +545,7 @@ Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each wou
 | Phase | Name | What |
 |---|---|---|
 | 10 | Dictation and media | built (above) |
-| 11 | Calendar and mail | read today's calendar and mail; draft replies that send only after your yes |
+| 11 | Calendar and mail | built (above) |
 | 12 | MCP client | Home Assistant, GitHub, and other MCP servers, each tool with a risk floor and a sensitivity label |
 | 13 | Faster and smaller | a 4B default model if the benchmark agrees, a fast intent model for routing, Whisper on the GPU |
 | 14 | Memory by meaning | semantic search over memories and past turns with `nomic-embed-text`; a morning briefing |

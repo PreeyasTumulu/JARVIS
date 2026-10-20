@@ -217,6 +217,24 @@ ntfy_topic = ""              # a long random name, in local.toml; anyone who kno
 twilio_from = ""             # a Twilio number allowed to call yours
 twilio_flow_sid = ""         # the Studio flow imported from docs/twilio-ask-flow.json
 
+[mail]
+# Gmail over IMAP and SMTP with an app password in .env as MAIL_APP_PASSWORD (SETUP.md 5k).
+address = ""                 # your address, in local.toml
+imap_host = "imap.gmail.com"
+imap_port = 993
+smtp_host = "smtp.gmail.com"
+smtp_port = 465
+folder = "INBOX"
+max_list = 5                 # emails listed at once
+body_chars = 4000            # of one email's text the model sees
+max_reply_chars = 5000
+signature = ""               # added under every reply
+
+[calendar]
+# The secret iCal address goes in .env as CALENDAR_ICS_URL (several: separate with spaces).
+cache_s = 300                # download it at most every 5 minutes
+max_events = 10
+
 [dictation]
 # Hold the hotkey, speak, release: the text appears where the cursor is, in any app (ADR-054).
 enabled = true

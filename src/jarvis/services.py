@@ -1,5 +1,5 @@
 """Long-lived helpers that tools share (voice, indexes, search, data APIs, reminders,
-the browser, contacts, WhatsApp, notifications, and memory)."""
+the browser, contacts, WhatsApp, notifications, memory, mail, and the calendar)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,10 @@ from jarvis.storage.db import Database
 from jarvis.storage.repositories import Preferences
 from jarvis.tools.apps.index import AppIndex, AppStore
 from jarvis.tools.browser.session import BrowserManager
+from jarvis.tools.calendar.feed import Calendar
 from jarvis.tools.data.hub import DataHub
 from jarvis.tools.files.index import FileIndex
+from jarvis.tools.mail.mailbox import Mailbox
 from jarvis.tools.memory import MemoryStore
 from jarvis.tools.messaging.contacts import ContactBook
 from jarvis.tools.messaging.whatsapp import WhatsApp, WhatsAppDesktop, WhatsAppWeb
@@ -35,6 +37,8 @@ class Services:
     whatsapp: WhatsApp
     notifications: Notifications
     memory: MemoryStore
+    mail: Mailbox
+    calendar: Calendar
 
     async def aclose(self) -> None:
         await self.browser.aclose()
@@ -64,4 +68,6 @@ def build_services(settings: Settings, db: Database) -> Services:
         ),
         notifications=Notifications(db, settings.notifications),
         memory=MemoryStore(db),
+        mail=Mailbox(settings.mail),
+        calendar=Calendar(settings.calendar),
     )

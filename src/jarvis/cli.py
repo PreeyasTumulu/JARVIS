@@ -1,5 +1,5 @@
 """Command line entry point: chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,
-notifications, audit, version."""
+notifications, mail, calendar, audit, version."""
 
 from __future__ import annotations
 
@@ -94,6 +94,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="list (the default), or test: show a test notification to read back",
     )
 
+    mail = sub.add_parser("mail", help="check that Jarvis can sign in to your mailbox")
+    mail.add_argument("action", choices=["test"], help="sign in and count unread email")
+    calendar = sub.add_parser("calendar", help="check that Jarvis can read your calendar")
+    calendar.add_argument("action", choices=["test"], help="download it and count events")
+
     hook = sub.add_parser(
         "claude-hook", help="answer Claude Code's questions through Jarvis (its hooks run this)"
     )
@@ -153,6 +158,10 @@ def main(argv: list[str] | None = None) -> int:
         return show_notifications(settings, args.action, console)
     if args.command == "startup":
         return manage_startup(args.action, console)
+    if args.command == "mail":
+        return test_mail(settings, console)
+    if args.command == "calendar":
+        return test_calendar(settings, console)
     if args.command == "serve":
         from jarvis.server.serve import run_serve
 
@@ -317,6 +326,52 @@ def manage_contacts(settings: Settings, args: argparse.Namespace, console: Conso
         return 1
     finally:
         db.close()
+    return 0
+
+
+def test_mail(settings: Settings, console: Console) -> int:
+    """Sign in and count unread email. Prints counts only, never a sender or subject."""
+    from jarvis.tools.mail.mailbox import Mailbox, MailError
+
+    mailbox = Mailbox(settings.mail)
+    try:
+        with console.status(f"Signing in to {settings.mail.imap_host}..."):
+            unread = asyncio.run(mailbox.count(unread_only=True))
+            total = asyncio.run(mailbox.count(unread_only=False))
+    except MailError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return 1
+    console.print(
+        f"[green]Signed in as {escape(settings.mail.address)}.[/green] "
+        f"{settings.mail.folder}: {total} emails, {unread} unread. "
+        'Now ask Jarvis: "any new email?"'
+    )
+    return 0
+
+
+def test_calendar(settings: Settings, console: Console) -> int:
+    """Download the calendar and count events. Prints counts only, never a title."""
+    from datetime import datetime, timedelta
+
+    from jarvis.tools.calendar.feed import Calendar, CalendarError
+
+    calendar = Calendar(settings.calendar)
+    now = datetime.now().astimezone()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        with console.status("Downloading your calendar..."):
+            today = asyncio.run(calendar.events(midnight, midnight + timedelta(days=1)))
+            week = asyncio.run(calendar.events(midnight, midnight + timedelta(days=7)))
+    except CalendarError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return 1
+    feeds = len(Calendar.urls())
+    console.print(
+        f"[green]Read {feeds} calendar{'s' if feeds > 1 else ''}.[/green] "
+        f"{len(today)} event{'' if len(today) == 1 else 's'} today, "
+        f"{len(week)} in the next 7 days. "
+        'Now ask Jarvis: "what\'s on today?"'
+    )
     return 0
 
 

@@ -1018,6 +1018,20 @@ wheels = [
 ]
 
 [[package]]
+name = "icalendar"
+version = "7.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "tzdata" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/47/2b/1bbf82d316df18c3331d9a06228819c8a5814ceda545a3e9980e52ffce1b/icalendar-7.3.0.tar.gz", hash = "sha256:7bd001c8e648205e1bde5c6a5b77096598e8d0893dcf57755c6c597635620132", size = 525811, upload-time = "2026-08-19T15:10:21.05Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bb/82/50bff78b0bb0c7d7c0cb39e0ee189b92f611fff6bd7cf57f25e92d5a7551/icalendar-7.3.0-py3-none-any.whl", hash = "sha256:8355acfe17be81b368f0b1e3740817cea9b56ea889931f8f1a87c62f2d28db0b", size = 542540, upload-time = "2026-08-19T15:10:19.525Z" },
+]
+
+[[package]]
 name = "identify"
 version = "2.6.20"
 source = { registry = "https://pypi.org/simple" }
@@ -1046,12 +1060,13 @@ wheels = [
 
 [[package]]
 name = "jarvis"
-version = "1.1.0"
+version = "1.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "ddgs" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "icalendar" },
     { name = "mss" },
     { name = "openai" },
     { name = "pillow" },
@@ -1062,6 +1077,7 @@ dependencies = [
     { name = "pystray" },
     { name = "python-dotenv" },
     { name = "rapidfuzz" },
+    { name = "recurring-ical-events" },
     { name = "rich" },
     { name = "trafilatura" },
     { name = "uvicorn" },
@@ -1106,6 +1122,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.143.1" },
     { name = "faster-whisper", marker = "extra == 'voice'", specifier = ">=1.2.1" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "icalendar", specifier = ">=6" },
     { name = "mss", specifier = ">=10.2.0" },
     { name = "numpy", marker = "extra == 'voice'", specifier = ">=2.4.6" },
     { name = "openai", specifier = ">=1.50" },
@@ -1119,6 +1136,7 @@ requires-dist = [
     { name = "pystray", specifier = ">=0.19.5" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "rapidfuzz", specifier = ">=3.9" },
+    { name = "recurring-ical-events", specifier = ">=3" },
     { name = "rich", specifier = ">=13.7" },
     { name = "sounddevice", marker = "extra == 'voice'", specifier = ">=0.5.6" },
     { name = "trafilatura", specifier = ">=2.3.1" },
@@ -2839,6 +2857,21 @@ wheels = [
 ]
 
 [[package]]
+name = "recurring-ical-events"
+version = "3.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "icalendar" },
+    { name = "python-dateutil" },
+    { name = "tzdata" },
+    { name = "x-wr-timezone" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/f5/898abd8fbb25766ec6cb17b244730ebf192f47963c71eeacd61aadd903a1/recurring_ical_events-3.8.2.tar.gz", hash = "sha256:e731af31d0b7dec5cd47a1defacd8549e2f36fab1c1995e8b9f042822a0acf8e", size = 604992, upload-time = "2026-04-30T19:21:46.2Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/f7/d3eb4f545baf5d6daaa5881694517626fb7ad04036d94168197a4f021384/recurring_ical_events-3.8.2-py3-none-any.whl", hash = "sha256:9ad605e27b4fbeb70ee1c66205ade32550be15a57cedc579606522f1c67aef6d", size = 241358, upload-time = "2026-04-30T19:21:44.079Z" },
+]
+
+[[package]]
 name = "regex"
 version = "2026.9.29"
 source = { registry = "https://pypi.org/simple" }
@@ -3914,6 +3947,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/41/46d28b8fa9b446cce7c780703dd1b86d5c636967a49d7ef63d932327e07a/winrt_windows_ui_notifications_management-3.2.1-cp314-cp314-win32.whl", hash = "sha256:8c7407fe2fa0f66453526efbf00f8b64ae0a380bec5f764c6134ebdd285f6f7d", size = 37700, upload-time = "2025-09-20T07:19:13.145Z" },
     { url = "https://files.pythonhosted.org/packages/68/20/3efb8b620cefe4a8cae78363e3718243ccc16dd039ebcf33ced1c5dd577d/winrt_windows_ui_notifications_management-3.2.1-cp314-cp314-win_amd64.whl", hash = "sha256:64dc71cfb094f4b3741bd63e2c09a399837dff5f90fab8ade5aa64f988795fd1", size = 39146, upload-time = "2025-09-20T07:19:13.811Z" },
     { url = "https://files.pythonhosted.org/packages/4d/ec/d5738532220304047ff1dd6c05ec2ecf4186b530eba37031fa071064ba06/winrt_windows_ui_notifications_management-3.2.1-cp314-cp314-win_arm64.whl", hash = "sha256:0ba05eea33ac9dac725d8363ca1ad044649dcd14ad945c388a152be0272b4b80", size = 35681, upload-time = "2025-09-20T07:19:14.495Z" },
+]
+
+[[package]]
+name = "x-wr-timezone"
+version = "2.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "icalendar" },
+    { name = "tzdata" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/2b/8ae5f59ab852c8fe32dd37c1aa058eb98aca118fec2d3af5c3cd56fffb7b/x_wr_timezone-2.0.1.tar.gz", hash = "sha256:9166c40e6ffd4c0edebabc354e1a1e2cffc1bb473f88007694793757685cc8c3", size = 18212, upload-time = "2025-02-06T17:10:40.913Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/b7/4bac35b4079b76c07d8faddf89467e9891b1610cfe8d03b0ebb5610e4423/x_wr_timezone-2.0.1-py3-none-any.whl", hash = "sha256:e74a53b9f4f7def8138455c240e65e47c224778bce3c024fcd6da2cbe91ca038", size = 11102, upload-time = "2025-02-06T17:10:39.192Z" },
 ]
 
 [[package]]

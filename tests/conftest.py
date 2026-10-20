@@ -8,6 +8,7 @@ import itertools
 import json
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
@@ -26,11 +27,13 @@ from jarvis.services import Services
 from jarvis.storage.db import Database
 from jarvis.tools.apps.index import AppEntry, AppIndex
 from jarvis.tools.browser.session import PageElement, PageSnapshot
+from jarvis.tools.calendar.feed import Calendar
 from jarvis.tools.data.http import ApiClient, ProviderError
 from jarvis.tools.data.hub import DataHub
 from jarvis.tools.data.market import Listing, Price
 from jarvis.tools.files.guard import FileGuard
 from jarvis.tools.files.index import FileIndex
+from jarvis.tools.mail.mailbox import Mailbox, MailError, MailHeader, MailMessage, preview
 from jarvis.tools.memory import MemoryStore
 from jarvis.tools.messaging.contacts import ContactBook
 from jarvis.tools.messaging.whatsapp import SendStatus, Sent
@@ -467,6 +470,81 @@ class FakeWhatsApp:
         return self.result
 
 
+class FakeMailServer:
+    """An inbox in memory. UIDs grow with arrival, like IMAP's."""
+
+    ADDRESS = "me@example.com"
+
+    def __init__(self) -> None:
+        self.messages: dict[str, MailMessage] = {}
+        self.sent: list[EmailMessage] = []
+        self.error: Exception | None = None
+
+    def add(
+        self,
+        name: str,
+        address: str,
+        subject: str,
+        body: str,
+        *,
+        unread: bool = True,
+        cc: tuple[str, ...] = (),
+        reply_to: tuple[str, ...] = (),
+        attachments: tuple[str, ...] = (),
+    ) -> str:
+        uid = str(100 + len(self.messages))
+        header = MailHeader(
+            uid=uid,
+            sender_name=name,
+            sender=address,
+            subject=subject,
+            date=FakeNotificationCenter.NOW,
+            unread=unread,
+            preview=preview(body),
+        )
+        self.messages[uid] = MailMessage(
+            header=header,
+            to=(f"Me <{self.ADDRESS}>",),
+            cc=cc,
+            reply_to=reply_to,
+            message_id=f"<{uid}@example.com>",
+            references="",
+            body=body,
+            attachments=attachments,
+        )
+        return uid
+
+    def _check(self) -> None:
+        if self.error is not None:
+            raise self.error
+
+    def search(self, *, unread_only: bool) -> list[str]:
+        self._check()
+        return [u for u, m in self.messages.items() if m.header.unread or not unread_only]
+
+    def headers(self, uids: list[str]) -> list[MailHeader]:
+        self._check()
+        return [self.messages[u].header for u in uids if u in self.messages]
+
+    def message(self, uid: str, max_bytes: int) -> MailMessage:
+        self._check()
+        if uid not in self.messages:
+            raise MailError("That email is not in the inbox any more.")
+        return self.messages[uid]
+
+    def send(self, message: EmailMessage) -> None:
+        self._check()
+        self.sent.append(message)
+
+
+@pytest.fixture
+def mail_server() -> FakeMailServer:
+    return FakeMailServer()
+
+
+CALENDAR_URL = "https://calendar.test/private/basic.ics"
+
+
 class FakeNotificationCenter:
     """The Windows notification center: tests add toasts; `denied` mimics access turned off."""
 
@@ -538,6 +616,7 @@ def make_app(
     fake_browser: FakeBrowser,
     fake_whatsapp: FakeWhatsApp,
     notification_center: FakeNotificationCenter,
+    mail_server: FakeMailServer,
 ) -> MakeApp:
     def factory(
         script: Sequence[LLMReply | BaseException | Hang] = (),
@@ -592,6 +671,15 @@ def make_app(
                 clock=lambda: FakeNotificationCenter.NOW,
             ),
             memory=MemoryStore(db),
+            mail=Mailbox(
+                cfg.mail.model_copy(update={"address": FakeMailServer.ADDRESS}),
+                mail_server,
+            ),
+            calendar=Calendar(
+                cfg.calendar,
+                http=httpx.AsyncClient(transport=httpx.MockTransport(web.handle)),
+                urls=[CALENDAR_URL],
+            ),
         )
         router = Router(cfg, db, clients=cloud or {}, clock=lambda: FakeNotificationCenter.NOW)
         app = build_app(

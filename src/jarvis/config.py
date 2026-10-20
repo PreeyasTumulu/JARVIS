@@ -246,6 +246,30 @@ class VoiceSettings(_Section):
     earcons: bool = True
 
 
+class MailSettings(_Section):
+    """Your mailbox over IMAP and SMTP with an app password in .env (ADR-057)."""
+
+    address: str = ""  # your email address (local.toml)
+    imap_host: str = "imap.gmail.com"
+    imap_port: int = 993
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 465
+    folder: str = "INBOX"
+    max_list: int = Field(default=5, ge=1, le=20)  # emails listed at once
+    body_chars: int = Field(default=4000, ge=500)  # of one email's text the model sees
+    max_reply_chars: int = Field(default=5000, ge=50)
+    signature: str = ""  # added under every reply
+    timeout_s: float = Field(default=20, gt=0)
+
+
+class CalendarSettings(_Section):
+    """Your calendar's secret iCal address goes in .env as CALENDAR_ICS_URL (ADR-057)."""
+
+    cache_s: float = Field(default=300, ge=0)  # download the calendar at most this often
+    max_events: int = Field(default=10, ge=1)
+    timeout_s: float = Field(default=20, gt=0)
+
+
 class DictationSettings(_Section):
     """Hold a hotkey, speak, and the text is inserted at the cursor (ADR-054)."""
 
@@ -278,6 +302,8 @@ class Settings(_Section):
     contacts: ContactsSettings = ContactsSettings()
     whatsapp: WhatsAppSettings = WhatsAppSettings()
     notifications: NotificationsSettings = NotificationsSettings()
+    mail: MailSettings = MailSettings()
+    calendar: CalendarSettings = CalendarSettings()
     server: ServerSettings = ServerSettings()
     bridge: BridgeSettings = BridgeSettings()
     phone: PhoneSettings = PhoneSettings()

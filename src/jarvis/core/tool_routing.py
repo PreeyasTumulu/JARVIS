@@ -143,6 +143,19 @@ GROUPS: dict[str, Group] = {
             r"podcast|playback|spotify|album|artist|who sings)\b"
         ),
     ),
+    "mail": Group(
+        ("read_mail", "read_email", "reply_email"),
+        re.compile(r"\b(e-?mails?|mails?|inbox|gmail|outlook|repl(y|ies)|respond|newsletters?)\b"),
+    ),
+    "calendar": Group(
+        ("calendar_events",),
+        re.compile(
+            r"\b(calendar|schedule|agenda|appointments?|busy|am i free|"
+            r"free (today|tomorrow|on|this|next|at)|what('s| is|s) on|plans? (for|today|tomorrow)|"
+            r"stand-?up|(my|next|any|first) (meetings?|events?|calls?)|"
+            r"(meetings?|events?) (today|tonight|tomorrow|this|next|on|at))\b"
+        ),
+    ),
     "memory": Group(
         ("remember", "list_memories", "forget"),
         re.compile(

@@ -6,12 +6,14 @@ from jarvis.tools.apps.docker import docker_list, docker_logs, docker_start, doc
 from jarvis.tools.apps.tools import close_app, focus_app, open_app
 from jarvis.tools.apps.vscode import vscode_open
 from jarvis.tools.browser.tools import browser_click, browser_open, browser_read, browser_type
+from jarvis.tools.calendar.tools import calendar_events
 from jarvis.tools.data.crypto import crypto_price
 from jarvis.tools.data.currency import convert_currency
 from jarvis.tools.data.market import market_data
 from jarvis.tools.data.weather import weather
 from jarvis.tools.files.tools import find_file, get_selected_file, open_file, read_file
 from jarvis.tools.interaction import ask_user, speak
+from jarvis.tools.mail.tools import read_email, read_mail, reply_email
 from jarvis.tools.memory import forget, list_memories, remember
 from jarvis.tools.messaging.calls import call_contact
 from jarvis.tools.messaging.tools import send_whatsapp
@@ -79,6 +81,10 @@ def build_registry() -> Registry:
             send_whatsapp,
             call_contact,
             read_notifications,
+            read_mail,
+            read_email,
+            reply_email,
+            calendar_events,
             remember,
             list_memories,
             forget,

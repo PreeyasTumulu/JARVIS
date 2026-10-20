@@ -137,6 +137,9 @@ CASES = [
     case("what's on my calendar today", "calendar_events", arg=("day", "today")),
     case("what's my next meeting", "calendar_events", arg=("day", "next")),
     case("am I free on friday", "calendar_events", arg=("day", "friday")),
+    # Phase 15
+    case("what's on my screen", "read_screen"),
+    case("read my screen to me", "read_screen"),
     # Phase 14 ("good morning" and "brief me" never reach the model)
     case("what did I ask about docker last week", "recall", arg=("about", "docker")),
     case("when did I last ask you about the weather", "recall"),

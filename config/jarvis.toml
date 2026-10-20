@@ -165,6 +165,8 @@ screenshot_folder = "{pictures}/Screenshots"
 [ui]
 read_max_chars = 6000        # window text the model gets to see
 window_wait_s = 10           # how long type_text waits for an app it had to start
+ocr_fallback = true          # read the window's pixels with Windows OCR when it exposes little text
+ocr_min_chars = 40           # "little" means fewer characters than this
 
 [browser]
 # Jarvis's own browser for browser_open, browser_click, and browser_type. Its profile lives in

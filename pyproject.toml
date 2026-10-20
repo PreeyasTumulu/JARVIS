@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "1.5.0"
+version = "1.6.0"
 description = "Local-first voice-controlled desktop assistant for Windows 11"
 readme = "README.md"
 license = "MIT"
@@ -36,6 +36,10 @@ dependencies = [
     "icalendar>=6",
     "recurring-ical-events>=3",
     "mcp>=2.3",
+    "winrt-windows-media-ocr>=3.2.1",
+    "winrt-windows-graphics-imaging>=3.2.1",
+    "winrt-windows-storage-streams>=3.2.1",
+    "winrt-windows-globalization>=3.2.1",
 ]
 
 [project.scripts]

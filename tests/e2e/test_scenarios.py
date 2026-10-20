@@ -177,6 +177,15 @@ class World:
                 self.monkeypatch.setattr(media, "control", control)
                 self.monkeypatch.setattr(media, "current", current)
                 self.monkeypatch.setattr(media, "press_media_key", self.media.append)
+            elif name == "screen":
+                from jarvis.platform.ocr import Line, Word
+                from jarvis.tools.ui import tools as ui_tools
+
+                async def read(rect: Any) -> list[Line]:
+                    words = (Word("Invoice", 0, 0, 60, 12), Word(SECRET, 70, 0, 90, 12))
+                    return [Line(f"Invoice {SECRET}", words)]
+
+                self.monkeypatch.setattr(ui_tools.ocr, "read", read)
             elif name == "cloud":
                 self.cloud = FakeCloud(script_of(scenario.get("cloud_script")))
 

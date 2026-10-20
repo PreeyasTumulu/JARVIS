@@ -340,6 +340,16 @@
     - text: You have one event today, Standup.
   expect: {decisions: [auto], ok: [true], cloud: false}
 
+# Phase 15: screen reading
+- name: what is on the screen stays local
+  say: what's on my screen?
+  setup: [screen, cloud]
+  first: [read_screen]
+  script:
+    - call: {read_screen: {}}
+    - text: An invoice.
+  expect: {decisions: [auto], ok: [true], cloud: false, never_sent_to_cloud: ["MERGER-SECRET-42"]}
+
 # Phase 14: recall and the briefing
 - name: good morning plays the briefing without the model
   say: good morning

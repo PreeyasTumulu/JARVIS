@@ -155,6 +155,9 @@ class SystemSettings(_Section):
 class UISettings(_Section):
     read_max_chars: int = Field(default=6000, ge=500)  # window text the model gets to see
     window_wait_s: float = Field(default=10, gt=0)  # for an app that type_text had to start
+    # Read a window's pixels with Windows OCR when UI Automation finds less text (ADR-067).
+    ocr_fallback: bool = True
+    ocr_min_chars: int = Field(default=40, ge=0)
 
 
 class BrowserSettings(_Section):

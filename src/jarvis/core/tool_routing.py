@@ -101,6 +101,13 @@ GROUPS: dict[str, Group] = {
             r"|\bat \d{1,2}(:\d{2})? ?(am|pm)?\b"
         ),
     ),
+    "screen": Group(
+        ("read_screen", "read_window_text"),
+        re.compile(
+            r"\b(on (my|the) screen|read (the|my) screen|what('s| is) on (my |the )?screen|"
+            r"screen says|my screen)\b"
+        ),
+    ),
     "ui": Group(
         ("type_text", "click", "press_keys", "read_window_text", "open_app"),
         re.compile(
@@ -160,7 +167,8 @@ GROUPS: dict[str, Group] = {
         ("calendar_events",),
         re.compile(
             r"\b(calendar|schedule|agenda|appointments?|busy|am i free|"
-            r"free (today|tomorrow|on|this|next|at)|what('s| is|s) on|plans? (for|today|tomorrow)|"
+            r"free (today|tomorrow|on|this|next|at)|what('s| is|s) on(?! (my |the )?screen)|"
+            r"plans? (for|today|tomorrow)|"
             r"stand-?up|(my|next|any|first) (meetings?|events?|calls?)|"
             r"(meetings?|events?) (today|tonight|tomorrow|this|next|on|at))\b"
         ),

@@ -1,9 +1,11 @@
-"""Generic UI automation tools: type, click, press keys, and read a window, in any app.
+"""Generic UI automation tools: type, click, press keys, and read a window or the screen.
 
 These are for apps without a dedicated tool. Each call names the app; Jarvis finds its window,
 brings it to the front, and checks that it is still in front before every burst of typing, so text
 never lands in whatever window you happen to click on meanwhile. Window reading and control lookup
-use UI Automation on the COM thread (platform/uia.py); keystrokes use SendInput.
+use UI Automation on the COM thread (platform/uia.py); keystrokes use SendInput. Where UI
+Automation sees nothing, Windows OCR reads the pixels (platform/ocr.py, ADR-067): reading falls
+back to it by itself, and a click on text found only that way always asks first.
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from dataclasses import dataclass
 from operator import attrgetter
 from typing import Any
 
-from jarvis.platform import sendinput, uia
+from jarvis.platform import ocr, sendinput, uia
 from jarvis.platform import windows as win
 from jarvis.platform.com import run_com
 from jarvis.tools.apps.index import AppEntry
@@ -32,6 +34,7 @@ LISTED_CONTROLS = 40
 READBACK_DELAY_S = 0.3  # let the app show what was typed before reading it back
 FIELD_KINDS = {"field", "document", "combo box"}
 PASSWORD_REASON = "that is a password field, and Jarvis never types into those"
+OCR_PREFIX = "ocr:"  # a click target found by reading the screen, not by UI Automation
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,32 @@ def match_control(
         raise ToolError(
             f"'{wanted}' could be the {best.label} or the {rival.label} in {app}. "
             "Ask the user which one."
+        )
+    return best
+
+
+async def ocr_window(window: win.WindowInfo, app: str) -> list[ocr.Line]:
+    """The window's text as Windows OCR reads it; the window is brought to the front first,
+    because whatever covers it is what gets read."""
+    await bring_forward(window, app)
+    await asyncio.sleep(0.15)  # let it repaint in front
+    try:
+        rect = await asyncio.to_thread(ocr.window_rect, window.hwnd)
+        return await ocr.read(rect)
+    except ocr.OcrError as exc:
+        raise ToolError(str(exc)) from exc
+
+
+def ocr_spot(lines: list[ocr.Line], wanted: str, app: str) -> ocr.Spot:
+    best, rival = ocr.find(lines, wanted)
+    if best is None:
+        raise ToolError(
+            f"I couldn't find '{wanted}' anywhere in {app}, even by reading the screen."
+        )
+    if rival is not None:
+        raise ToolError(
+            f"'{wanted}' appears more than once in {app}. Ask the user which one (top, bottom, "
+            "left, or right)."
         )
     return best
 
@@ -214,6 +243,16 @@ async def click(ctx: ToolContext, app: str, target: str) -> ToolResult:
         target: The visible name of what to click, for example "Save" or "File".
     """
     window = await live_window(ctx, app)
+    if target.startswith(OCR_PREFIX):
+        # Found by reading the screen and confirmed: find it again where it is now.
+        wanted = target.removeprefix(OCR_PREFIX)
+        spot = ocr_spot(await ocr_window(window, app), wanted, app)
+        await still_in_front(window, app, "")
+        await asyncio.to_thread(sendinput.click_at, *spot.center)
+        return ToolResult.success(
+            data={"app": app, "clicked": spot.text, "how": "by its place on screen (OCR)"},
+            speech=f"Clicked {spot.text}.",
+        )
     control = match_control(await read_controls(ctx, window), target, app)
     await bring_forward(window, app)
     try:
@@ -230,11 +269,32 @@ async def click(ctx: ToolContext, app: str, target: str) -> ToolResult:
 async def _prepare_click(ctx: ToolContext, args: dict[str, Any]) -> Prepared:
     found = await find_target(ctx, args["app"], may_start=False)
     assert found.window is not None
-    control = match_control(await read_controls(ctx, found.window), args["target"], found.app)
+    wanted = str(args["target"]).removeprefix(OCR_PREFIX).strip()
+    try:
+        control = match_control(await read_controls(ctx, found.window), wanted, found.app)
+    except ToolError:
+        if not ctx.settings.ui.ocr_fallback:
+            raise
+        return await _prepare_ocr_click(ctx, found, wanted)
     risk, reason = guard.combine(ui_rating(ctx, found), guard.target_risk(control.name))
     return Prepared(
         args={"app": found.app, "target": control.name},
         summary=f"Click the {control.label} in {found.app}",
+        risk=risk,
+        reason=reason,
+    )
+
+
+async def _prepare_ocr_click(ctx: ToolContext, found: Target, wanted: str) -> Prepared:
+    """UI Automation has no such control: look for the text on screen. A click by position is
+    less certain than pressing a control, so it always asks (ADR-067)."""
+    assert found.window is not None
+    spot = ocr_spot(await ocr_window(found.window, found.app), wanted, found.app)
+    rating = guard.combine(ui_rating(ctx, found), guard.target_risk(spot.text))
+    risk, reason = guard.combine(rating, (Risk.CONFIRM, "a click found by reading the screen"))
+    return Prepared(
+        args={"app": found.app, "target": f"{OCR_PREFIX}{spot.text}"},
+        summary=f'Click "{spot.text}" in {found.app} (found by reading the screen)',
         risk=risk,
         reason=reason,
     )
@@ -299,9 +359,41 @@ async def read_window_text(ctx: ToolContext, app: str) -> ToolResult:
     }
     if truncated:
         data["truncated"] = True
+    cfg = ctx.settings.ui
+    seen = sum(len(line) for line in content.lines) + sum(len(c.name) for c in content.controls)
+    if cfg.ocr_fallback and not minimized and seen < cfg.ocr_min_chars:
+        # The app shows UI Automation little or nothing: read its pixels instead.
+        lines = await ocr_window(window, found.app)
+        if lines:
+            text = "\n".join(line.text for line in lines)
+            data["text"] = text[: cfg.read_max_chars]
+            data["read_by"] = "OCR (the app exposes no text, so its pixels were read)"
+            data["truncated"] = len(text) > cfg.read_max_chars
+            return ToolResult.success(data=hide_secrets(data, "text"))
     if not content.lines and not content.controls:
         data["note"] = "The window shows no readable text (some apps do not expose any)."
     return ToolResult.success(data=hide_secrets(data, "text"))
+
+
+@tool(risk=Risk.SAFE, sensitivity=Sensitivity.PRIVATE, untrusted=True, timeout_s=30)
+async def read_screen(ctx: ToolContext) -> ToolResult:
+    """Read all the text on the user's screen with OCR, for "what's on my screen" or "read my
+    screen". For one app's window use read_window_text instead."""
+    try:
+        lines = await ocr.read(None)
+    except ocr.OcrError as exc:
+        raise ToolError(str(exc)) from exc
+    limit = ctx.settings.ui.read_max_chars
+    text = "\n".join(line.text for line in lines)
+    data: dict[str, Any] = {"text": text[:limit], "lines": len(lines)}
+    if len(text) > limit:
+        data["truncated"] = True
+    if not lines:
+        data["note"] = "No text was found on the screen."
+    return ToolResult.success(
+        data=hide_secrets(data, "text"),
+        hint="Say what is on the screen in one or two sentences unless asked for all of it.",
+    )
 
 
 @read_window_text.preparer

@@ -30,7 +30,7 @@ from jarvis.tools.system.reminders import (
     set_reminder,
     set_timer,
 )
-from jarvis.tools.ui.tools import click, press_keys, read_window_text, type_text
+from jarvis.tools.ui.tools import click, press_keys, read_screen, read_window_text, type_text
 from jarvis.tools.web.browser import open_url
 from jarvis.tools.web.fetch import fetch_page
 from jarvis.tools.web.search import web_search
@@ -76,6 +76,7 @@ def build_registry() -> Registry:
             click,
             press_keys,
             read_window_text,
+            read_screen,
             browser_open,
             browser_read,
             browser_click,

@@ -100,7 +100,7 @@ ALL_TOOLS = {
     "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
     "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "browser_open",
     "browser_read", "browser_click", "browser_type", "send_whatsapp", "call_contact",
-    "read_notifications",
+    "media_control", "now_playing", "read_notifications",
     "remember", "list_memories", "forget",
     "speak", "ask_user",
 }  # fmt: skip

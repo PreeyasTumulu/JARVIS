@@ -19,6 +19,7 @@ from jarvis.tools.notifications.tools import read_notifications
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.clipboard import clipboard_read, clipboard_write
 from jarvis.tools.system.controls import lock_screen, screenshot, set_brightness, set_volume
+from jarvis.tools.system.media import media_control, now_playing
 from jarvis.tools.system.reminders import (
     cancel_reminder,
     list_reminders,
@@ -57,6 +58,8 @@ def build_registry() -> Registry:
             weather,
             set_volume,
             set_brightness,
+            media_control,
+            now_playing,
             lock_screen,
             screenshot,
             clipboard_read,

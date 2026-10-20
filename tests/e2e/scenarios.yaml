@@ -24,6 +24,9 @@
 #     cloud        true when a cloud model must answer, false when it must not be asked
 #     never_sent_to_cloud   strings that must never appear in anything sent to a cloud model
 #     prompts      how many confirmations Jarvis asked for
+#     dialed       numbers Phone Link was asked to call
+#     media        media buttons pressed (play, pause, next, previous)
+#     model_calls  how many times the model was asked (0: the fast path answered)
 
 # Phase 1 and 3: apps
 - name: open an allowlisted app
@@ -284,6 +287,28 @@
     - call: {call_contact: {contact: mom}}
     - text: Okay, I won't call.
   expect: {decisions: [denied], dialed: [], prompts: 1}
+
+# Phase 10: media
+- name: an exact media phrase skips the model
+  say: pause the music
+  setup: [media]
+  first: [media_control]   # run by the fast path, not chosen by a model
+  expect: {decisions: [auto], ok: [true], media: [pause], model_calls: 0, reply: paused}
+
+- name: what is playing stays local and skips the model
+  say: what's playing
+  setup: [media, cloud]
+  first: [now_playing]
+  expect: {decisions: [auto], reply: Lofi Beats, model_calls: 0, cloud: false}
+
+- name: other media requests go to the model
+  say: could you skip to the next track for me
+  setup: [media]
+  first: [media_control]
+  script:
+    - call: {media_control: {action: next}}
+    - text: Skipped.
+  expect: {decisions: [auto], media: [next]}
 
 # Phase 7: notifications
 - name: read notifications from allowed apps only

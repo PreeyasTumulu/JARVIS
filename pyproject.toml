@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "1.0.0"
+version = "1.1.0"
 description = "Local-first voice-controlled desktop assistant for Windows 11"
 readme = "README.md"
 license = "MIT"
@@ -32,6 +32,7 @@ dependencies = [
     "winrt-windows-applicationmodel>=3.2.1",
     "pystray>=0.19.5",
     "pillow>=13.0.0",
+    "winrt-windows-media-control>=3.2.1",
 ]
 
 [project.scripts]

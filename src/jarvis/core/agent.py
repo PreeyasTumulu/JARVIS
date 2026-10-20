@@ -27,10 +27,11 @@ from jarvis.core.events import (
     TurnStarted,
 )
 from jarvis.core.executor import CallOutcome, ToolExecutor
+from jarvis.core.fast_path import fast_call
 from jarvis.core.prompts import related_memories, system_prompt
 from jarvis.core.tool_routing import ALWAYS, matched_groups, select_tools
 from jarvis.llm.router import CLOUD_TOOLS, Router
-from jarvis.llm.types import ChatModel, LLMError
+from jarvis.llm.types import ChatModel, LLMError, ToolCall
 from jarvis.services import Services
 from jarvis.storage.repositories import HistoryLog
 from jarvis.tools.base import ContextFlags, Sensitivity, ToolContext
@@ -42,6 +43,7 @@ EMPTY_REPLY_NUDGE = (
     "(Your last reply was empty. Call the right tool, or answer in one short sentence.)"
 )
 DONE = "Done."
+FAST_PATH = "fast path"  # the model name recorded for a turn no model answered
 NOT_UNDERSTOOD = "Sorry, I didn't get that. Could you say it another way?"
 
 
@@ -145,9 +147,15 @@ class Agent:
         try:
             async with asyncio.timeout(self._settings.agent.turn_timeout_s):
                 cloud = None
-                if self._router is not None and self._router.wants_cloud(text):
+                fast = fast_call(text)
+                if fast is not None and self._registry.get(fast[0]) is None:
+                    fast = None
+                if fast is None and self._router is not None and self._router.wants_cloud(text):
                     cloud = await self._cloud_turn(turn_id, text, outcomes, stage_times)
-                if cloud is not None:
+                if fast is not None:
+                    reply = await self._fast_turn(turn_id, *fast, outcomes, stage_times, started)
+                    status, iterations, model = TurnStatus.OK, 0, FAST_PATH
+                elif cloud is not None:
                     reply, iterations, model = cloud
                     status = TurnStatus.OK
                     self._messages.append({"role": "assistant", "content": reply})
@@ -261,6 +269,42 @@ class Agent:
         text = f"I couldn't finish that within {agent_cfg.max_iterations} steps, so I stopped."
         self._messages.append({"role": "assistant", "content": text})
         return text, TurnStatus.LIMIT, agent_cfg.max_iterations
+
+    async def _fast_turn(
+        self,
+        turn_id: str,
+        name: str,
+        arguments: str,
+        outcomes: list[CallOutcome],
+        stage_times: dict[str, int],
+        started: float,
+    ) -> str:
+        """Run an exact short command's tool without the model (core/fast_path.py, ADR-056).
+
+        The exchange is kept in the history like a model's own call, so the next turn sees it
+        and the context flags still count a private result.
+        """
+        call = ToolCall(id=f"fast_{turn_id}", name=name, arguments=arguments)
+        ctx = ToolContext(
+            settings=self._settings,
+            channel=self._channel,
+            services=self._services,
+            session_id=self.session_id,
+            turn_id=turn_id,
+            flags=self._context_flags(),
+        )
+        stage_times["first_tool_ms"] = int((time.perf_counter() - started) * 1000)
+        outcome = await self._executor.run(call, ctx)
+        outcomes.append(outcome)
+        self._call_flags[call.id] = outcome.flags
+        content = outcome.model_content(self._settings.agent.max_tool_result_chars)
+        reply = outcome.result.speech or outcome.result.error or DONE
+        self._messages += [
+            {"role": "assistant", "content": "", "tool_calls": [call.as_message_part()]},
+            {"role": "tool", "tool_call_id": call.id, "content": content},
+            {"role": "assistant", "content": reply},
+        ]
+        return reply
 
     async def _cloud_turn(
         self,

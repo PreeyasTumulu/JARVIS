@@ -136,6 +136,13 @@ GROUPS: dict[str, Group] = {
             r"(message|text|write|reply|call)|what did \w+ (say|send|write))\b"
         ),
     ),
+    "media": Group(
+        ("media_control", "now_playing", "set_volume"),
+        re.compile(
+            r"\b(music|songs?|tracks?|playing|playlist|pause|paused|resume|unpause|play|skip|"
+            r"podcast|playback|spotify|album|artist|who sings)\b"
+        ),
+    ),
     "memory": Group(
         ("remember", "list_memories", "forget"),
         re.compile(

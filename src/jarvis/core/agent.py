@@ -28,7 +28,7 @@ from jarvis.core.events import (
 )
 from jarvis.core.executor import CallOutcome, ToolExecutor
 from jarvis.core.fast_path import fast_call
-from jarvis.core.prompts import related_memories, system_prompt
+from jarvis.core.prompts import system_prompt
 from jarvis.core.tool_routing import ALWAYS, matched_groups, needs_meaning, select_tools
 from jarvis.llm.router import CLOUD_TOOLS, Router
 from jarvis.llm.types import ChatModel, LLMError, ToolCall
@@ -36,7 +36,9 @@ from jarvis.services import Services
 from jarvis.storage.repositories import HistoryLog
 from jarvis.tools.base import ContextFlags, Sensitivity, ToolContext
 from jarvis.tools.mcp.tools import register_all
+from jarvis.tools.recall import relevant_memories
 from jarvis.tools.registry import Registry
+from jarvis.voice.phrases import parse_yes
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +47,8 @@ EMPTY_REPLY_NUDGE = (
 )
 DONE = "Done."
 FAST_PATH = "fast path"  # the model name recorded for a turn no model answered
+BRIEFING_OFFER = "By the way, would you like your morning briefing?"
+OFFERED_KEY = "briefing.offered_on"  # the day the briefing was last offered
 NOT_UNDERSTOOD = "Sorry, I didn't get that. Could you say it another way?"
 
 
@@ -104,6 +108,8 @@ class Agent:
         self._task: asyncio.Task[Any] | None = None
         self._task_loop: asyncio.AbstractEventLoop | None = None
         self._turn_lock = asyncio.Lock()  # one turn at a time, whichever channel started it
+        self._relevant: list[str] = []  # memories that fit the current request (ADR-065)
+        self._offer_pending = False  # the last reply offered the briefing (ADR-066)
         self._mcp_ready = False
 
     @property
@@ -151,6 +157,7 @@ class Agent:
         """
         async with self._turn_lock:
             await self.prepare_tools()
+            self._relevant = await relevant_memories(self._services, text)
             return await self._run_turn(text, source, timings)
 
     async def _run_turn(self, text: str, source: str, timings: dict[str, int] | None) -> TurnResult:
@@ -170,6 +177,10 @@ class Agent:
             async with asyncio.timeout(self._settings.agent.turn_timeout_s):
                 cloud = None
                 fast = fast_call(text)
+                if self._offer_pending:
+                    self._offer_pending = False
+                    if parse_yes(text):  # "yes" to "would you like your briefing?"
+                        fast = ("briefing", "{}")
                 if fast is not None and self._registry.get(fast[0]) is None:
                     fast = None
                 if fast is None and self._router is not None and self._router.wants_cloud(text):
@@ -206,6 +217,9 @@ class Agent:
             del self._messages[mark:]
             self._messages.append({"role": "user", "content": text})
             self._messages.append({"role": "assistant", "content": reply})
+        if status is TurnStatus.OK and self._should_offer(outcomes):
+            reply = f"{reply} {BRIEFING_OFFER}"
+            self._offer_pending = True
         self._trim_history()
 
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -291,6 +305,24 @@ class Agent:
         text = f"I couldn't finish that within {agent_cfg.max_iterations} steps, so I stopped."
         self._messages.append({"role": "assistant", "content": text})
         return text, TurnStatus.LIMIT, agent_cfg.max_iterations
+
+    def _should_offer(self, outcomes: list[CallOutcome]) -> bool:
+        """Offer the briefing once a day, on the first command of the morning (ADR-066)."""
+        cfg = self._settings.briefing
+        prefs = self._services.prefs
+        if not cfg.offer or prefs is None or self._registry.get("briefing") is None:
+            return False
+        now = self._clock() if self._clock else datetime.now().astimezone()
+        if any(o.call.name == "briefing" for o in outcomes):
+            prefs.set(OFFERED_KEY, now.date().isoformat())  # heard it: no offer today
+            return False
+        if not cfg.offer_from_hour <= now.hour < cfg.offer_until_hour:
+            return False
+        today = now.date().isoformat()
+        if prefs.get(OFFERED_KEY) == today:
+            return False
+        prefs.set(OFFERED_KEY, today)
+        return True
 
     async def _fast_turn(
         self,
@@ -412,9 +444,7 @@ class Agent:
         if self._settings.agent.tool_routing == "all":
             return self._registry.schemas()
         request = next(m["content"] for m in reversed(self._messages) if m["role"] == "user")
-        if related_memories(request, self._services.memory.texts()) and set(
-            matched_groups(request)
-        ) <= {"questions"}:
+        if self._relevant and set(matched_groups(request)) <= {"questions"}:
             # "Who is my manager" when Jarvis remembers it: offer memory, not web search, which
             # an 8B model otherwise picks over the answer it already has. Only reading: given
             # remember, the model saved the fact a second time instead of answering.
@@ -451,7 +481,7 @@ class Agent:
         # words with the request are repeated inside it (only in what the model sees).
         last_user = max(i for i, m in enumerate(messages) if m["role"] == "user")
         question = messages[last_user]["content"]
-        relevant = related_memories(question, memories)
+        relevant = self._relevant
         if relevant:
             note = "; ".join(relevant)
             messages[last_user] = {

@@ -240,7 +240,8 @@ def settings(tmp_path: Path) -> Settings:
         REPO / "config",
         include_local=False,
         env_file=tmp_path / "missing.env",
-        overrides={"data_dir": str(tmp_path)},
+        # The briefing offer depends on the hour; tests that want it turn it on.
+        overrides={"data_dir": str(tmp_path), "briefing": {"offer": False}},
     )
 
 
@@ -636,7 +637,11 @@ def make_app(
                 REPO / "config",
                 include_local=False,
                 env_file=settings.data_dir / "missing.env",
-                overrides={"data_dir": str(settings.data_dir), **overrides},
+                overrides={
+                    "data_dir": str(settings.data_dir),
+                    "briefing": {"offer": False},
+                    **overrides,
+                },
             )
         # Only fake cloud models, ever: a real API key in the environment must not matter.
         cfg = cfg.model_copy(deep=True)

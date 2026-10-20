@@ -69,7 +69,12 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
         "when is my next call",
         "am I booked on friday afternoon",
     ),
-    "memory": ("keep in mind that my car is a swift", "what do you know about my family"),
+    "memory": (
+        "what was that thing I asked you before",
+        "remind me what we talked about this morning",
+        "keep in mind that my car is a swift",
+        "what do you know about my family",
+    ),
     "ui": ("put hello in the text box", "hit save in paint"),
 }
 

@@ -157,10 +157,16 @@ GROUPS: dict[str, Group] = {
             r"(meetings?|events?) (today|tonight|tomorrow|this|next|on|at))\b"
         ),
     ),
+    "briefing": Group(
+        ("briefing",),
+        re.compile(r"\b(brief(ing)?|good morning|my day|daily summary|morning update)\b"),
+    ),
     "memory": Group(
-        ("remember", "list_memories", "forget"),
+        ("remember", "list_memories", "forget", "recall"),
         re.compile(
             r"\b(remember|forget|memory|memories|keep in mind|what do you know about me|"
+            r"did i (ask|say|tell|search|message|check|look)|when did i|what did i|"
+            r"last (week|month|time)|yesterday|earlier|previously|before now|i asked|"
             r"note that)\b"
         ),
     ),

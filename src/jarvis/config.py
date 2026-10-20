@@ -315,6 +315,21 @@ class CalendarSettings(_Section):
     timeout_s: float = Field(default=20, gt=0)
 
 
+class BriefingSettings(_Section):
+    """The morning briefing (ADR-066)."""
+
+    parts: list[Literal["weather", "calendar", "reminders", "mail", "messages"]] = [
+        "weather",
+        "calendar",
+        "reminders",
+        "mail",
+        "messages",
+    ]
+    offer: bool = True  # offer it once a day, the first time you use Jarvis in the morning
+    offer_from_hour: int = Field(default=6, ge=0, le=23)
+    offer_until_hour: int = Field(default=12, ge=1, le=24)
+
+
 class DictationSettings(_Section):
     """Hold a hotkey, speak, and the text is inserted at the cursor (ADR-054)."""
 
@@ -350,6 +365,7 @@ class Settings(_Section):
     mail: MailSettings = MailSettings()
     calendar: CalendarSettings = CalendarSettings()
     mcp: McpSettings = McpSettings()
+    briefing: BriefingSettings = BriefingSettings()
     server: ServerSettings = ServerSettings()
     bridge: BridgeSettings = BridgeSettings()
     phone: PhoneSettings = PhoneSettings()

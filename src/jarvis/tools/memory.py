@@ -19,7 +19,7 @@ from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolErro
 from jarvis.tools.naming import pick
 from jarvis.tools.registry import tool
 
-MAX_MEMORIES = 100
+MAX_MEMORIES = 500  # found by meaning, so more than fit in a prompt
 MAX_CHARS = 300
 PROMPT_MEMORIES = 30  # newest first, so the prompt stays small for an 8B model
 _LEAD = re.compile(r"^\s*(remember|note|keep in mind)( that)?[:,]?\s+", re.IGNORECASE)

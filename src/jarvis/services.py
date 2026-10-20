@@ -7,9 +7,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from jarvis.config import Settings
+from jarvis.core.meaning import Embedder, MeaningIndex
 from jarvis.core.semantic_routing import SemanticRouter
 from jarvis.storage.db import Database
-from jarvis.storage.repositories import Preferences
+from jarvis.storage.repositories import HistoryLog, Preferences
 from jarvis.tools.apps.index import AppIndex, AppStore
 from jarvis.tools.browser.session import BrowserManager
 from jarvis.tools.calendar.feed import Calendar
@@ -44,6 +45,9 @@ class Services:
     calendar: Calendar
     mcp: McpHub
     semantic: SemanticRouter | None = None
+    meaning: MeaningIndex | None = None  # memories and past commands by meaning
+    history: HistoryLog | None = None  # set by build_app when not given
+    prefs: Preferences | None = None  # small settings Jarvis keeps (set by build_app)
 
     async def aclose(self) -> None:
         await self.mcp.aclose()
@@ -82,4 +86,11 @@ def build_services(settings: Settings, db: Database) -> Services:
         )
         if settings.agent.semantic_routing and "local" in settings.llm.providers
         else None,
+        meaning=MeaningIndex(
+            db, Embedder(settings.llm.providers["local"].base_url, settings.agent.semantic_model)
+        )
+        if "local" in settings.llm.providers
+        else None,
+        history=HistoryLog(db),
+        prefs=Preferences(db),
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from jarvis.tools.apps.docker import docker_list, docker_logs, docker_start, docker_stop
 from jarvis.tools.apps.tools import close_app, focus_app, open_app
 from jarvis.tools.apps.vscode import vscode_open
+from jarvis.tools.briefing import briefing
 from jarvis.tools.browser.tools import browser_click, browser_open, browser_read, browser_type
 from jarvis.tools.calendar.tools import calendar_events
 from jarvis.tools.data.crypto import crypto_price
@@ -18,6 +19,7 @@ from jarvis.tools.memory import forget, list_memories, remember
 from jarvis.tools.messaging.calls import call_contact
 from jarvis.tools.messaging.tools import send_whatsapp
 from jarvis.tools.notifications.tools import read_notifications
+from jarvis.tools.recall import recall
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.clipboard import clipboard_read, clipboard_write
 from jarvis.tools.system.controls import lock_screen, screenshot, set_brightness, set_volume
@@ -88,6 +90,8 @@ def build_registry() -> Registry:
             remember,
             list_memories,
             forget,
+            recall,
+            briefing,
             speak,
             ask_user,
         ]

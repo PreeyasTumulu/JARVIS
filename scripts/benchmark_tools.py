@@ -137,6 +137,10 @@ CASES = [
     case("what's on my calendar today", "calendar_events", arg=("day", "today")),
     case("what's my next meeting", "calendar_events", arg=("day", "next")),
     case("am I free on friday", "calendar_events", arg=("day", "friday")),
+    # Phase 14 ("good morning" and "brief me" never reach the model)
+    case("what did I ask about docker last week", "recall", arg=("about", "docker")),
+    case("when did I last ask you about the weather", "recall"),
+    case("give me a rundown of my day", "briefing"),
     # Phase 13: paraphrases with none of the keywords (semantic routing's job)
     case("what have I got lined up tomorrow", "calendar_events"),
     case("anything booked for friday evening", "calendar_events"),

@@ -340,6 +340,26 @@
     - text: You have one event today, Standup.
   expect: {decisions: [auto], ok: [true], cloud: false}
 
+# Phase 14: recall and the briefing
+- name: good morning plays the briefing without the model
+  say: good morning
+  first: [briefing]
+  expect: {decisions: [auto], ok: [true], model_calls: 0, reply: good}
+
+- name: an earlier command is recalled, not guessed
+  say: what did I ask about the weather earlier?
+  before:
+    - say: what's the weather in Hyderabad
+      setup: [weather]
+      script:
+        - call: {weather: {place: Hyderabad}}
+        - text: It's 27 degrees in Hyderabad.
+  setup: [weather]
+  script:
+    - call: {recall: {about: weather}}
+    - text: You asked about the weather in Hyderabad today.
+  expect: {decisions: [auto], ok: [true], cloud: false}
+
 # Phase 12: MCP servers (the notes test server over stdio)
 - name: a trusted server's read-only tool runs without asking
   say: what's in my notes?

@@ -16,7 +16,7 @@ from jarvis.llm.router import Router
 from jarvis.llm.types import ChatModel
 from jarvis.services import Services, build_services
 from jarvis.storage.db import Database
-from jarvis.storage.repositories import AuditLog, HistoryLog
+from jarvis.storage.repositories import AuditLog, HistoryLog, Preferences
 from jarvis.tools.catalog import build_registry
 from jarvis.tools.notifications.store import NotificationWatcher
 from jarvis.tools.policy import PolicyGate
@@ -74,6 +74,10 @@ def build_app(
     bus = EventBus()
     registry = registry or build_registry()
     services = services or build_services(settings, db)
+    if services.history is None:
+        services.history = history  # recall reads the same command history
+    if services.prefs is None:
+        services.prefs = Preferences(db)
     llm = llm or LLMClient(settings.llm.active())
     router = router or Router(settings, db)
     executor = ToolExecutor(

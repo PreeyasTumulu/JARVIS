@@ -272,6 +272,13 @@ list_commits = ["owner", "repo", "sha", "author"]
 issue_write = ["method", "owner", "repo", "issue_number", "title", "body", "state", "labels"]
 add_issue_comment = ["owner", "repo", "issue_number", "body"]
 
+[briefing]
+# "Good morning" or "brief me" (ADR-066). Email and messages are counts and senders only.
+parts = ["weather", "calendar", "reminders", "mail", "messages"]
+offer = true                 # offer it once a day, the first time you use Jarvis in the morning
+offer_from_hour = 6
+offer_until_hour = 12
+
 [dictation]
 # Hold the hotkey, speak, release: the text appears where the cursor is, in any app (ADR-054).
 enabled = true

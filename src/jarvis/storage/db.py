@@ -161,6 +161,16 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (day, provider)
     );
     """,
+    # 8: vectors for searching memories and past commands by meaning (Phase 14)
+    """
+    CREATE TABLE embeddings (
+        kind TEXT NOT NULL,
+        ref_id INTEGER NOT NULL,
+        model TEXT NOT NULL,
+        vector BLOB NOT NULL,
+        PRIMARY KEY (kind, ref_id, model)
+    );
+    """,
 ]
 
 

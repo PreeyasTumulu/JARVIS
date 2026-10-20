@@ -34,6 +34,18 @@ MEDIA: dict[str, str] = {
     "play previous song": "previous",
     "go back a song": "previous",
 }
+BRIEFING = {
+    "good morning",
+    "brief me",
+    "morning briefing",
+    "my briefing",
+    "give me my briefing",
+    "daily briefing",
+    "what's my day look like",
+    "how does my day look",
+    "how does my day look like",
+    "what does my day look like",
+}
 NOW_PLAYING = {
     "what's playing",
     "what is playing",
@@ -59,4 +71,6 @@ def fast_call(text: str) -> tuple[str, str] | None:
         return "media_control", json.dumps({"action": MEDIA[phrase]})
     if phrase in NOW_PLAYING:
         return "now_playing", "{}"
+    if phrase in BRIEFING:
+        return "briefing", "{}"
     return None

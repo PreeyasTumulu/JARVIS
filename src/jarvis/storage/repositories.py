@@ -79,6 +79,19 @@ class HistoryLog:
     def __init__(self, db: Database) -> None:
         self._db = db
 
+    def between(
+        self, start: datetime, end: datetime, *, exclude_turn: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Commands from start to end (inclusive), oldest first; stopped ones left out (recall)."""
+        low = "" if start.year <= 1 else start.astimezone(UTC).isoformat(timespec="milliseconds")
+        high = end.astimezone(UTC).isoformat(timespec="milliseconds")
+        rows = self._db.execute(
+            "SELECT id, ts, turn_id, input_text, response_text FROM command_history "
+            "WHERE ts >= ? AND ts <= ? AND status != 'cancelled' AND turn_id != ? ORDER BY id",
+            (low, high, exclude_turn or ""),
+        )
+        return [dict(row) for row in rows]
+
     def record(
         self,
         *,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 
+import numpy as np
 from rich.console import Console
 from rich.markup import escape
 
@@ -79,6 +80,16 @@ def hotkey_bindings(settings: Settings) -> dict[str, Hotkey]:
     return bindings
 
 
+def wake_detector(settings: Settings) -> WakeWordDetector:
+    cfg = settings.voice
+    return WakeWordDetector(
+        cfg.wake_word,
+        settings.models_dir,
+        verifier=cfg.wake_verifier,
+        verifier_floor=cfg.wake_verifier_floor,
+    )
+
+
 def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> VoiceSession:
     cfg = settings.voice
     return VoiceSession(
@@ -89,7 +100,7 @@ def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> Voice
         stt=Transcriber(cfg, settings.models_dir),
         tts=app.services.tts,
         cues=Earcons(AudioPlayer(), enabled=cfg.earcons),
-        wake=WakeWordDetector(cfg.wake_word, settings.models_dir) if wake_enabled else None,
+        wake=wake_detector(settings) if wake_enabled else None,
         vad=SileroVAD(settings.models_dir, cfg.wake_word) if wake_enabled else None,
         dictation=Inserter(settings.dictation) if settings.dictation.enabled else None,
     )
@@ -170,11 +181,12 @@ def wake_test(settings: Settings, console: Console, *, seconds: float) -> int:
     wake_threshold from where you sit, and to pick a threshold for config/local.toml.
     """
     cfg = settings.voice
-    detector = WakeWordDetector(cfg.wake_word, settings.models_dir)
+    detector = wake_detector(settings)
     with console.status("Loading the wake word model..."):
         detector.load()
+    trained = " with the verifier trained on your voice" if detector.verified else ""
     console.print(
-        f'Say "Hey Jarvis" a few times. Threshold {cfg.wake_threshold:.2f} '
+        f'Say "Hey Jarvis" a few times{trained}. Threshold {cfg.wake_threshold:.2f} '
         f"(wake_threshold under \\[voice]). "
         f"Microphone: {escape(str(cfg.input_device or 'default'))}."
     )
@@ -187,6 +199,7 @@ def wake_test(settings: Settings, console: Console, *, seconds: float) -> int:
             end = time.monotonic() + seconds
             window: list[float] = []
             levels: list[float] = []
+            peaks: list[float] = []  # the best score of each half second that had one
             while time.monotonic() < end:
                 frame = await asyncio.wait_for(mic.read(), timeout=3)
                 if frame is None:
@@ -195,6 +208,7 @@ def wake_test(settings: Settings, console: Console, *, seconds: float) -> int:
                 levels.append(rms(frame))
                 if len(window) == 6:  # about half a second
                     best, level = max(window), max(levels)
+                    peaks.append(best)
                     bar = "#" * min(40, int(level / 50))
                     mark = "  [bold green]WAKE[/bold green]" if best >= cfg.wake_threshold else ""
                     console.print(f"level {level:6.0f} {bar:<40} score {best:.2f}{mark}")
@@ -208,9 +222,94 @@ def wake_test(settings: Settings, console: Console, *, seconds: float) -> int:
         finally:
             await mic.stop()
         console.print(f"{hits} wake word detection(s) in {seconds:.0f} s.")
+        console.print(wake_advice(peaks, cfg.wake_threshold, detector.verified))
         return 0
 
     return asyncio.run(measure())
+
+
+def wake_advice(peaks: list[float], threshold: float, verified: bool) -> str:
+    """What to do after a wake test, from the half-second peaks."""
+    tops = sorted(peaks, reverse=True)
+    near = [p for p in tops if threshold * 0.4 <= p < threshold]
+    if not tops or tops[0] < 0.1:
+        return "The wake word never registered: check the microphone (level) and say it clearly."
+    if tops[0] >= threshold:
+        return "It works. If it also wakes up on its own, raise wake_threshold a little."
+    best = ", ".join(f"{p:.2f}" for p in tops[:5])
+    if verified:
+        return (
+            f"Your best scores were {best}, below {threshold:.2f}. Train again in your usual spot "
+            "(uv run jarvis voice --train-wake)."
+        )
+    tip = (
+        f'Your "Hey Jarvis" scored up to {best}, below the threshold {threshold:.2f}. The fix: '
+        "teach it your voice (about two minutes): uv run jarvis voice --train-wake"
+    )
+    if near:
+        tip += (
+            f". A quick stopgap: wake_threshold = {max(0.2, round(near[0] * 0.8, 2))} under [voice]"
+        )
+    return tip + "."
+
+
+def train_wake(settings: Settings, console: Console) -> int:
+    """Record your voice and train the wake word verifier (ADR-064)."""
+    import sounddevice as sd
+
+    from jarvis.voice import wake_training as training
+
+    cfg = settings.voice
+    index = resolve_input_device(cfg.input_device)
+    folder = training.training_dir(settings.data_dir)
+
+    def record(seconds: float) -> np.ndarray:
+        audio = sd.rec(
+            int(seconds * 16_000), samplerate=16_000, channels=1, dtype="int16", device=index
+        )
+        sd.wait()
+        return np.asarray(audio)[:, 0]
+
+    console.print(
+        'Jarvis will learn your voice from 8 recordings of "Hey Jarvis" and about 25 seconds '
+        f"of other speech. They stay in {escape(str(folder))}. Sit where you usually sit."
+    )
+    positives = []
+    for number in range(1, 9):
+        input(f'[{number}/8] Press Enter, then say "Hey Jarvis" once (2 seconds)... ')
+        clip = record(2.0)
+        positives.append(clip)
+        training.save_wav(folder / "positive" / f"{number:02d}.wav", clip)
+    console.print(
+        f"\nNow read this aloud at a normal pace (20 seconds):\n\n  {training.NEGATIVE_PASSAGE}\n"
+    )
+    input("Press Enter and start reading... ")
+    speech = record(20.0)
+    input("Now press Enter and stay quiet for 5 seconds (the room's own noise)... ")
+    quiet = record(5.0)
+    negatives = training.split(speech) + training.split(quiet)
+    for number, clip in enumerate(negatives, start=1):
+        training.save_wav(folder / "negative" / f"{number:02d}.wav", clip)
+
+    with console.status("Training on your voice..."):
+        try:
+            report = training.train(settings.models_dir, cfg.wake_word, positives, negatives)
+        except ValueError as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            return 1
+    scores = ", ".join(f"{s:.2f}" for s in report.positive_scores)
+    console.print(
+        f'Trained on {report.positive_examples} moments of your "Hey Jarvis" and '
+        f"{report.negative_examples} of other sound.\nYour recordings now score: {scores} "
+        f"({report.caught} of 8 above 0.50). Other speech peaks at {report.negative_best:.2f}."
+    )
+    if report.negative_best >= cfg.wake_threshold:
+        console.print(
+            "[yellow]Other speech also scores high: it may wake up on its own. Train again with "
+            'clearer "Hey Jarvis" recordings.[/yellow]'
+        )
+    console.print("Check it live: uv run jarvis voice --wake-test 30")
+    return 0
 
 
 def list_devices(console: Console) -> int:

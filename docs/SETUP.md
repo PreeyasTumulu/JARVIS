@@ -254,6 +254,7 @@ The tray icon is blue when ready, red while listening, amber while thinking, gre
 
 ```powershell
 uv run jarvis voice --wake-test 30
+uv run jarvis voice --train-wake        # if your "Hey Jarvis" scores stay under the threshold
 ```
 
 It prints the microphone level and the wake word score every half second; say "Hey Jarvis" and look for `WAKE`. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if it does not fire.

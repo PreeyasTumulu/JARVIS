@@ -13,7 +13,13 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 
    Say "Hey Jarvis" a few times from where you usually sit. Each half second prints the microphone level and the wake word score; `WAKE` marks a detection.
    - Level stays around 0 to 10 even while you talk: the wrong microphone. `uv run jarvis voice --list-devices`, then set `input_device` under `[voice]` in `config/local.toml` (on this laptop, `"Microphone Array"`).
-   - Level moves but the score stays under the threshold: lower `wake_threshold` under `[voice]` (default 0.5, try 0.35), or move closer.
+   - Level moves and the score rises after each "Hey Jarvis" but stays under the threshold (this laptop's first real test: 0.25 to 0.45 against 0.5): teach it your voice, about two minutes:
+
+     ```powershell
+     uv run jarvis voice --train-wake
+     ```
+
+     Then run the wake test again and restart Jarvis (tray, Quit, then start it). A quick stopgap is a lower `wake_threshold` under `[voice]`; the wake test suggests one, but it also makes false wakes more likely (ADR-064).
    - It fires on its own: raise `wake_threshold`.
 3. **After sleep or plugging in a headset** the stream can go quiet; Jarvis reopens it after 3 seconds of silence from the device and logs `The microphone sent no audio for 3s; reopening it` (R34).
 4. **Windows privacy:** Settings, Privacy and security, Microphone: "Let desktop apps access your microphone" must be on.

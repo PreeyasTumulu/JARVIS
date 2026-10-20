@@ -244,6 +244,9 @@ class VoiceSettings(_Section):
     wake_word: str = "hey_jarvis"
     wake_word_enabled: bool = False
     wake_threshold: float = Field(default=0.5, gt=0, lt=1)
+    # Your trained verifier (jarvis voice --train-wake) decides once the model scores this.
+    wake_verifier: bool = True  # use it when it exists
+    wake_verifier_floor: float = Field(default=0.1, gt=0, lt=1)
     vad_threshold: float = Field(default=0.5, gt=0, lt=1)
     end_silence_ms: int = Field(default=800, ge=200)
     max_utterance_s: float = Field(default=12, gt=1)

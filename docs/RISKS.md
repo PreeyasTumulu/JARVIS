@@ -227,6 +227,10 @@ Hermes (2.2 GB on the GPU, the rest on the CPU), Whisper (about 0.5 GB), and the
 
 The Whisper benchmark uses Piper's voice with added noise. Real speech, an Indian English accent, a laptop microphone, and a fan all make every model worse, and not equally. Record your own voice once (`scripts/benchmark_stt.py --record`) before changing `stt_model`.
 
+### R49. The wake word and real voices
+
+openWakeWord's "hey jarvis" model scores synthetic voices near 1.0 and real ones much lower: this laptop's first real test peaked at 0.45 against a threshold of 0.5. `jarvis voice --train-wake` fixes it for one voice (ADR-064); anyone else will rarely wake Jarvis, and push-to-talk (Ctrl+Alt+J) always works. Retrain after a big change of room or microphone.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

@@ -53,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SECONDS",
         help='show the microphone level and the "hey jarvis" score live (default 30 s)',
     )
+    voice.add_argument(
+        "--train-wake",
+        action="store_true",
+        help='teach "hey jarvis" your voice (8 short recordings, about two minutes)',
+    )
 
     serve = sub.add_parser("serve", help="open the web UI (with voice, if installed)")
     serve.add_argument("--port", type=int, help="port on 127.0.0.1 (default from config)")
@@ -205,6 +210,8 @@ def main(argv: list[str] | None = None) -> int:
             return runner.list_devices(console)
         if args.wake_test is not None:
             return runner.wake_test(settings, console, seconds=args.wake_test)
+        if args.train_wake:
+            return runner.train_wake(settings, console)
         if args.model:
             settings.llm.active().model = args.model
         return runner.run_voice(settings, console, wake=args.wake, verbose=args.verbose)

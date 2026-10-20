@@ -77,6 +77,16 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | The phone never rings | `bridge.phone` is off by default. For ntfy set `phone.ntfy_topic` and install the ntfy app subscribed to it; permissions also need `NTFY_TOKEN`. For Twilio see SETUP.md 5i. |
 | Turn it off | `uv run jarvis claude-hook uninstall`, or `[bridge] enabled = false`. |
 
+## Recall and the briefing
+
+| Symptom | Check |
+|---|---|
+| The briefing has no weather | Set `[weather] home` in local.toml. |
+| The briefing skips email or the calendar | They need their setup (SETUP.md 5k); a part that fails is left out without a word. |
+| The first recall is slow | It embeds your whole history once; later ones are quick. |
+| Recall finds nothing | Say a time range ("last week", "yesterday") or a few words of what you asked; without `nomic-embed-text` it matches words only. |
+| I don't want the morning offer | `[briefing] offer = false`. |
+
 ## Routing and models
 
 | Symptom | Check |

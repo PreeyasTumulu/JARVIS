@@ -388,6 +388,18 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** the first real test on this laptop scored every "Hey Jarvis" between 0.25 and 0.45 against a threshold of 0.5, so nothing ever woke Jarvis, while silence and other sound stayed at 0.00 to 0.10. The model was trained on synthetic voices; checked on this laptop, Piper's and Windows' voices score 1.0 even when muffled and pitch shifted, so it is real accents and microphones it misses. Lowering the threshold alone also lets similar sounds through; a verifier trained on your voice and your room separates them.
 - **Cost:** two minutes of recording, and again if you move to a very different room or microphone. The verifier is a pickle file, which Python loads as code: Jarvis only ever loads the one it wrote itself, from your data folder. A verifier is trained on one voice, so other people will rarely wake Jarvis.
 
+### ADR-065: Memories and past commands by meaning
+
+- **Decision:** memories and past commands are embedded with `nomic-embed-text` (through Ollama, on this laptop) and the vectors kept in a new `embeddings` table, computed once per item and dropped when the item is deleted. Each turn, the memories that fit the request (similarity at least 0.51 and within 0.06 of the best, at most three) are repeated next to it for the model, across all memories rather than the newest 30, so up to 500 can be kept. `recall(about, when?)` searches the command history (what you said and what Jarvis answered) by meaning within a time range: today, yesterday, this or last week or month, a weekday, a date, "N days ago", or all time; it is private and untrusted, because an old answer may quote a page or a message. Without the embedding model both fall back to shared words.
+- **Why:** you chose memories and past commands. Word matching missed "who is my boss" for "my manager is Ravi"; by meaning it scores 0.62 against at most 0.49 for unrelated requests (measured on this laptop with eight memories and thirteen questions).
+- **Cost:** the first recall embeds the whole history once (about 20 seconds for a few hundred commands); later ones only the question. A request that needs reasoning ("can I eat this satay" for a peanut allergy) is not found by similarity; the memory is still in the prompt if it is among the newest 30.
+
+### ADR-066: A morning briefing, offered once a day
+
+- **Decision:** `briefing()` gathers weather for `weather.home`, today's calendar events, the reminders due today, the unread email count with up to three senders, and the new notifications with senders, each part with its own 20-second timeout and left out when it is not set up or fails. Email and messages are counts and senders only, never subjects or text. "Good morning", "brief me", and "how does my day look" run it without the model. The first command between 6 AM and noon each day ends with "By the way, would you like your morning briefing?"; a plain yes next plays it, anything else is an ordinary command, and nothing plays without your yes. `[briefing]` chooses the parts, the hours, and turns the offer off.
+- **Why:** you chose weather, calendar and reminders, and unread email and messages, offered once a day. Counts and senders keep a briefing short when spoken and keep message text out of a room you may not be alone in.
+- **Cost:** the offer adds one sentence to the first reply of the morning. Weather needs `weather.home` set; mail and calendar need their Phase 11 setup.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

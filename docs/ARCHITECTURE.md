@@ -285,6 +285,8 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `reply_email(message, text, reply_all?)` | 11 | confirm (floor); only to the people on that email, addresses read out | private |
 | `<server>_<tool>` from MCP servers (`[mcp.servers]`) | 12 | confirm (floor); safe only when the server marks it read-only and you marked the server trusted; offered only by the server's keywords | private (configurable), untrusted |
 | `calendar_events(day?)` | 11 | safe; from the secret iCal link, read-only | private, untrusted |
+| `recall(about, when?)` | 14 | safe; past commands by meaning in a time range | private, untrusted |
+| `briefing()` | 14 | safe; weather, today's calendar and reminders, unread email and message counts | private, untrusted |
 | `remember(fact)`, `list_memories()`, `forget(what)` | 8 | safe; remembering after outside content asks; forgetting always asks | private |
 
 ## 6. Safety model
@@ -556,7 +558,8 @@ jarvis/
     tray.py                   the tray icon (pystray) and its menu
     services.py               shared helpers tools use (TTS, app index, search backend)
     config.py
-    core/                     agent loop, executor (gate + confirm + audit), tool routing, fast path, events,
+    core/                     agent loop, executor (gate + confirm + audit), tool routing, fast path,
+                              meaning.py (embeddings in SQLite), semantic routing, events,
                               channel, prompts
     llm/                      OpenAI-compatible client, tool-call text parser, router and privacy guard
     tools/

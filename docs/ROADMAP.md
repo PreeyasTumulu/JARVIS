@@ -20,6 +20,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 11 | Mail and calendar | Built on `phase/11-calendar-mail` (stacked on Phase 10), waiting for your test | v1.2.0 |
 | 12 | MCP servers (GitHub first) | Built on `phase/12-mcp` (stacked on Phase 11), waiting for your test | v1.3.0 |
 | 13 | Faster and smaller | Built on `phase/13-faster` (stacked on Phase 12), waiting for your test | v1.4.0 |
+| 14 | Memory by meaning, morning briefing | Built on `phase/14-memory-briefing` (stacked on Phase 13), waiting for your test | v1.5.0 |
 
 ## How each phase runs
 
@@ -643,6 +644,48 @@ uv run python scripts/benchmark_stt.py --mine --device cuda --models small.en ba
 
 **Exit criteria:** commands are understood faster with no loss of accuracy; paraphrases reach the right tools; Hermes's speed holds with everything loaded.
 
+## Phase 14: Memory by meaning and the morning briefing
+
+**Scope:** find memories and past commands by meaning; a short spoken briefing for the day.
+
+**Decisions (asked 2026-10-20, all as recommended):** memories and past commands, both by meaning (ADR-065); a briefing of weather, calendar and reminders, and unread email and messages, offered once a day and played only after a yes (ADR-066).
+
+**Built**
+
+- `core/meaning.py`: embeddings from `nomic-embed-text` kept in a new `embeddings` table, computed once per item and dropped with it; words as the fallback.
+- Memories that fit each request are found by meaning across all of them (up to 500 kept) and repeated next to the request for the model.
+- `recall(about, when?)`: what you asked and what Jarvis answered, by meaning, within today, yesterday, this or last week or month, a weekday, a date, or "N days ago". Questions about your own past requests are offered only recall, so the model cannot reach for the topic's tool instead.
+- `briefing()`: weather for `weather.home`, today's events and reminders, unread email count with senders, new messages with senders; every part with its own timeout and left out quietly when it is not set up. "Good morning", "brief me", and "how does my day look" run it without the model; the first command of the morning offers it, and a plain yes plays it.
+- 2 new end-to-end scenarios (53 in all), 3 new benchmark commands (87).
+
+**Test commands**
+
+```powershell
+uv run pytest                                   # about 750 tests
+uv run jarvis ask "good morning"                # after [weather] home = "Hyderabad" in local.toml
+uv run jarvis ask "remember that my manager is Ravi"
+uv run jarvis ask "who is my boss"              # found by meaning, not shared words
+uv run jarvis ask "what did I ask about the weather earlier"
+```
+
+**Verified during the build (live, with a scratch data folder):** "brief me" gave Hyderabad's weather, today's holiday from a public Google calendar, and a test reminder in 2.4 s with no model; recall answered "what did I ask about music today" and "when did I ask about the weather" from real earlier commands, with their times; the two new scenarios with Hermes 3 8B. Memory matching thresholds were measured with the real embedding model: unrelated requests scored at most 0.49, real matches 0.52 to 0.77.
+
+**Measured:** Hermes 3 8B picked the right first tool for 93% of 87 commands, median 2.7 s, all three new ones right ([phase14.md](benchmarks/phase14.md)).
+
+**Found and fixed during the build**
+
+| Found | Fix |
+|---|---|
+| "When did I last ask about the weather" called the weather tool, and a Docker recall question got no tool | questions about your own past requests are offered only recall |
+| "Earlier" was not a recall word, so the model answered from nothing | added, with a prompt rule never to guess an earlier request |
+| Forgetting the last memory left its vector behind | vectors are synced even when no memory is left |
+| A command recorded in the same millisecond as the search was missed | the time range includes its end |
+| The briefing offer could repeat when two clocks disagreed | one clock decides the day |
+
+**Not done, needs you:** `[weather] home` in local.toml for the briefing's weather; the Phase 11 setup for its calendar and email.
+
+**Exit criteria:** "good morning" gives a useful briefing; past commands and memories are found by meaning.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -653,5 +696,5 @@ Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each wou
 | 11 | Calendar and mail | built (above) |
 | 12 | MCP client | built (above) |
 | 13 | Faster and smaller | built (above) |
-| 14 | Memory by meaning | semantic search over memories and past turns with `nomic-embed-text`; a morning briefing |
+| 14 | Memory by meaning | built (above) |
 | 15 | Screen reading | Windows OCR where UI Automation sees nothing |

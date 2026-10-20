@@ -399,6 +399,17 @@ uv run python scripts/benchmark_stt.py --mine --models small.en base.en medium.e
 
 Requests that use none of Jarvis's keywords ("what have I got lined up tomorrow") are routed by meaning with `nomic-embed-text`, which Phase 1 already pulled (`ollama pull nomic-embed-text` if not). Turn it off with `[agent] semantic_routing = false`.
 
+## 5n. Recall and the morning briefing (Phase 14)
+
+Nothing to install: both use `nomic-embed-text`, which is already pulled. For the briefing's weather, set your city in `config/local.toml`:
+
+```toml
+[weather]
+home = "Hyderabad"
+```
+
+Then: "good morning" or "brief me" (weather, today's calendar and reminders, unread email and messages: counts and senders only), "what did I ask about Docker last week", "when did I check the weather". The first command each morning ends with an offer of the briefing; turn it off with `[briefing] offer = false`, or choose the parts with `parts = ["weather", "calendar"]`.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

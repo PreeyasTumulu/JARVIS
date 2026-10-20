@@ -231,6 +231,10 @@ The Whisper benchmark uses Piper's voice with added noise. Real speech, an India
 
 openWakeWord's "hey jarvis" model scores synthetic voices near 1.0 and real ones much lower: this laptop's first real test peaked at 0.45 against a threshold of 0.5. `jarvis voice --train-wake` fixes it for one voice (ADR-064); anyone else will rarely wake Jarvis, and push-to-talk (Ctrl+Alt+J) always works. Retrain after a big change of room or microphone.
 
+### R50. The command history is kept, and now searchable
+
+Every command and Jarvis's answer has been kept in `jarvis.db` since Phase 1; recall makes it searchable by meaning, and answers can include private content (a message read out, an email summary). It never leaves the laptop and never reaches a cloud model, but anyone with your Windows account can read the database. There is no automatic expiry yet; deleting `%LOCALAPPDATA%\Jarvis\jarvis.db` clears everything (contacts, memories, and history together).
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

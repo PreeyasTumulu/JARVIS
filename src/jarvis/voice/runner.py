@@ -253,6 +253,9 @@ def wake_advice(peaks: list[float], threshold: float, verified: bool) -> str:
     return tip + "."
 
 
+WAKE_CLIP_MIN_RMS = 150  # below this a clip is mostly silence
+
+
 def train_wake(settings: Settings, console: Console) -> int:
     """Record your voice and train the wake word verifier (ADR-064)."""
     import sounddevice as sd
@@ -263,30 +266,49 @@ def train_wake(settings: Settings, console: Console) -> int:
     index = resolve_input_device(cfg.input_device)
     folder = training.training_dir(settings.data_dir)
 
+    frames: list[np.ndarray] = []
+
     def record(seconds: float) -> np.ndarray:
-        audio = sd.rec(
-            int(seconds * 16_000), samplerate=16_000, channels=1, dtype="int16", device=index
-        )
-        sd.wait()
-        return np.asarray(audio)[:, 0]
+        """From the stream that stays open: a freshly opened microphone sends silence for about
+        half a second, which cut the "Hey" off every clip."""
+        frames.clear()
+        time.sleep(seconds)
+        audio = np.concatenate(frames)[:, 0] if frames else np.zeros(0, dtype=np.int16)
+        return audio[: int(seconds * 16_000)]
 
     console.print(
         'Jarvis will learn your voice from 8 recordings of "Hey Jarvis" and about 25 seconds '
         f"of other speech. They stay in {escape(str(folder))}. Sit where you usually sit."
     )
-    positives = []
-    for number in range(1, 9):
-        input(f'[{number}/8] Press Enter, then say "Hey Jarvis" once (2 seconds)... ')
-        clip = record(2.0)
-        positives.append(clip)
-        training.save_wav(folder / "positive" / f"{number:02d}.wav", clip)
-    console.print(
-        f"\nNow read this aloud at a normal pace (20 seconds):\n\n  {training.NEGATIVE_PASSAGE}\n"
+    stream = sd.InputStream(
+        samplerate=16_000,
+        channels=1,
+        dtype="int16",
+        device=index,
+        callback=lambda data, *_: frames.append(data.copy()),
     )
-    input("Press Enter and start reading... ")
-    speech = record(20.0)
-    input("Now press Enter and stay quiet for 5 seconds (the room's own noise)... ")
-    quiet = record(5.0)
+    positives: list[np.ndarray] = []
+    with stream:
+        time.sleep(0.6)  # let the microphone settle before the first clip
+        while len(positives) < 8:
+            number = len(positives) + 1
+            input(f'[{number}/8] Press Enter, then say "Hey Jarvis" once (2 seconds)... ')
+            clip = record(2.0)
+            level = int(np.sqrt(np.mean(clip.astype(np.float64) ** 2))) if len(clip) else 0
+            if level < WAKE_CLIP_MIN_RMS:
+                console.print(f"  [yellow]That was very quiet (level {level}); once more.[/yellow]")
+                continue
+            console.print(f"  [green]Got it[/green] (level {level}).")
+            positives.append(clip)
+            training.save_wav(folder / "positive" / f"{number:02d}.wav", clip)
+        console.print(
+            "\nNow read this aloud at a normal pace (20 seconds):\n\n"
+            f"  {training.NEGATIVE_PASSAGE}\n"
+        )
+        input("Press Enter and start reading... ")
+        speech = record(20.0)
+        input("Now press Enter and stay quiet for 5 seconds (the room's own noise)... ")
+        quiet = record(5.0)
     negatives = training.split(speech) + training.split(quiet)
     for number, clip in enumerate(negatives, start=1):
         training.save_wav(folder / "negative" / f"{number:02d}.wav", clip)

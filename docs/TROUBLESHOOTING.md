@@ -38,6 +38,7 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 |---|---|
 | "is sending pure silence" | The selected microphone is muted or virtual (AudioRelay, Voicemeeter, DroidCam). Pick a real one with `input_device`. |
 | "Could not register" a hotkey | Another app owns that combination. Change `ptt_hotkey` or `stop_hotkey` under `[voice]`. |
+| Speech recognition is slow (over a second) | The log says where Whisper loaded ("loaded on the GPU"). For the GPU: `uv sync --extra voice --extra piper --extra gpu`. A game holding the GPU memory pushes it back to the CPU. |
 | It mishears names | Say numbers when answering a list ("two"); add app names to the vocabulary hint by using them; `stt_model = "small.en"` is the default, `medium.en` is slower but better. |
 
 ## Apps, files, the browser, WhatsApp
@@ -69,6 +70,14 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | A permission was not decided by voice | Only a clear yes or no counts ("yes", "allow it", "no"); anything else is left to Claude's own prompt, by design. |
 | The phone never rings | `bridge.phone` is off by default. For ntfy set `phone.ntfy_topic` and install the ntfy app subscribed to it; permissions also need `NTFY_TOKEN`. For Twilio see SETUP.md 5i. |
 | Turn it off | `uv run jarvis claude-hook uninstall`, or `[bridge] enabled = false`. |
+
+## Routing and models
+
+| Symptom | Check |
+|---|---|
+| A request without the usual words gets a web search | Semantic routing needs `nomic-embed-text` in Ollama (`ollama pull nomic-embed-text`); the log says "Semantic routing is off" when it is missing. |
+| Answers got slower after a game | Ollama placed Hermes while the game held GPU memory; `ollama stop jarvis-hermes3` and the next command reloads it (R47). |
+| I want faster answers and accept more mistakes | `[llm.providers.local] model = "llama3.2:3b"` in local.toml: 0.4 s instead of 2.7 s, 87% instead of 93% on the benchmark (ADR-061). |
 
 ## MCP servers and GitHub
 

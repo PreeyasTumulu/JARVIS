@@ -364,11 +364,29 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** you chose GitHub first. Its untrimmed schemas were 19,000 characters for ten tools, which made a request take 6 to 17 seconds on the 8B model and one time out after 69 seconds; trimmed, they are 6,700 characters and all eight GitHub benchmark commands pick the right tool.
 - **Cost:** Docker Desktop must be running. Parameters left out of `params` (paging, sorting, extra filters) cannot be used by voice until you add them. The model does not know your GitHub username: tell Jarvis "remember that my GitHub username is ...", or it may guess the owner of "my repo".
 
+### ADR-061: Hermes 3 8B stays the default model
+
+- **Decision:** after benchmarking the small models on the same commands with the same routing (84 commands, `docs/benchmarks/phase13.md`), Hermes 3 8B stays the default: 93% right at a median of 2.7 s. Llama 3.2 3B scored 87% at 0.4 s (fully on the GPU), and Qwen3 4B Instruct 2507 86% at 1.4 s (a third on the CPU at an 8K context). `config/ollama/qwen3-4b.Modelfile` is kept for anyone who wants to try it. The `qwen3:4b` tag itself is now the thinking-only release: neither Ollama's `think: false` nor `/no_think` stops it reasoning for hundreds of tokens before every answer, so it is unusable for voice.
+- **Why:** your rule was to switch only for a model within 3 points of Hermes that is at least twice as fast and passes every safety scenario. Both small models are fast enough but 6 or more points behind: they confuse focus and open, guess which app "the app" means, and call speak for a greeting.
+- **Cost:** a command still takes 2 to 4 seconds of model time. Llama 3.2 3B is one config line away (`[llm.providers.local] model = "llama3.2:3b"`) for someone who prefers speed.
+
+### ADR-062: Whisper on the GPU, small.en kept
+
+- **Decision:** `voice.stt_device` defaults to `"auto"`: with the `gpu` extra installed (`uv sync --extra gpu`, cuBLAS 12 and cuDNN 9 as pip packages, about 1 GB, no system install) Whisper runs on the GPU with `int8_float16`, otherwise on the CPU. Jarvis adds the packages' DLL folders to the search path, runs one real transcription when the model loads (only that loads cuBLAS), and falls back to the CPU if anything fails. The model stays `small.en`. `scripts/benchmark_stt.py` compares Whisper models, on synthetic speech or, with `--record` and `--mine`, on your own voice (kept in your data folder).
+- **Why:** you asked to measure and switch only if accuracy holds. On 30 spoken commands, small.en on the GPU took 135 ms against 1.4 s on the CPU, with a word error rate of 6.8% against 11.2%. Hermes keeps the same share of the GPU with Whisper loaded (it uses 2.2 GB of the 4 GB; Whisper adds about 0.5 GB), and its warm replies stay at about 1.0 s. base.en was faster still on the CPU (0.44 s) and even scored better on Piper's voice, but synthetic speech flatters small models, and on the GPU the gain over small.en is only 80 ms.
+- **Cost:** about 1 GB of CUDA libraries in the environment. A heavier model in Ollama, or another GPU app (a game), could leave too little GPU memory; then Whisper or the model moves to the CPU. Your voice may still favour base.en or medium.en: `--record` once, then `--mine`, tells.
+
+### ADR-063: Semantic routing when no keyword matches
+
+- **Decision:** when a request matches no keyword group (only question words, or nothing), `core/semantic_routing.py` embeds it with `nomic-embed-text` through Ollama and compares it with a few example requests per group, phrased without the group's keywords. Groups at or above `agent.semantic_threshold` (0.62), at most two and within 0.03 of the best, are offered; below it the old fallback applies. Keywords always win when they match, and MCP tools are still offered only by their own keywords. Example vectors are cached in the data folder; any failure (Ollama down, the model missing, slower than `semantic_timeout_s`) means no help, never an error. `jarvis serve` loads the embedding model at start.
+- **Why:** you chose embeddings as a backup. Six paraphrases with no keywords ("what have I got lined up tomorrow", "it's too loud, bring it down", "has anybody tried to reach me") went from one right to six right, and Hermes's accuracy on all 84 commands from 86% to 93%; those requests also got faster, because the model no longer reads every tool. The threshold came from measuring: unrelated requests ("tell me a joke", "good morning") scored at most 0.60, paraphrases 0.64 to 0.83.
+- **Cost:** about 90 ms per unmatched request once warm (the first takes about a second), and 0.3 GB of GPU memory, which fits beside Hermes and Whisper. The examples need adding to when a new group arrives.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.
 
 1. **Phone escalation:** off, ntfy (free; install the ntfy app and pick a long random topic), or Twilio (paid; needs an account, a number, and the Studio flow). Recommended: ntfy for questions first.
-2. **The Ollama speed settings** offered in Phase 8 (flash attention and a q8_0 KV cache, set as user environment variables). Recommended: yes; it frees VRAM on the 4 GB GPU.
 
 The Claude Code hooks (once open decision 1) were installed on 2026-10-20 after `jarvis claude-hook test` passed.
+The Ollama speed settings (once open decision 2) were found already set on this laptop on 2026-10-20 (`OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, confirmed in Ollama's log); every Phase 13 measurement includes them.

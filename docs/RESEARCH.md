@@ -54,7 +54,7 @@ The flow in one line: Claude asks, the hook posts to Jarvis on 127.0.0.1, Jarvis
 
 ## 3. Small but smart
 
-The laptop has an RTX 3050 with 4 GB and 16 GB of RAM. Hermes 3 8B runs 58% on the CPU, which is why a turn takes 2 to 4 seconds. Ways to get more out of it, roughly in order of value:
+The laptop has an RTX 3050 with 4 GB and 16 GB of RAM. Hermes 3 8B runs 58% on the CPU, which is why a turn takes 2 to 4 seconds. Ways to get more out of it, roughly in order of value (Phase 13 measured the first five; see ADR-061 to ADR-063):
 
 1. **Ollama speed settings** (needs your OK, ADR open decision 3): `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0` halve the context memory, so more of the model fits on the GPU.
 2. **A 4B tool-calling model as the default**: Qwen3 4B or Gemma 3n/Gemma 4 E4B class models fit entirely in 4 GB at Q4 and are often as good at single tool calls. `scripts/benchmark_tools.py --models ...` compares them on Jarvis's own 67 commands; `gemma3:4b` and `llama3.2:3b` are already pulled.

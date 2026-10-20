@@ -19,6 +19,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 10 | Dictation and media | Built on `phase/10-dictation-media` (stacked on Phase 9), waiting for your test | v1.1.0 |
 | 11 | Mail and calendar | Built on `phase/11-calendar-mail` (stacked on Phase 10), waiting for your test | v1.2.0 |
 | 12 | MCP servers (GitHub first) | Built on `phase/12-mcp` (stacked on Phase 11), waiting for your test | v1.3.0 |
+| 13 | Faster and smaller | Built on `phase/13-faster` (stacked on Phase 12), waiting for your test | v1.4.0 |
 
 ## How each phase runs
 
@@ -585,6 +586,63 @@ uv run jarvis ask "open a github issue on JARVIS titled test from Jarvis"   # an
 
 **Exit criteria:** GitHub questions are answered by voice; reading runs, writing asks; a broken or missing server never affects the rest of Jarvis.
 
+## Phase 13: Faster and smaller
+
+**Scope:** a smaller default model if the benchmark agrees, routing that understands paraphrases, and faster speech recognition.
+
+**Decisions (asked 2026-10-20, all as recommended):** download qwen3:4b to compare; switch the default only for a model within 3 points of Hermes, twice as fast, and safe (ADR-061); measure Whisper and switch only if accuracy holds (ADR-062); embeddings as a routing backup (ADR-063).
+
+**Built**
+
+- Semantic routing: a request with none of the keywords is matched by meaning (`nomic-embed-text`) to the right tool groups instead of getting all 52 tools; keywords still decide when they match, and failures fall back silently. Warmed up when `jarvis serve` starts.
+- Whisper on the GPU (`stt_device = "auto"` with the new `gpu` extra), checked by a real warm-up transcription and falling back to the CPU on any failure.
+- `scripts/benchmark_stt.py` (Whisper models, synthetic speech or `--record` / `--mine` for your own voice) and `--no-semantic` for the tool benchmark; six paraphrase commands added (84 in all).
+- `config/ollama/qwen3-4b.Modelfile` for Qwen3 4B Instruct, kept as an option.
+
+**Measured** ([phase13.md](benchmarks/phase13.md), [stt.md](benchmarks/stt.md), [stt-gpu.md](benchmarks/stt-gpu.md))
+
+| | Right first tool (84) | Median | Placement |
+|---|---|---|---|
+| Hermes 3 8B, semantic routing | 93% | 2.7 s | 58% CPU |
+| Hermes 3 8B, keywords only | 86% | 2.8 s | 58% CPU |
+| Llama 3.2 3B, semantic routing | 87% | 0.4 s | GPU |
+| Qwen3 4B Instruct, semantic routing | 86% | 1.4 s | 34% CPU |
+
+| Whisper (30 spoken commands, Piper voice with noise) | Word error rate | Median |
+|---|---|---|
+| small.en, GPU | 6.8% | 135 ms |
+| base.en, GPU | 7.7% | 56 ms |
+| small.en, CPU (before) | 11.2% | 1,434 ms |
+| base.en, CPU | 8.0% | 442 ms |
+| distil-small.en, CPU | 17.4% | 1,304 ms |
+
+The voice self-test went from 2.2 s to 0.97 s between the end of speech and the text being ready, and Hermes keeps its GPU share and its 1.0 s warm replies with Whisper and the embedding model loaded. Hermes stays the default: both small models are 6 or more points behind.
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper --extra gpu
+uv run pytest                                   # about 715 tests
+uv run python scripts/voice_selftest.py         # "heard ... in about 130 ms"
+uv run jarvis ask "what have I got lined up tomorrow"     # the calendar, not a web search
+uv run jarvis ask "it's too loud, bring it down"          # the volume
+uv run python scripts/benchmark_stt.py --record           # read 30 commands once
+uv run python scripts/benchmark_stt.py --mine --device cuda --models small.en base.en medium.en
+```
+
+**Found and fixed during the build**
+
+| Found | Fix |
+|---|---|
+| `qwen3:4b` is now the thinking-only release; nothing turns its reasoning off | benchmarked Qwen3 4B Instruct 2507 instead |
+| Whisper on the GPU failed on a missing cuBLAS DLL | the `gpu` extra, with its DLL folders added to the search path |
+| The warm-up never ran the model (faster-whisper's segments are lazy), so the first command paid the GPU start | the warm-up consumes the segments |
+| Paraphrases got every tool and often a web search or no tool | semantic routing |
+
+**Not done, needs you:** reading the 30 commands once in your own voice (`--record`), to confirm small.en against base.en or medium.en for your accent and microphone.
+
+**Exit criteria:** commands are understood faster with no loss of accuracy; paraphrases reach the right tools; Hermes's speed holds with everything loaded.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -594,6 +652,6 @@ Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each wou
 | 10 | Dictation and media | built (above) |
 | 11 | Calendar and mail | built (above) |
 | 12 | MCP client | built (above) |
-| 13 | Faster and smaller | a 4B default model if the benchmark agrees, a fast intent model for routing, Whisper on the GPU |
+| 13 | Faster and smaller | built (above) |
 | 14 | Memory by meaning | semantic search over memories and past turns with `nomic-embed-text`; a morning briefing |
 | 15 | Screen reading | Windows OCR where UI Automation sees nothing |

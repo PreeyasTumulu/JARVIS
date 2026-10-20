@@ -380,6 +380,24 @@ tools = ["HassTurnOn", "HassTurnOff", "GetLiveContext"]
 
 `uv run jarvis mcp tools home` lists everything it offers, with which ones are read-only. Add `trusted = true` only for a server you trust to label its tools honestly, and `[mcp.servers.home.params]` to show the model fewer parameters.
 
+## 5m. Faster speech recognition (Phase 13)
+
+Whisper runs about ten times faster on the GPU. It needs NVIDIA's CUDA libraries as pip packages (about 1 GB, nothing system-wide):
+
+```powershell
+uv sync --extra voice --extra piper --extra gpu
+uv run python scripts/voice_selftest.py      # "heard 'Open Notepad.' in about 130 ms"
+```
+
+`[voice] stt_device = "auto"` (the default) uses the GPU when it works and the CPU otherwise; `"cpu"` forces the CPU. To check which Whisper model suits your voice, read 30 commands once and compare (your recordings stay in `%LOCALAPPDATA%\Jarvis\stt-test`):
+
+```powershell
+uv run python scripts/benchmark_stt.py --record
+uv run python scripts/benchmark_stt.py --mine --models small.en base.en medium.en --device cuda
+```
+
+Requests that use none of Jarvis's keywords ("what have I got lined up tomorrow") are routed by meaning with `nomic-embed-text`, which Phase 1 already pulled (`ollama pull nomic-embed-text` if not). Turn it off with `[agent] semantic_routing = false`.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

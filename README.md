@@ -9,7 +9,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 to 12 (dictation and media; mail and calendar; MCP servers), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
+> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 to 13 (dictation and media; mail and calendar; MCP servers; faster speech and routing), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -86,14 +86,14 @@ Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the we
 | Language | Python 3.12 with uv |
 | Local model | Nous Hermes 3 8B on Ollama, native tool calling; any OpenAI-compatible model by config |
 | Cloud (optional, public questions only) | Groq gpt-oss-120b, then OpenRouter's free Nemotron, both free tiers |
-| Voice | openWakeWord ("hey jarvis"), Silero VAD, faster-whisper, Piper or Windows SAPI |
+| Voice | openWakeWord ("hey jarvis"), Silero VAD, faster-whisper on the GPU, Piper or Windows SAPI |
 | Automation | Windows UI Automation (comtypes), SendInput, Playwright driving your default browser (Brave, Chrome, or Edge) |
 | Interface | FastAPI and a WebSocket page, a pystray tray icon, a rich CLI |
 | Storage | SQLite (local audit log, history, contacts, memories) |
 
 ## Quality
 
-About 700 tests run in CI on Windows, including 51 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 92% of 86 benchmark commands, GitHub's included, ([benchmark](docs/benchmarks/phase12.md)).
+About 715 tests run in CI on Windows, including 51 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 93% of 84 benchmark commands ([benchmark](docs/benchmarks/phase13.md)).
 
 ## Documentation
 

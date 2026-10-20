@@ -219,6 +219,14 @@ An MCP server is someone else's program, started with your secrets: GitHub's run
 
 Every tool schema is prompt the model reads on each request, and MCP servers write long ones. GitHub requests take 5 to 9 seconds (built-in requests 2 to 4) even after trimming. Keep `tools` and `params` short; Phase 13 (a smaller, faster default model) helps. Docker Desktop also uses several gigabytes of memory while it runs.
 
+### R47. Three models on a 4 GB GPU
+
+Hermes (2.2 GB on the GPU, the rest on the CPU), Whisper (about 0.5 GB), and the embedding model (0.3 GB) share the card. Measured together they fit, but Ollama decides how many of Hermes's layers go on the GPU when it loads the model; if a game or another GPU app holds memory then, Hermes runs more on the CPU and gets slower until it reloads. Whisper falls back to the CPU on its own if the GPU fails.
+
+### R48. Speech numbers come from a synthetic voice
+
+The Whisper benchmark uses Piper's voice with added noise. Real speech, an Indian English accent, a laptop microphone, and a fan all make every model worse, and not equally. Record your own voice once (`scripts/benchmark_stt.py --record`) before changing `stt_model`.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

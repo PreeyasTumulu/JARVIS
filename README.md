@@ -9,7 +9,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 and 11 (dictation and media; mail and calendar), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
+> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 to 12 (dictation and media; mail and calendar; MCP servers), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -26,6 +26,7 @@ Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools
 | Mail and calendar | "any new email", "read the one from Ravi", "reply that I'll send it tonight", "what's on today", "my next meeting", "am I free on Friday" |
 | Memory | "remember that my manager is Ravi", "who is my manager", "what do you remember about me" |
 | Thinking | "think harder: why did the Roman empire fall in the west but not in the east" (a free cloud model) |
+| GitHub (and any MCP server) | "any open issues on JARVIS", "read issue 12", "open an issue titled ..." (asks first), "find repos about wake words" |
 | Claude Code | Claude asks "Which database? one, PostgreSQL. two, SQLite." and you say "two" |
 
 ## Why it is different
@@ -54,7 +55,7 @@ flowchart LR
   T[Text: CLI or web page] --> A
   A <--> M[Router: Hermes 3 8B local, free cloud for public questions]
   A --> P[Policy gate: safe, confirm, blocked]
-  P --> R[52 typed tools]
+  P --> R[52 typed tools + MCP servers]
   R --> W[Apps, UI, files, web, Brave, data, WhatsApp, calls, notifications, system]
   A --> E[Events: page, tray, voice, audit log]
   C[Claude Code hooks] --> B[Bridge] --> E
@@ -92,7 +93,7 @@ Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the we
 
 ## Quality
 
-About 680 tests run in CI on Windows, including 49 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 92% of 78 benchmark commands ([benchmark](docs/benchmarks/phase11.md)).
+About 700 tests run in CI on Windows, including 51 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 92% of 86 benchmark commands, GitHub's included, ([benchmark](docs/benchmarks/phase12.md)).
 
 ## Documentation
 

@@ -70,6 +70,17 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | The phone never rings | `bridge.phone` is off by default. For ntfy set `phone.ntfy_topic` and install the ntfy app subscribed to it; permissions also need `NTFY_TOKEN`. For Twilio see SETUP.md 5i. |
 | Turn it off | `uv run jarvis claude-hook uninstall`, or `[bridge] enabled = false`. |
 
+## MCP servers and GitHub
+
+| Symptom | Check |
+|---|---|
+| GitHub questions get a web search | `uv run jarvis mcp list`: the token must be in `.env`, and the server must start (`uv run jarvis mcp test github`). The request must mention GitHub, an issue, a pull request, a repo, or a commit. |
+| "did not answer within 60s" | Docker Desktop is not running, or the image is still downloading: `docker pull ghcr.io/github/github-mcp-server:v2.0.2`. The server's own log is `%LOCALAPPDATA%\Jarvis\logs\mcp-github.log`. |
+| "None of the tools listed exist" | The server renamed its tools; `uv run jarvis mcp tools github` shows the current names for `tools`. |
+| It used the wrong owner for "my repo" | Say "remember that my GitHub username is ..." once. |
+| A read asks for confirmation | The server is not `trusted`, or the tool is not marked read-only by the server. |
+| GitHub answers are slow | Expected on the 8B model (R46); trim `tools` and `params`. |
+
 ## Mail and calendar
 
 | Symptom | Check |

@@ -283,6 +283,7 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `read_notifications(person?)` | 7 | safe; only apps on `notifications.apps` | private, untrusted |
 | `read_mail(sender?, unread_only?)`, `read_email(message)` | 11 | safe; the folder is opened read-only and nothing is marked read | private, untrusted |
 | `reply_email(message, text, reply_all?)` | 11 | confirm (floor); only to the people on that email, addresses read out | private |
+| `<server>_<tool>` from MCP servers (`[mcp.servers]`) | 12 | confirm (floor); safe only when the server marks it read-only and you marked the server trusted; offered only by the server's keywords | private (configurable), untrusted |
 | `calendar_events(day?)` | 11 | safe; from the secret iCal link, read-only | private, untrusted |
 | `remember(fact)`, `list_memories()`, `forget(what)` | 8 | safe; remembering after outside content asks; forgetting always asks | private |
 
@@ -579,6 +580,7 @@ jarvis/
       notifications/          store and allowlist, watcher (polling), read_notifications
       mail/                   mailbox.py (IMAP read-only, SMTP, parsing), read_mail, read_email, reply_email
       calendar/               feed.py (iCal download, repeats, day ranges), calendar_events
+      mcp/                    hub.py (one task per server, stdio or HTTP, calls), tools.py (risk, schemas, registration)
       system/                 volume, brightness, lock, screenshot, clipboard, timers and reminders,
                               media (play, pause, next, now playing)
     voice/

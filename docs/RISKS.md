@@ -211,6 +211,14 @@ A Gmail app password signs in to the whole mailbox (IMAP and SMTP) and is not li
 
 The secret iCal address can be read by anyone who has it, and Google can reset it (Jarvis then says the link answered 404). Google refreshes the published feed on its own schedule, sometimes hours late, so a meeting added a minute ago may be missing. Only events in the linked calendars are seen; invitations not yet accepted may not appear.
 
+### R45. MCP servers run on your laptop
+
+An MCP server is someone else's program, started with your secrets: GitHub's runs in a Docker container with your token, an npx server runs as you. Prefer official servers and pinned versions (the GitHub image is pinned to v2.0.2). A server marked `trusted` can mislabel a tool as read-only and have it run without asking; leave `trusted` off for servers you do not know. Everything a server returns is untrusted data and private by default, and every call is in the audit log.
+
+### R46. MCP tools are slow on the 8B model
+
+Every tool schema is prompt the model reads on each request, and MCP servers write long ones. GitHub requests take 5 to 9 seconds (built-in requests 2 to 4) even after trimming. Keep `tools` and `params` short; Phase 13 (a smaller, faster default model) helps. Docker Desktop also uses several gigabytes of memory while it runs.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

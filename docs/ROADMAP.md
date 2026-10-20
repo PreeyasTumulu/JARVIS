@@ -18,6 +18,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 9 | Test hardening, docs, demo (plus the Claude Code bridge, Brave, calls) | Built on `phase/9-hardening` (stacked on Phase 8), waiting for your test | v1.0.0 |
 | 10 | Dictation and media | Built on `phase/10-dictation-media` (stacked on Phase 9), waiting for your test | v1.1.0 |
 | 11 | Mail and calendar | Built on `phase/11-calendar-mail` (stacked on Phase 10), waiting for your test | v1.2.0 |
+| 12 | MCP servers (GitHub first) | Built on `phase/12-mcp` (stacked on Phase 11), waiting for your test | v1.3.0 |
 
 ## How each phase runs
 
@@ -538,6 +539,52 @@ uv run jarvis ask "what's my next meeting"
 
 **Exit criteria:** the inbox and calendar answer correctly by voice; nothing is marked read; a reply goes only after your yes, to the right people, in the right thread.
 
+## Phase 12: MCP servers (GitHub first)
+
+**Scope:** use tools from MCP servers (GitHub, Home Assistant, anything that speaks the Model Context Protocol), each through the same policy gate, privacy labels, and audit log as a built-in tool.
+
+**Decisions (asked 2026-10-20, all as recommended):** MCP tools ask first unless the server marks them read-only and you marked the server trusted (ADR-059); only the tools you list reach the model (ADR-059); GitHub's official server first (ADR-060).
+
+**Built**
+
+- An MCP client on the official `mcp` SDK: `[mcp.servers.<name>]` with a `command` over stdio or a `url` over Streamable HTTP, secrets as `$NAME` from `.env` (a server without them is skipped), one task per server, connected when `jarvis serve` starts or on the first command; a broken server is logged (`logs/mcp-<name>.log`) and left out.
+- Listed tools become `<server>_<tool>` Jarvis tools: risk floor `confirm`, safe only for read-only tools on a `trusted` server, `risk` per tool and `safety.tool_risk_overrides` can only raise; private (configurable) and untrusted; open-world tools are egress. The confirmation reads the server, the action, and the arguments ("GitHub: issue write (owner: PreeyasTumulu; repo: JARVIS; title: ...)").
+- They are offered only when a request mentions the server's name or keywords, and never as part of "all tools". Schemas are compacted, and `[mcp.servers.<name>.params]` lists the parameters the model sees.
+- GitHub: the official server in Docker (pinned v2.0.2) with ten tools, eight read-only and two that write. `jarvis mcp list`, `jarvis mcp tools <server>`, `jarvis mcp test <server>`; `scripts/benchmark_tools.py --mcp`.
+- A small MCP test server (`tests/fixtures/mcp_notes_server.py`) that the tests start over stdio: 20 MCP tests and 2 end-to-end scenarios (51 in all) run the real SDK, transport, and policy gate.
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper
+uv run pytest                                   # about 700 tests (the MCP ones start a real server)
+docker pull ghcr.io/github/github-mcp-server:v2.0.2
+uv run jarvis mcp list                          # after GITHUB_PERSONAL_ACCESS_TOKEN is in .env
+uv run jarvis mcp test github                   # the ten tools and whether each asks first
+uv run jarvis ask "remember that my GitHub username is PreeyasTumulu"
+uv run jarvis ask "any open issues on my JARVIS repo on github"
+uv run jarvis ask "what were the last commits on JARVIS"
+uv run jarvis ask "open a github issue on JARVIS titled test from Jarvis"   # answer n to just hear the question
+```
+
+**Verified during the build (live, on this laptop):** the MCP SDK's stdio transport on Windows against the test server (listing, read-only and writing tools, errors, an unlisted tool kept hidden, a broken command, a missing secret); GitHub's official server started in Docker, listing its 46 tools and exposing the ten configured ones with the right risk (with a placeholder token: listing needs no real one, so no GitHub API call was made); `jarvis mcp list` and `jarvis mcp test github`. Not verified live: a real GitHub call, which needs your token.
+
+**Measured:** with GitHub's ten tools added, Hermes 3 8B picked the right first tool for 92% of 86 commands, and all eight GitHub commands right ([phase12.md](benchmarks/phase12.md)). Before trimming, GitHub's schemas were 19,000 characters, requests took 6 to 17 seconds, and one timed out after 69 seconds; trimmed (6,700 characters), GitHub requests take 5 to 9 seconds. This run's overall median (4.3 s, 2.8 s in Phase 11) is not comparable: a game was running with 1 GB of memory free, and the same run without MCP was 4.3 s too.
+
+**Found and fixed during the build**
+
+| Found | Fix |
+|---|---|
+| GitHub's full schemas made requests 3 to 5 times slower and one time out | compacted schemas and per-tool `params` |
+| Compacting dropped GitHub's `title` parameter (schema titles and a parameter called title look alike) | parameter names are never touched |
+| Plain results came back as `{"result": ...}` | unwrapped |
+| `jarvis mcp test` without the token said no tools exist | it names the missing secret |
+| Under pythonw a server's log had nowhere to go | each server logs to `logs/mcp-<name>.log` |
+
+**Not done, needs you:** a GitHub token in `.env`, Docker Desktop running, and the test commands above; any other server you want (Home Assistant example in SETUP.md 5l).
+
+**Exit criteria:** GitHub questions are answered by voice; reading runs, writing asks; a broken or missing server never affects the rest of Jarvis.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -546,7 +593,7 @@ Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each wou
 |---|---|---|
 | 10 | Dictation and media | built (above) |
 | 11 | Calendar and mail | built (above) |
-| 12 | MCP client | Home Assistant, GitHub, and other MCP servers, each tool with a risk floor and a sensitivity label |
+| 12 | MCP client | built (above) |
 | 13 | Faster and smaller | a 4B default model if the benchmark agrees, a fast intent model for routing, Whisper on the GPU |
 | 14 | Memory by meaning | semantic search over memories and past turns with `nomic-embed-text`; a morning briefing |
 | 15 | Screen reading | Windows OCR where UI Automation sees nothing |

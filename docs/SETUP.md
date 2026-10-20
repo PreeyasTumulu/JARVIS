@@ -343,6 +343,43 @@ uv run jarvis calendar test
 
 Then: "what's on today", "my next meeting", "am I free on Friday", "what's on next week". Keep the link secret; "Reset" in the same place makes a new one.
 
+## 5l. MCP servers and GitHub (Phase 12)
+
+Jarvis can use tools from MCP servers. Each server is a section under `[mcp.servers]` in `config/jarvis.toml` (or your `local.toml`); only the tools listed there are given to the model, and they ask first unless the server marks them read-only and the section says `trusted = true`.
+
+**GitHub** (already configured; needs Docker Desktop running):
+
+1. Create a fine-grained personal access token at https://github.com/settings/personal-access-tokens: your repositories, read access to issues, pull requests, and contents (add write to issues only if you want Jarvis to open issues and comment).
+2. Put it in `.env`:
+
+   ```
+   GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
+   ```
+
+3. Check it, and tell Jarvis who you are on GitHub:
+
+   ```powershell
+   docker pull ghcr.io/github/github-mcp-server:v2.0.2
+   uv run jarvis mcp list
+   uv run jarvis mcp test github
+   uv run jarvis ask "remember that my GitHub username is PreeyasTumulu"
+   ```
+
+Then: "any open issues on my JARVIS repo", "read issue 12 on JARVIS", "what were the last commits on JARVIS", "open an issue on JARVIS titled wake word misses quiet voices" (asks first).
+
+**Another server** (for example one from https://github.com/modelcontextprotocol/servers):
+
+```toml
+[mcp.servers.home]
+label = "Home Assistant"
+url = "http://homeassistant.local:8123/api/mcp"
+headers = { Authorization = "Bearer $HASS_TOKEN" }
+keywords = ["light", "lights", "thermostat", "temperature", "living room"]
+tools = ["HassTurnOn", "HassTurnOff", "GetLiveContext"]
+```
+
+`uv run jarvis mcp tools home` lists everything it offers, with which ones are read-only. Add `trusted = true` only for a server you trust to label its tools honestly, and `[mcp.servers.home.params]` to show the model fewer parameters.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

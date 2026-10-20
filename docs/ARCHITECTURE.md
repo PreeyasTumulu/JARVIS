@@ -276,6 +276,7 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `clipboard_read()` / `clipboard_write(text)` | 4 | safe | private, untrusted / public |
 | `set_timer`, `set_reminder`, `list_reminders`, `cancel_reminder(which)` | 4 | safe; cancelling more than one confirms | private |
 | `type_text(app, text, field?)`, `click(app, target)`, `press_keys(app, keys)` | 6 | confirm, or safe inside trusted apps except destructive targets and closing keys; always confirm in messaging apps and terminals; blocked in Registry Editor, consoles, sign-in prompts, password managers, and password fields | public |
+| `read_screen()` | 15 | safe; every screen read with Windows OCR | private, untrusted |
 | `read_window_text(app)` | 6 | safe (blocked for the apps above) | private, untrusted |
 | `browser_open(url, search?)`, `browser_read()`, `browser_click(target)`, `browser_type(text, target?, submit?)` | 6 | safe; submits, purchases, and deletes confirm (search boxes do not); passwords, card numbers, one-time codes, local addresses, and WhatsApp sites blocked; open and type are `egress` | private, untrusted |
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
@@ -604,7 +605,7 @@ jarvis/
                               COM thread, volume, display (brightness, lock, screenshot), clipboard,
                               UI Automation (uia.py), synthetic keys and clicks (sendinput.py),
                               the notification center (notifications.py), Startup shortcut (startup.py),
-                              media sessions and media keys (media.py)
+                              media sessions and media keys (media.py), Windows OCR (ocr.py)
   tests/
     unit/                     tools with mocks, policy, router, registry, bridge
     integration/              sqlite, real Ollama (marked, optional)

@@ -9,13 +9,13 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 to 14 (dictation and media; mail and calendar; MCP servers; faster speech and routing; recall and the briefing), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
+> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 to 15 (dictation and media; mail and calendar; MCP servers; faster speech and routing; recall and the briefing; screen reading), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
 | | Examples |
 |---|---|
-| Apps and windows | "open VS Code", "switch to WhatsApp", "close the calculator", "type hello world in Notepad", "click Save in Paint", "what does Notepad say" |
+| Apps and windows | "open VS Code", "switch to WhatsApp", "close the calculator", "type hello world in Notepad", "click Save in Paint", "what does Notepad say", "what's on my screen" (OCR where apps show no text) |
 | Files and projects | "find my resume", "read the README in Downloads", "open this file in VS Code", "show the logs of the postgres container" |
 | Web | "search YouTube for lofi music", "look up Alan Turing on Wikipedia", "search the web for the latest Python release", "summarize https://..." |
 | Data | "what's the weather tomorrow in Bangalore", "price of Reliance shares", "bitcoin in rupees", "convert 100 dollars to rupees" |
@@ -94,7 +94,7 @@ Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the we
 
 ## Quality
 
-About 750 tests run in CI on Windows, including 53 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 93% of 87 benchmark commands ([benchmark](docs/benchmarks/phase14.md)).
+About 765 tests run in CI on Windows, including 54 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 93% of 89 benchmark commands ([benchmark](docs/benchmarks/phase15.md)).
 
 ## Documentation
 

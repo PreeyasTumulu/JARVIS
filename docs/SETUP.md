@@ -410,6 +410,10 @@ home = "Hyderabad"
 
 Then: "good morning" or "brief me" (weather, today's calendar and reminders, unread email and messages: counts and senders only), "what did I ask about Docker last week", "when did I check the weather". The first command each morning ends with an offer of the briefing; turn it off with `[briefing] offer = false`, or choose the parts with `parts = ["weather", "calendar"]`.
 
+## 5o. Screen reading (Phase 15)
+
+Nothing to set up: Windows OCR and its English language data come with Windows (check with `uv run python -c "from winrt.windows.media.ocr import OcrEngine; print([l.language_tag for l in OcrEngine.available_recognizer_languages])"`). Then: "what does this game window say" (read with OCR when the app shows no text to Windows), "click Save draft in ..." (asks first when it can only be found by reading the screen), "what's on my screen". Turn the fallbacks off with `[ui] ocr_fallback = false`.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

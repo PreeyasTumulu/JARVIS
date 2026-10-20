@@ -235,6 +235,10 @@ openWakeWord's "hey jarvis" model scores synthetic voices near 1.0 and real ones
 
 Every command and Jarvis's answer has been kept in `jarvis.db` since Phase 1; recall makes it searchable by meaning, and answers can include private content (a message read out, an email summary). It never leaves the laptop and never reaches a cloud model, but anyone with your Windows account can read the database. There is no automatic expiry yet; deleting `%LOCALAPPDATA%\Jarvis\jarvis.db` clears everything (contacts, memories, and history together).
 
+### R51. Reading and clicking by OCR
+
+OCR reads what is visible, so a window must be in front (Jarvis brings it forward) and nothing may cover it; text in images, games, and remote desktops is read as it looks, mistakes included. A click found by OCR is a click at a position: a pop-up, a scroll, or a window that moved between the confirmation and the click could put something else there. Jarvis asks every time and reads the window again just before clicking, but it cannot see what a button does. Anything on the screen can be read, including other apps' private content; it stays local and never reaches a cloud model.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

@@ -400,6 +400,12 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** you chose weather, calendar and reminders, and unread email and messages, offered once a day. Counts and senders keep a briefing short when spoken and keep message text out of a room you may not be alone in.
 - **Cost:** the offer adds one sentence to the first reply of the morning. Weather needs `weather.home` set; mail and calendar need their Phase 11 setup.
 
+### ADR-067: Screen reading with Windows OCR
+
+- **Decision:** `platform/ocr.py` captures a window (its DWM bounds) or every screen with mss and has Windows recognize the text through `Windows.Media.Ocr` (pywinrt, the language packs Windows already has; English here), with each word's position in physical pixels. `read_window_text` falls back to it by itself when UI Automation finds fewer than `ui.ocr_min_chars` (40) characters, bringing the window to the front first because whatever covers it is what gets read. `click` falls back to finding the text on screen when UI Automation has no such control: the confirmation always asks ("Click "Save draft" in ... (found by reading the screen)"), and after the yes Jarvis reads the window again and clicks only if the text is still there. `read_screen()` reads every screen for "what's on my screen". All of it is private and untrusted, with secret-looking values hidden; `ui.ocr_fallback = false` turns the fallbacks off.
+- **Why:** you chose the automatic fallback, OCR clicks that always ask, and the window or the whole screen when asked. Windows OCR is already on the laptop, needs no model or download beyond small pip packages, and reads a window in about 0.4 seconds and the whole screen in about 0.3.
+- **Cost:** reading a window this way brings it to the front. OCR mistakes small or stylized text ("12" came back as "1 2"), cannot read text covered by another window, and a click by position can land on something that moved; that is why OCR clicks always ask and look again first.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

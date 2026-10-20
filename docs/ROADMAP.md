@@ -21,6 +21,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 12 | MCP servers (GitHub first) | Built on `phase/12-mcp` (stacked on Phase 11), waiting for your test | v1.3.0 |
 | 13 | Faster and smaller | Built on `phase/13-faster` (stacked on Phase 12), waiting for your test | v1.4.0 |
 | 14 | Memory by meaning, morning briefing | Built on `phase/14-memory-briefing` (stacked on Phase 13), waiting for your test | v1.5.0 |
+| 15 | Screen reading (Windows OCR) | Built on `phase/15-screen-reading` (stacked on Phase 14), waiting for your test | v1.6.0 |
 
 ## How each phase runs
 
@@ -686,6 +687,44 @@ uv run jarvis ask "what did I ask about the weather earlier"
 
 **Exit criteria:** "good morning" gives a useful briefing; past commands and memories are found by meaning.
 
+## Phase 15: Screen reading
+
+**Scope:** read and click in apps that show Windows nothing (games, some Electron apps, images, remote desktop), and read the whole screen.
+
+**Decisions (asked 2026-10-20, all as recommended):** OCR as an automatic fallback; OCR clicks always ask first; the window, or the whole screen when asked (ADR-067).
+
+**Built**
+
+- `platform/ocr.py`: a window's pixels (its DWM bounds) or every screen captured with mss and read by Windows' own OCR (`Windows.Media.Ocr`), each word with its position; fuzzy finding of a phrase with a rival check.
+- `read_window_text` falls back to OCR when UI Automation sees fewer than 40 characters, bringing the window forward first.
+- `click` falls back to clicking the centre of the text on screen, always after a yes, finding it again just before the click.
+- `read_screen()` for "what's on my screen". Private and untrusted, secrets hidden.
+- `[ui] ocr_fallback` and `ocr_min_chars`; 11 OCR tests, 1 new scenario (54 in all), 2 new benchmark commands (89).
+
+**Test commands**
+
+```powershell
+uv run pytest                                   # about 765 tests
+uv run jarvis ask "what's on my screen"
+uv run jarvis ask "what does <a game or canvas app> say"
+uv run jarvis ask "click <a button's text> in <that app>"   # asks first, then clicks
+```
+
+**Verified during the build (live, on a scratch window that shows UI Automation nothing):** `read_window_text` fell back to OCR and read every line; "click save draft" asked first and the click landed at the exact centre of the button; reading the whole screen took 0.33 s (60 lines, not printed). Windows OCR languages here: English (GB and US).
+
+**Measured:** Hermes 3 8B 93% of 89 commands, median 2.7 s, both screen commands right ([phase15.md](benchmarks/phase15.md)).
+
+**Found and fixed during the build**
+
+| Found | Fix |
+|---|---|
+| "What's on my screen" also offered the calendar ("what's on") | the calendar phrase no longer matches the screen |
+| OCR read "12" as "1 2" | phrases are matched fuzzily and by words, so near misses still match |
+
+**Not done, needs you:** try it on a real app that shows no text (a game launcher, a canvas app, a remote desktop window).
+
+**Exit criteria:** apps that hide their text can be read and, with your yes, clicked.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -697,4 +736,4 @@ Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each wou
 | 12 | MCP client | built (above) |
 | 13 | Faster and smaller | built (above) |
 | 14 | Memory by meaning | built (above) |
-| 15 | Screen reading | Windows OCR where UI Automation sees nothing |
+| 15 | Screen reading | built (above) |

@@ -77,6 +77,15 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | The phone never rings | `bridge.phone` is off by default. For ntfy set `phone.ntfy_topic` and install the ntfy app subscribed to it; permissions also need `NTFY_TOKEN`. For Twilio see SETUP.md 5i. |
 | Turn it off | `uv run jarvis claude-hook uninstall`, or `[bridge] enabled = false`. |
 
+## Screen reading
+
+| Symptom | Check |
+|---|---|
+| "Windows has no OCR language installed" | Settings, Time and language, Language: add English (or your language) with its optical character recognition option. |
+| It read the wrong text | OCR reads what is visible: another window covered it, or the text is tiny or stylized. Jarvis brings the window forward first; make it larger. |
+| It asks before every click in one app | That app shows no buttons to Windows, so clicks are found by reading the screen, and those always ask (ADR-067). |
+| "appears more than once" | Say which one ("the Delete at the bottom") or use the app's own shortcut with press_keys. |
+
 ## Recall and the briefing
 
 | Symptom | Check |

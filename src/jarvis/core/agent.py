@@ -35,6 +35,7 @@ from jarvis.llm.types import ChatModel, LLMError, ToolCall
 from jarvis.services import Services
 from jarvis.storage.repositories import HistoryLog
 from jarvis.tools.base import ContextFlags, Sensitivity, ToolContext
+from jarvis.tools.mcp.tools import register_all
 from jarvis.tools.registry import Registry
 
 log = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ class Agent:
         self._task: asyncio.Task[Any] | None = None
         self._task_loop: asyncio.AbstractEventLoop | None = None
         self._turn_lock = asyncio.Lock()  # one turn at a time, whichever channel started it
+        self._mcp_ready = False
 
     @property
     def messages(self) -> list[dict[str, Any]]:
@@ -120,6 +122,25 @@ class Agent:
         loop.call_soon_threadsafe(task.cancel)
         return True
 
+    async def prepare_tools(self) -> list[str]:
+        """Connect the MCP servers once and register their listed tools (ADR-059).
+
+        `jarvis serve` calls this at startup; otherwise the first turn does. A server that
+        fails is skipped, so this never raises.
+        """
+        if self._mcp_ready:
+            return []
+        self._mcp_ready = True
+        hub = self._services.mcp
+        if not hub.configured():
+            return []
+        try:
+            remotes = await hub.start()
+        except Exception:
+            log.exception("MCP servers could not start")
+            return []
+        return register_all(self._registry, hub, remotes, hub.configured())
+
     async def run_turn(
         self, text: str, source: str = "cli", timings: dict[str, int] | None = None
     ) -> TurnResult:
@@ -129,6 +150,7 @@ class Agent:
         arrives while another runs waits for it (callers cancel the old one first if they want).
         """
         async with self._turn_lock:
+            await self.prepare_tools()
             return await self._run_turn(text, source, timings)
 
     async def _run_turn(self, text: str, source: str, timings: dict[str, int] | None) -> TurnResult:

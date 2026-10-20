@@ -7,13 +7,14 @@ is launched, sent, or fetched. See the header of scenarios.yaml for the format.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from jarvis.config import load_settings
+from jarvis.config import McpServerSettings, McpSettings, load_settings
 from jarvis.core.agent import TurnResult
 from jarvis.core.executor import Decision
 from jarvis.llm.types import LLMReply
@@ -22,6 +23,7 @@ from jarvis.platform.media import MediaState
 from jarvis.platform.uia import Control
 from jarvis.tools.apps import docker
 from jarvis.tools.browser.session import PageElement
+from jarvis.tools.mcp.hub import McpHub
 from tests.conftest import (
     FakeBrowser,
     FakeChannel,
@@ -41,6 +43,7 @@ SCENARIOS: list[dict[str, Any]] = yaml.safe_load(
     (Path(__file__).with_name("scenarios.yaml")).read_text(encoding="utf-8")
 )
 MOM = "+919876543210"
+NOTES_SERVER = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_notes_server.py"
 SECRET = "MERGER-SECRET-42"
 CALENDAR_FEED = (
     b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
@@ -181,6 +184,18 @@ class World:
         for name in scenario.get("setup") or []:
             if name == "contacts":
                 h.app.services.contacts.add("Amma", MOM, aliases=["mom"])
+            elif name == "mcp_notes":
+                notes = McpServerSettings(
+                    command=sys.executable,
+                    args=[str(NOTES_SERVER)],
+                    tools=["list_notes", "add_note", "delete_notes"],
+                    trusted=True,
+                    keywords=["note", "notes"],
+                    label="Notes",
+                )
+                h.app.services.mcp = McpHub(
+                    McpSettings(servers={"notes": notes}), log_dir=h.files_root
+                )
             elif name == "memories":
                 h.app.services.memory.add("My manager is Ravi.")
             elif name == "files":
@@ -235,8 +250,11 @@ async def run(
             h.llm._script += script_of(step.get("script"), h.files_root)  # type: ignore[attr-defined]
     world.after_app(scenario, h)
     result: TurnResult | None = None
-    for step in steps:
-        result = await h.app.agent.run_turn(step["say"])
+    try:
+        for step in steps:
+            result = await h.app.agent.run_turn(step["say"])
+    finally:
+        await h.app.services.mcp.aclose()
     assert result is not None
     return h, result
 

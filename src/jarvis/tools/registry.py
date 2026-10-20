@@ -37,6 +37,8 @@ class Tool:
     fn: ToolFn
     prepare_fn: PrepareFn | None = None
     egress: bool = False  # sends a request to an address the model chooses (see policy.py)
+    parameters: dict[str, Any] | None = None  # a JSON schema given as is (MCP tools)
+    route: re.Pattern[str] | None = None  # words that offer this tool (MCP servers' keywords)
 
     def preparer(self, fn: PrepareFn) -> PrepareFn:
         """Register a side-effect-free step that resolves and risk-rates arguments."""
@@ -44,7 +46,11 @@ class Tool:
         return fn
 
     def schema(self) -> dict[str, Any]:
-        parameters = _clean_schema(self.args_model.model_json_schema())
+        parameters = (
+            self.parameters
+            if self.parameters is not None
+            else _clean_schema(self.args_model.model_json_schema())
+        )
         return {
             "type": "function",
             "function": {

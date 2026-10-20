@@ -1,5 +1,5 @@
 """Command line entry point: chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,
-notifications, mail, calendar, audit, version."""
+notifications, mail, calendar, mcp, audit, version."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ from jarvis.core.agent import TurnStatus
 from jarvis.logging_setup import setup_logging
 from jarvis.storage.db import Database
 from jarvis.storage.repositories import AuditLog
+from jarvis.tools.mcp.hub import McpHub, RemoteTool
 from jarvis.voice.tts.base import TTSEngine
 
 
@@ -98,6 +99,16 @@ def build_parser() -> argparse.ArgumentParser:
     mail.add_argument("action", choices=["test"], help="sign in and count unread email")
     calendar = sub.add_parser("calendar", help="check that Jarvis can read your calendar")
     calendar.add_argument("action", choices=["test"], help="download it and count events")
+    mcp = sub.add_parser("mcp", help="MCP servers: list them, see their tools, test one")
+    mcp.add_argument(
+        "action",
+        nargs="?",
+        choices=["list", "tools", "test"],
+        default="list",
+        help="list servers (the default), tools: everything a server offers, test: connect "
+        "and show what Jarvis exposes",
+    )
+    mcp.add_argument("server", nargs="?", help="the server name, for tools and test")
 
     hook = sub.add_parser(
         "claude-hook", help="answer Claude Code's questions through Jarvis (its hooks run this)"
@@ -162,6 +173,8 @@ def main(argv: list[str] | None = None) -> int:
         return test_mail(settings, console)
     if args.command == "calendar":
         return test_calendar(settings, console)
+    if args.command == "mcp":
+        return manage_mcp(settings, args.action, args.server, console)
     if args.command == "serve":
         from jarvis.server.serve import run_serve
 
@@ -347,6 +360,89 @@ def test_mail(settings: Settings, console: Console) -> int:
         'Now ask Jarvis: "any new email?"'
     )
     return 0
+
+
+def manage_mcp(settings: Settings, action: str, server: str | None, console: Console) -> int:
+    """List servers, show a server's tools, or connect and show what Jarvis exposes."""
+    from jarvis.tools.mcp.hub import McpError, McpHub, missing_vars
+    from jarvis.tools.mcp.tools import risk_for, tool_name
+
+    hub = McpHub(settings.mcp, log_dir=settings.data_dir / "logs")
+    servers = hub.configured()
+    if action == "list":
+        if not servers:
+            console.print("No MCP servers are enabled (see [mcp.servers] in config/jarvis.toml).")
+            return 0
+        table = Table(title="MCP servers")
+        for column in ("name", "how", "tools listed", "trusted", "status"):
+            table.add_column(column)
+        for name, cfg in servers.items():
+            missing = missing_vars(cfg)
+            how = cfg.url or cfg.command
+            status = f"needs {', '.join(missing)} in .env" if missing else "ready to start"
+            table.add_row(
+                name, escape(how), str(len(cfg.tools)), "yes" if cfg.trusted else "no", status
+            )
+        console.print(table)
+        return 0
+    if not server or server not in servers:
+        console.print(
+            f"[red]Name an enabled server: {', '.join(servers) or 'none configured'}.[/red]"
+        )
+        return 2
+    cfg = servers[server]
+    missing = missing_vars(cfg)
+    if missing:
+        console.print(f"[red]{escape(server)} needs {', '.join(missing)} in .env first.[/red]")
+        return 1
+    try:
+        with console.status(f"Starting {server}..."):
+            if action == "tools":
+                found = asyncio.run(hub.offered(server))
+            else:
+                found = asyncio.run(_mcp_exposed(hub, server))
+    except McpError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return 1
+    if action == "test" and not found:
+        console.print(f"[red]None of the tools listed for {escape(server)} exist on it.[/red]")
+        return 1
+    title = f"{server}: {len(found)} tools" + (
+        " offered" if action == "tools" else " Jarvis exposes"
+    )
+    table = Table(title=title)
+    for column in (
+        "Jarvis name" if action == "test" else "tool",
+        "read-only",
+        "asks first",
+        "description",
+    ):
+        table.add_column(column)
+    for remote in found:
+        listed = remote.name in cfg.tools or cfg.tools == ["*"]
+        asks = risk_for(remote, cfg).value if listed else "not exposed"
+        shown = tool_name(server, remote.name) if action == "test" else remote.name
+        table.add_row(
+            escape(shown),
+            "yes" if remote.read_only else "no",
+            asks,
+            escape(remote.description.splitlines()[0][:70]),
+        )
+    console.print(table)
+    return 0
+
+
+async def _mcp_exposed(hub: McpHub, server: str) -> list[RemoteTool]:
+    from jarvis.tools.mcp.hub import McpError
+
+    try:
+        tools = [tool for tool in await hub.start() if tool.server == server]
+        entry = hub.servers.get(server)
+        if not tools and entry is not None and entry.error:
+            raise McpError(f"{server} failed: {entry.error}")
+        return tools
+    finally:
+        await hub.aclose()
 
 
 def test_calendar(settings: Settings, console: Console) -> int:

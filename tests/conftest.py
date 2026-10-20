@@ -34,6 +34,7 @@ from jarvis.tools.data.market import Listing, Price
 from jarvis.tools.files.guard import FileGuard
 from jarvis.tools.files.index import FileIndex
 from jarvis.tools.mail.mailbox import Mailbox, MailError, MailHeader, MailMessage, preview
+from jarvis.tools.mcp.hub import McpHub
 from jarvis.tools.memory import MemoryStore
 from jarvis.tools.messaging.contacts import ContactBook
 from jarvis.tools.messaging.whatsapp import SendStatus, Sent
@@ -680,6 +681,7 @@ def make_app(
                 http=httpx.AsyncClient(transport=httpx.MockTransport(web.handle)),
                 urls=[CALENDAR_URL],
             ),
+            mcp=McpHub(cfg.mcp.model_copy(update={"servers": {}})),
         )
         router = Router(cfg, db, clients=cloud or {}, clock=lambda: FakeNotificationCenter.NOW)
         app = build_app(

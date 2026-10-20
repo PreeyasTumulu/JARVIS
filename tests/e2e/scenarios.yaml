@@ -340,6 +340,24 @@
     - text: You have one event today, Standup.
   expect: {decisions: [auto], ok: [true], cloud: false}
 
+# Phase 12: MCP servers (the notes test server over stdio)
+- name: a trusted server's read-only tool runs without asking
+  say: what's in my notes?
+  setup: [mcp_notes]
+  script:
+    - call: {notes_list_notes: {}}
+    - text: You have one note, buy milk.
+  expect: {decisions: [auto], ok: [true], prompts: 0}
+
+- name: an MCP tool that changes things asks first, and no means no
+  say: delete all my notes
+  setup: [mcp_notes]
+  confirm: no
+  script:
+    - call: {notes_delete_notes: {}}
+    - text: Okay, I left your notes alone.
+  expect: {decisions: [denied], prompts: 1}
+
 # Phase 10: media
 - name: an exact media phrase skips the model
   say: pause the music

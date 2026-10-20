@@ -6,6 +6,8 @@ correct assistant would do. Nothing is executed. Results are written as a Markdo
 Usage:
     uv run python scripts/benchmark_tools.py
     uv run python scripts/benchmark_tools.py --models jarvis-hermes3 jarvis-hermes3-3b
+    uv run python scripts/benchmark_tools.py --mcp   # also the MCP servers' tools (their
+                                                     # secrets must be set; only listed)
 """
 
 from __future__ import annotations
@@ -25,6 +27,8 @@ from jarvis.core.tool_routing import select_tools
 from jarvis.llm.client import LLMClient
 from jarvis.llm.types import LLMError
 from jarvis.tools.catalog import build_registry
+from jarvis.tools.mcp.hub import McpHub
+from jarvis.tools.mcp.tools import register_all
 
 ROOT = Path(__file__).resolve().parents[1]
 NO_TOOL = "(no tool)"
@@ -134,6 +138,23 @@ CASES = [
     case("am I free on friday", "calendar_events", arg=("day", "friday")),
 ]
 
+# Phase 12: GitHub through its MCP server (run with --mcp). For "my repo" a first call to
+# github_get_me (to learn the user's account) is also right.
+MCP_CASES = [
+    case("any open issues on my JARVIS repo on github", "github_list_issues",
+         "github_search_issues", "github_get_me"),
+    case("show the pull requests on PreeyasTumulu/JARVIS", "github_list_pull_requests",
+         arg=("repo", "jarvis")),
+    case("who am I on github", "github_get_me"),
+    case("open a github issue on PreeyasTumulu/JARVIS titled wake word misses quiet voices",
+         "github_issue_write", arg=("title", "wake word")),
+    case("what were the last commits on PreeyasTumulu/JARVIS", "github_list_commits"),
+    case("find github repos about wake word detection", "github_search_repositories"),
+    case("read issue 12 on PreeyasTumulu/JARVIS", "github_issue_read"),
+    case("comment on issue 12 in PreeyasTumulu/JARVIS that it is fixed",
+         "github_add_issue_comment", arg=("body", "fixed")),
+]  # fmt: skip
+
 
 @dataclass
 class Row:
@@ -190,12 +211,18 @@ def unload_all_models() -> None:
         pass
 
 
-async def run_model(model: str, routing: str) -> Report:
+async def run_model(model: str, routing: str, mcp: bool = False) -> Report:
     unload_all_models()
     settings = load_settings()
     provider = settings.llm.active().model_copy(update={"model": model})
     client = LLMClient(provider)
     registry = build_registry()
+    cases = list(CASES)
+    hub = McpHub(settings.mcp, log_dir=settings.data_dir / "logs")
+    if mcp:
+        added = register_all(registry, hub, await hub.start(), hub.configured())
+        cases += [c for c in MCP_CASES if c.expected & set(added)]
+        print(f"  MCP tools: {len(added)}")
     tools = registry.schemas()
     system = {"role": "system", "content": system_prompt()}
 
@@ -203,7 +230,7 @@ async def run_model(model: str, routing: str) -> Report:
     await client.complete([system, {"role": "user", "content": "hello"}], tools)  # loads model
     report = Report(model, int((time.perf_counter() - started) * 1000), ollama_placement(model))
 
-    for item in CASES:
+    for item in cases:
         messages = [system, {"role": "user", "content": item.text}]
         offered = (
             [tool.schema() for tool in select_tools(item.text, registry)]
@@ -232,6 +259,7 @@ async def run_model(model: str, routing: str) -> Report:
         mark = "ok " if correct else "BAD"
         print(f"  {mark} {reply.latency_ms:>6} ms  {item.text!r} -> {chosen} {args}")
     await client.aclose()
+    await hub.aclose()
     return report
 
 
@@ -245,7 +273,8 @@ def render(reports: list[Report], routing: str) -> str:
     lines = [
         f"# Model benchmark (tool routing: {routing})",
         "",
-        f"Run on {datetime.now():%Y-%m-%d %H:%M}, {gpu}. Each of {len(CASES)} commands is "
+        f"Run on {datetime.now():%Y-%m-%d %H:%M}, {gpu}. "
+        f"Each of {len(reports[0].rows)} commands is "
         f"sent once with the Jarvis system prompt and {offered}. "
         "A case is correct "
         "if the first tool call (or no call) matches what a careful assistant would do, "
@@ -300,12 +329,13 @@ async def main() -> None:
     )
     parser.add_argument("--out", type=Path, default=ROOT / "docs" / "benchmarks" / "latest.md")
     parser.add_argument("--routing", choices=["keywords", "all"], default="keywords")
+    parser.add_argument("--mcp", action="store_true", help="add the MCP servers' tools")
     args = parser.parse_args()
 
     reports = []
     for model in args.models:
         print(f"== {model}")
-        reports.append(await run_model(model, args.routing))
+        reports.append(await run_model(model, args.routing, args.mcp))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render(reports, args.routing), encoding="utf-8")
     print(f"\nWrote {args.out}")

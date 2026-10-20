@@ -235,6 +235,43 @@ signature = ""               # added under every reply
 cache_s = 300                # download it at most every 5 minutes
 max_events = 10
 
+[mcp]
+# Tools from MCP servers (ADR-059). Each server's tools ask first unless the server marks them
+# read-only and you set trusted = true. Only the tools listed in `tools` reach the model;
+# `uv run jarvis mcp tools <server>` shows everything a server offers.
+enabled = true
+connect_timeout_s = 60       # the first start of a Docker image is slow
+call_timeout_s = 30
+
+[mcp.servers.github]
+# GitHub's official server in Docker. Starts once GITHUB_PERSONAL_ACCESS_TOKEN is in .env.
+label = "GitHub"
+command = "docker"
+args = ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "-e", "GITHUB_TOOLSETS",
+        "ghcr.io/github/github-mcp-server:v2.0.2"]
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "$GITHUB_PERSONAL_ACCESS_TOKEN", GITHUB_TOOLSETS = "context,repos,issues,pull_requests" }
+trusted = true               # GitHub's own read-only labels are believed: reading runs, writing asks
+keywords = ["github", "git hub", "issue", "issues", "pull request", "pull requests", "pr", "prs",
+            "repo", "repos", "repository", "repositories", "commit", "commits"]
+tools = [
+  "get_me", "list_issues", "issue_read", "search_issues", "list_pull_requests",
+  "pull_request_read", "search_repositories", "list_commits",
+  "issue_write", "add_issue_comment",
+]
+
+[mcp.servers.github.params]
+# The parameters the model sees for each tool (required ones always). GitHub's full schemas
+# made each request 3 to 5 times slower on the 8B model.
+list_issues = ["owner", "repo", "state", "labels"]
+issue_read = ["owner", "repo", "issue_number", "method"]
+search_issues = ["query", "owner", "repo"]
+list_pull_requests = ["owner", "repo", "state"]
+pull_request_read = ["owner", "repo", "pullNumber", "method"]
+search_repositories = ["query"]
+list_commits = ["owner", "repo", "sha", "author"]
+issue_write = ["method", "owner", "repo", "issue_number", "title", "body", "state", "labels"]
+add_issue_comment = ["owner", "repo", "issue_number", "body"]
+
 [dictation]
 # Hold the hotkey, speak, release: the text appears where the cursor is, in any app (ADR-054).
 enabled = true

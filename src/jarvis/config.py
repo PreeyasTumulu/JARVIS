@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from jarvis.tools.base import Risk
+from jarvis.tools.base import Risk, Sensitivity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -246,6 +246,43 @@ class VoiceSettings(_Section):
     earcons: bool = True
 
 
+class McpServerSettings(_Section):
+    """One MCP server: a command over stdio or a URL over Streamable HTTP (ADR-059).
+
+    Secrets are written as $NAME and come from .env; a server whose secrets are not set is
+    skipped. Only the tools listed in `tools` reach the model ("*" means every tool).
+    """
+
+    enabled: bool = True
+    command: str = ""
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    cwd: str = ""
+    url: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+    tools: list[str] = Field(default_factory=list)
+    trusted: bool = False  # tools the server marks read-only may run without asking
+    keywords: list[str] = Field(default_factory=list)  # words that offer this server's tools
+    risk: dict[str, Risk] = Field(default_factory=dict)  # per tool; can only raise the risk
+    # per tool: the parameters the model sees (required ones always); unlisted tools show all
+    params: dict[str, list[str]] = Field(default_factory=dict)
+    sensitivity: Sensitivity = Sensitivity.PRIVATE
+    label: str = ""  # how Jarvis names the server aloud, e.g. "GitHub"
+
+    @model_validator(mode="after")
+    def _one_transport(self) -> McpServerSettings:
+        if bool(self.command) == bool(self.url):
+            raise ValueError("an MCP server needs exactly one of command or url")
+        return self
+
+
+class McpSettings(_Section):
+    enabled: bool = True
+    connect_timeout_s: float = Field(default=60, gt=0)  # Docker may need to start the image
+    call_timeout_s: float = Field(default=30, gt=0)
+    servers: dict[str, McpServerSettings] = Field(default_factory=dict)
+
+
 class MailSettings(_Section):
     """Your mailbox over IMAP and SMTP with an app password in .env (ADR-057)."""
 
@@ -304,6 +341,7 @@ class Settings(_Section):
     notifications: NotificationsSettings = NotificationsSettings()
     mail: MailSettings = MailSettings()
     calendar: CalendarSettings = CalendarSettings()
+    mcp: McpSettings = McpSettings()
     server: ServerSettings = ServerSettings()
     bridge: BridgeSettings = BridgeSettings()
     phone: PhoneSettings = PhoneSettings()

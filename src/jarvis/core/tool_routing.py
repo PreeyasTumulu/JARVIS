@@ -184,12 +184,16 @@ def matched_groups(text: str) -> list[str]:
 
 
 def select_tools(text: str, registry: Registry) -> list[Tool]:
+    """Tools for a request. MCP tools are offered only when their server's keywords match,
+    never as part of "everything", so a big server cannot crowd out the built-in tools."""
     lowered = text.casefold()
+    routed = [tool for tool in registry if tool.route is not None]
+    keyed = [tool for tool in routed if tool.route and tool.route.search(lowered)]
     matched = [group for group in GROUPS.values() if group.pattern.search(lowered)]
     specific = [group for group in matched if not group.fallback]
-    chosen = specific or matched
-    if not chosen:
-        return list(registry)
+    chosen = specific or ([] if keyed else matched)
+    if not chosen and not keyed:
+        return [tool for tool in registry if tool.route is None]
     wanted = {name for group in chosen for name in group.tools}
     wanted.update(ALWAYS)
-    return [tool for tool in registry if tool.name in wanted]
+    return [tool for tool in registry if tool.name in wanted and tool.route is None] + keyed

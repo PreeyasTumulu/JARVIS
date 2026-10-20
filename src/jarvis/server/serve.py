@@ -154,6 +154,8 @@ async def _serve(
         voice_ready = await voice.start() if voice is not None else False
         session = voice.session if voice is not None else None
         await app.start_background(session.announce if session else _speaker(app, console))
+        # MCP servers (Docker) connect while the page loads, not on the first command.
+        background.append(asyncio.create_task(app.agent.prepare_tools(), name="mcp"))
 
         bridge_token = None
         if app.settings.bridge.enabled:

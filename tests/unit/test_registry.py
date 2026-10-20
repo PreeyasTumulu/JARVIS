@@ -148,3 +148,12 @@ def test_the_word_null_for_an_optional_argument_means_none() -> None:
     args = type_text.validate({"app": "notepad", "text": "hi", "field": "null"})
     assert args["field"] is None
     assert type_text.validate({"app": "notepad", "text": "None", "field": "x"})["text"] == "None"
+
+
+def test_arguments_wrapped_in_the_call_are_unwrapped() -> None:
+    from jarvis.tools.catalog import build_registry
+
+    reply = build_registry().get("reply_email")
+    assert reply is not None
+    wrapped = {"function": "reply_email", "arguments": {"message": "Ravi", "text": "ok"}}
+    assert reply.validate(wrapped) == {"message": "Ravi", "text": "ok", "reply_all": False}

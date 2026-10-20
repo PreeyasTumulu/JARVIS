@@ -59,9 +59,17 @@ class Tool:
 
         Small models write the word "null" (or "none", or "") for an optional argument they
         mean to leave out; type_text then looked for a field called "null". Optional
-        arguments get a real None instead.
+        arguments get a real None instead. Hermes also sometimes wraps the arguments in the
+        call itself ({"function": "reply_email", "arguments": {...}}); that is unwrapped.
         """
         cleaned = dict(raw)
+        inner = cleaned.get("arguments")
+        if (
+            isinstance(inner, dict)
+            and set(cleaned) <= {"function", "name", "arguments"}
+            and "arguments" not in self.args_model.model_fields
+        ):
+            cleaned = dict(inner)
         for name, field in self.args_model.model_fields.items():
             value = cleaned.get(name)
             if (

@@ -329,3 +329,21 @@ def test_a_wrong_password_is_explained(monkeypatch: pytest.MonkeyPatch) -> None:
     server = ImapSmtpServer(MailSettings(address="me@example.com"), "wrong")
     with pytest.raises(MailError, match="refused the sign-in"):
         server.search(unread_only=True)
+
+
+@pytest.mark.parametrize(
+    ("given", "sent"),
+    [
+        ("reply that I'll send the report tonight", "I'll send the report tonight"),
+        ("Tell him that I'm running late.", "I'm running late."),
+        ("saying: thanks!", "Thanks!"),
+        ("Say hi to everyone for me.", "Say hi to everyone for me."),
+        ("say that the demo moved", "The demo moved"),
+        ("Thanks, see you Friday.", "Thanks, see you Friday."),
+        ("Replying is fine.", "Replying is fine."),
+    ],
+)
+def test_the_instruction_is_not_sent(given: str, sent: str) -> None:
+    from jarvis.tools.mail.tools import reply_text
+
+    assert reply_text(given) == sent

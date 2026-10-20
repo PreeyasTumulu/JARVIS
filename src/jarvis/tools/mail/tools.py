@@ -24,6 +24,17 @@ from jarvis.tools.secrets import redact_secrets
 
 _RE = re.compile(r"^(\s*(re|aw|sv)\s*:\s*)+", re.IGNORECASE)
 CONFIRMED = re.compile(r"^uid:(?P<uid>\S+)$")
+# The model sometimes keeps the instruction in the text: "reply that I'll send it tonight".
+_LEAD_IN = re.compile(
+    r"^((reply|respond|write back|tell (him|her|them))( (to )?(him|her|them))?( that| saying)?"
+    r"|(say|saying)( that\b|(?=:)))[\s,:]+",
+    re.IGNORECASE,
+)
+
+
+def reply_text(text: str) -> str:
+    text = _LEAD_IN.sub("", text.strip()).strip()
+    return text[:1].upper() + text[1:]
 
 
 def _when(header: MailHeader, now: datetime) -> str:
@@ -61,11 +72,12 @@ async def read_mail(
     ctx: ToolContext, sender: str | None = None, unread_only: bool = True
 ) -> ToolResult:
     """Check the user's email inbox: the newest emails with sender, subject, and a short
-    preview, for "any new email", "check my mail", or "emails from Ravi". Does not mark
+    preview, for "any new email", "check my mail", or "emails from my manager". Does not mark
     anything as read. Use read_email to read one in full.
 
     Args:
-        sender: Only emails from this person or company, as the user said it.
+        sender: Only emails from this person or company, when the user names one. Leave it
+            out for "any new email".
         unread_only: false to include emails already read ("my latest emails").
     """
     mailbox = ctx.services.mail
@@ -197,7 +209,7 @@ async def reply_email(
 
 @reply_email.preparer
 async def _prepare_reply_email(ctx: ToolContext, args: dict[str, Any]) -> Prepared:
-    text = str(args["text"]).strip()
+    text = reply_text(str(args["text"]))
     if not text:
         raise ToolError("The reply is empty. Ask the user what to say.")
     limit = ctx.settings.mail.max_reply_chars

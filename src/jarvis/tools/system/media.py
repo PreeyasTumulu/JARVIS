@@ -32,7 +32,8 @@ async def media_control(
     the browser, the Media Player), for "pause the music", "next song", or "resume".
 
     Args:
-        action: play, pause, toggle (play if paused, pause if playing), next, or previous.
+        action: play (also for resume, unpause, continue), pause (also for stop the music),
+            next (skip), previous (go back), or toggle only when the user says play/pause.
     """
     try:
         before = await media.control(action)

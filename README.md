@@ -7,9 +7,9 @@
 
 **A local-first voice assistant for Windows 11 that actually operates your laptop, and never acts without your yes.**
 
-Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, searches sites in your browser, reads your WhatsApp notifications, sends messages, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
+Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications, sends messages, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** v1.0.0 (Phase 9 of 9), waiting for hands-on testing before it is merged to `main`. See the [roadmap](docs/ROADMAP.md).
+> **Status:** v1.0.0 (Phases 4 to 9) plus Phase 10 (dictation and media), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -19,6 +19,8 @@ Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools
 | Files and projects | "find my resume", "read the README in Downloads", "open this file in VS Code", "show the logs of the postgres container" |
 | Web | "search YouTube for lofi music", "look up Alan Turing on Wikipedia", "search the web for the latest Python release", "summarize https://..." |
 | Data | "what's the weather tomorrow in Bangalore", "price of Reliance shares", "bitcoin in rupees", "convert 100 dollars to rupees" |
+| Media | "pause the music", "next song", "resume", "what's playing" (instant, no model needed), in Spotify, YouTube, or any player |
+| Dictation | hold `Ctrl+Alt+D` and speak: the text appears where your cursor is, in any app ("new line", "comma", "full stop" work) |
 | System | "set the volume to 30", "dim the screen", "lock my computer", "take a screenshot", "set a timer for 10 minutes", "remind me to call the bank at 5" |
 | People | "message Mom that I'll be late", "call Mom", "read my notifications", "anything new from Ravi" |
 | Memory | "remember that my manager is Ravi", "who is my manager", "what do you remember about me" |
@@ -51,7 +53,7 @@ flowchart LR
   T[Text: CLI or web page] --> A
   A <--> M[Router: Hermes 3 8B local, free cloud for public questions]
   A --> P[Policy gate: safe, confirm, blocked]
-  P --> R[46 typed tools]
+  P --> R[48 typed tools]
   R --> W[Apps, UI, files, web, Brave, data, WhatsApp, calls, notifications, system]
   A --> E[Events: page, tray, voice, audit log]
   C[Claude Code hooks] --> B[Bridge] --> E
@@ -73,7 +75,7 @@ uv run jarvis setup-voice
 uv run jarvis serve --wake
 ```
 
-Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the weather". `Ctrl+Alt+X` or "stop" cancels. `uv run jarvis startup enable` starts it at every login in the tray. Add contacts with `uv run jarvis contacts add "Amma" "+91 98765 43210" --alias Mom`.
+Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the weather". Hold `Ctrl+Alt+D` to dictate into the app you are typing in. `Ctrl+Alt+X` or "stop" cancels. `uv run jarvis startup enable` starts it at every login in the tray. Add contacts with `uv run jarvis contacts add "Amma" "+91 98765 43210" --alias Mom`.
 
 ## Tech stack
 
@@ -89,7 +91,7 @@ Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the we
 
 ## Quality
 
-About 550 tests run in CI on Windows, including 41 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 91% of 67 benchmark commands ([benchmark](docs/benchmarks/phase9.md)).
+About 625 tests run in CI on Windows, including 44 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 92% of 71 benchmark commands ([benchmark](docs/benchmarks/phase10.md)).
 
 ## Documentation
 

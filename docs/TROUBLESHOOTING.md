@@ -70,6 +70,18 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | The phone never rings | `bridge.phone` is off by default. For ntfy set `phone.ntfy_topic` and install the ntfy app subscribed to it; permissions also need `NTFY_TOKEN`. For Twilio see SETUP.md 5i. |
 | Turn it off | `uv run jarvis claude-hook uninstall`, or `[bridge] enabled = false`. |
 
+## Dictation and media
+
+| Symptom | Check |
+|---|---|
+| Ctrl+Alt+D does nothing | The startup banner says if another app owns the key; pick another under `[dictation] hotkey`. Dictation needs voice running (`jarvis serve`) and the microphone on in the tray. |
+| "A key is still held down" | Let go of Ctrl and Alt within two seconds of releasing D; text typed with Ctrl held would act as shortcuts. |
+| "That window runs as administrator" | Windows blocks typing into administrator windows from a normal app (R39). |
+| The pasted text was your old clipboard | The app read the clipboard late; raise `paste_over_chars` so more text is typed instead. |
+| A word came out wrong | Whisper `small.en` mishears names; there is no correction step. Spell it, or type it. |
+| "Pause" started the music | That app has no Windows media session, so only the play/pause toggle key works (R40). |
+| "What's playing" names the wrong app | Windows picks the current session when several apps play; pause the others. |
+
 ## Data
 
 | Symptom | Check |

@@ -286,6 +286,25 @@ Answer a question with its number ("two") or its name; "other: ..." gives your o
 
 **Calls through your phone.** Pair your Android phone in Phone Link with calls turned on (Bluetooth). Then "call mom" asks "Call Amma (number ending 3210) from your phone?" and, on yes, Phone Link dials. The first time, Windows asks which app opens phone links: pick Phone Link and "Always".
 
+## 5j. Dictation and media (Phase 10)
+
+```powershell
+uv sync --extra voice --extra piper   # adds winrt-windows-media-control (a pip package, no system install)
+uv run jarvis serve --wake
+```
+
+**Dictation.** Click where you want the text (a chat box, an email, VS Code), hold `Ctrl+Alt+D`, speak, and release. Say "comma", "full stop", "question mark", "new line", or "new paragraph" for punctuation and breaks; "um" and "uh" are dropped. Short text is typed; long text is pasted and your clipboard is put back, and it never shows up in Win+V history. A new line is Shift+Enter, so it never sends a chat message. Change the key or the rules under `[dictation]` in `config/local.toml`:
+
+```toml
+[dictation]
+hotkey = "ctrl+alt+d"
+paste_over_chars = 200     # 0 always pastes; a big number always types
+spoken_commands = true
+remove_fillers = true
+```
+
+**Media.** "Pause the music", "resume", "next song", "previous track", "skip this song", and "what's playing" run instantly, without the model. Anything else ("pause the video in Brave", "could you skip to the next track") goes to the model, which uses the same tools. It works with any app that shows up in the Windows volume flyout (Spotify, Media Player, YouTube in Brave); other apps get the keyboard's media keys.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

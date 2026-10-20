@@ -322,10 +322,29 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** "call my mom" with no paid service. Phone Link is on this laptop (`Microsoft.YourPhone`), and `tel:` is how Windows routes calls to it.
 - **Cost:** Phone Link must be paired with calls turned on (Bluetooth). Windows has not chosen an app for `tel:` links yet, so the first call asks which app to use. Not tried live: placing a real call needs you.
 
+### ADR-054: Dictation into any app, with rules and no model
+
+- **Decision:** holding `dictation.hotkey` (Ctrl+Alt+D) records like push-to-talk; on release Whisper transcribes without the command hint, and the text goes to the focused window, never to the agent. Rules, not a model, shape it: spoken "new line", "new paragraph", "comma", "full stop", "question mark", "exclamation mark", "semicolon", and a final "period" become punctuation, fillers ("um", "uh") are dropped, sentences start with a capital, and a trailing space follows end punctuation so the next dictation starts a new word. Up to `paste_over_chars` (200) characters are typed as Unicode keystrokes; longer text is pasted: the clipboard's text is saved, the dictation is put there with the formats that keep it out of Win+V history and the cloud clipboard, Ctrl+V is pressed, and the old text is put back after half a second. An image or files on the clipboard mean typing, because they could not be restored. Line breaks are Shift+Enter, so a "new line" in a chat box never sends the message. Jarvis waits for Ctrl, Alt, Shift, and Windows to be released first, so the text is not read as shortcuts, and refuses a window that runs as administrator (Windows would drop the input).
+- **Why:** you chose typing for short text and pasting for long, and rules only. Typing is paced for slow apps (about 12 ms a character), which is fine for a sentence and too slow for a paragraph. Rules are instant and never change what you meant; a model could.
+- **Cost:** pasting briefly replaces the clipboard, and an app that reads it more than half a second late would paste the old text. Some apps block pasting (a few password and banking fields), and dictation there is typed only when it is short. Whisper `small.en` mishears names and rare words; there is no correction step. Dictated text is not audited, because it is yours and never acted on.
+
+### ADR-055: Media through Windows media sessions, with the media keys as a fallback
+
+- **Decision:** `media_control(action)` (play, pause, toggle, next, previous) drives the session Windows considers current, through `GlobalSystemMediaTransportControlsSessionManager` (pywinrt, `winrt-windows-media-control`): play and pause are separate buttons, and the reply names the app. With no session, "pause" says nothing is playing and presses nothing; the other actions press the keyboard's media key, which is also the fallback when the API fails. `now_playing()` reads the title, artist, and app. `media_control` is public (its result never carries the title); `now_playing` is private, because what you listen to is yours.
+- **Why:** you chose media sessions: they tell playing from paused and can say what is playing. Spotify, the Media Player, and YouTube in Brave and Chrome register sessions.
+- **Cost:** one more pywinrt package (no system install). An app that registers no session gets only the toggle key, and Jarvis cannot tell what it did. When several apps play, Windows picks the current one.
+
+### ADR-056: Exact short commands skip the model
+
+- **Decision:** `core/fast_path.py` maps whole, exact phrases ("pause", "pause the music", "resume", "next song", "skip this song", "previous track", "what's playing", "what song is this") to a tool call, after removing the wake word, "please", and a trailing "now" or "Jarvis". The agent runs that call through the executor (policy gate, audit, events) and says its result; the exchange goes into the history like a model's own call, so the next turn sees it and the privacy flags count it. Bare "stop" keeps meaning stop Jarvis, and bare "next" or "previous" are not matched, because they mean other things.
+- **Why:** you chose exact phrases. A media command answered in about 30 ms instead of 2 to 3 seconds; anything longer still reaches the model, so nothing is lost.
+- **Cost:** a phrase list to maintain. The fast path never sees the conversation, so "pause it" always means the media.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.
 
-1. **Install the Claude Code hooks?** `uv run jarvis claude-hook install` edits `~/.claude/settings.json` for every Claude Code session. Recommended: yes, after `uv run jarvis claude-hook test`.
-2. **Phone escalation:** off, ntfy (free; install the ntfy app and pick a long random topic), or Twilio (paid; needs an account, a number, and the Studio flow). Recommended: ntfy for questions first.
-3. **The Ollama speed settings** offered in Phase 8 (flash attention and a q8_0 KV cache, set as user environment variables). Recommended: yes; it frees VRAM on the 4 GB GPU.
+1. **Phone escalation:** off, ntfy (free; install the ntfy app and pick a long random topic), or Twilio (paid; needs an account, a number, and the Studio flow). Recommended: ntfy for questions first.
+2. **The Ollama speed settings** offered in Phase 8 (flash attention and a q8_0 KV cache, set as user environment variables). Recommended: yes; it frees VRAM on the 4 GB GPU.
+
+The Claude Code hooks (once open decision 1) were installed on 2026-10-20 after `jarvis claude-hook test` passed.

@@ -16,6 +16,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 7 | Notifications (feasibility spike first) | Built on `phase/7-notifications` (stacked on Phase 6), waiting for your test | v0.7.0 |
 | 8 | Model router, memory, tray, startup, packaging | Built on `phase/8-router-tray` (stacked on Phase 7), waiting for your test | v0.8.0 |
 | 9 | Test hardening, docs, demo (plus the Claude Code bridge, Brave, calls) | Built on `phase/9-hardening` (stacked on Phase 8), waiting for your test | v1.0.0 |
+| 10 | Dictation and media | Built on `phase/10-dictation-media` (stacked on Phase 9), waiting for your test | v1.1.0 |
 
 ## How each phase runs
 
@@ -443,13 +444,58 @@ uv run jarvis claude-hook install               # then Claude Code asks you thro
 
 **Exit criteria:** every tool has unit tests with mocks and CI reports coverage; the YAML suite runs scripted in CI and against Ollama locally; the docs and the troubleshooting guide are current; the demo script exists. The recorded demo is yours to make.
 
+## Phase 10: Dictation and media
+
+**Scope:** hold a hotkey to dictate into any app; play, pause, and skip whatever is playing, and say what it is.
+
+**Decisions (asked 2026-10-20, all as recommended):** short dictation typed, long dictation pasted with the clipboard restored (ADR-054); rules only, no model, for cleaning up dictated text (ADR-054); Windows media sessions with the media keys as a fallback (ADR-055); exact short phrases skip the model (ADR-056).
+
+**Built**
+
+- Dictation: hold `Ctrl+Alt+D`, speak, release, and the text appears where the cursor is. Whisper runs without the command hint; "new line", "new paragraph", "comma", "full stop", "question mark", "exclamation mark", "semicolon", and a final "period" become punctuation; "um" and "uh" are dropped. Up to 200 characters are typed; longer text is pasted through the clipboard, which is kept out of Win+V history and put back. A new line is Shift+Enter, so a chat message is never sent by accident. Held modifier keys and administrator windows are refused, out loud. The agent never sees dictated text.
+- `media_control(action)`: play, pause, toggle, next, previous on the current Windows media session (Spotify, Media Player, YouTube in Brave), with the media keys for apps that have none. "Pause" with nothing playing presses nothing.
+- `now_playing()`: the title, artist, and app (private).
+- The fast path: "pause the music", "resume", "next song", "skip this song", "previous track", "what's playing", and similar exact phrases run without the model, through the policy gate and the audit log, in about 30 ms.
+- `[dictation]` settings; 3 new end-to-end scenarios (44 in all), 4 new benchmark commands (71).
+
+**Test commands**
+
+```powershell
+uv sync --extra voice --extra piper
+uv run pytest                                   # about 625 tests, including the scripted e2e suite
+uv run pytest tests/e2e -m llm                  # the 44 scenarios with the real model
+uv run jarvis serve --wake                      # then, in Notepad or a chat box: hold Ctrl+Alt+D and say
+                                                #   "hello comma new line this is a test full stop"
+uv run jarvis ask "pause the music"             # with Spotify or YouTube playing
+uv run jarvis ask "what's playing"
+uv run jarvis ask "could you skip to the next track"
+```
+
+**Verified during the build (live, on this laptop):** dictation into a scratch window, typed (with the Shift+Enter line break) and pasted, with the clipboard identical afterwards; synthetic speech through the real Whisper in dictation mode and the rules; a silent test file in the Media Player paused, resumed, and named through media sessions; "play", "what's playing", "pause the music", and "hey jarvis pause it please" through `jarvis ask` on the fast path (about 33 ms each), and "could you resume the music for me" through Hermes 3 8B (0.9 s); the 44 scenarios with the real model.
+
+**Measured:** Hermes 3 8B picked the right first tool for 92% of 71 commands (91% of 67 in Phase 9), median 2.8 s, all four media commands right after the `media_control` description said that "resume" means play ([phase10.md](benchmarks/phase10.md)). In the same run with every pulled model, `llama3.2:3b` scored 86% at a median of 0.4 s, fully on the GPU: a candidate for Phase 13.
+
+**Found and fixed during the build**
+
+| Found | Fix |
+|---|---|
+| "comma new line" lost the line break | spoken commands no longer swallow a line break next to them |
+| "we should, uh, ship it" kept a stray comma | a filler takes the comma before it |
+| "take the next line of code" became a line break | only "new line" is a command |
+| Text typed while Ctrl was still held would act as shortcuts | Jarvis waits up to two seconds, then refuses and says so |
+| "Resume the song" picked toggle | the tool description says resume means play |
+
+**Not done, needs you:** dictation and media with your own voice and your own player (Spotify or YouTube in Brave).
+
+**Exit criteria:** dictation lands in any normal app with the clipboard intact; media commands work in your player; exact phrases answer instantly.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
 
 | Phase | Name | What |
 |---|---|---|
-| 10 | Dictation and media | hold a hotkey to dictate into any app; play, pause, next through the media keys |
+| 10 | Dictation and media | built (above) |
 | 11 | Calendar and mail | read today's calendar and mail; draft replies that send only after your yes |
 | 12 | MCP client | Home Assistant, GitHub, and other MCP servers, each tool with a risk floor and a sensitivity label |
 | 13 | Faster and smaller | a 4B default model if the benchmark agrees, a fast intent model for routing, Whisper on the GPU |

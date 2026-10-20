@@ -187,6 +187,18 @@ The bridge answers only while `jarvis serve` runs. Whisper can mishear option na
 
 The clipboard, a window, a container log, or an ordinary file can hold a secret. Values with a known shape (API keys from OpenAI, Anthropic, Groq, OpenRouter, GitHub, AWS, Google, Slack; JWTs; private keys) and `NAME=value` lines whose name says key, token, secret, or password are replaced by `[hidden]` before the model or the audit log sees them (`tools/secrets.py`). A secret with no recognizable shape gets through. During live testing a copied `.env` reached the local model's context before this existed; nothing went to the cloud.
 
+### R39. Dictation into other apps
+
+Synthetic input goes to whichever window has the focus when Whisper finishes, so switching windows during the second of transcription types into the new one. Windows drops input to administrator windows (Jarvis says so instead). Pasting borrows the clipboard for half a second: an app that reads it later pastes your old clipboard text instead, and a clipboard manager that ignores the "exclude from history" formats may still record the dictation. Apps that block pasting get only short dictations, typed. A held Ctrl or Alt would turn typed text into shortcuts; Jarvis waits up to two seconds for them to be released and otherwise types nothing and says so. Layout-independent Unicode typing does not work in a few games and remote desktop windows.
+
+### R40. Media sessions
+
+Only apps that register a Windows media session can be told play or pause; for the rest the media key toggles, so "pause" can start playback if the app was already paused. Windows chooses the "current" session when several apps play, which may not be the one you meant. Some apps leave the title empty (Jarvis says it cannot tell what is playing), and browsers report the tab's media title, which can be a page title.
+
+### R41. The fast path
+
+Exact phrases run without the model and without the conversation, so "pause it" right after "set a timer" still pauses the media. The phrase list is small on purpose; a phrase you expected to be instant goes to the model and takes the usual 2 to 3 seconds.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

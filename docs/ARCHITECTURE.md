@@ -138,6 +138,8 @@ async def run_turn(state: AgentState) -> AgentState:
     return state.finish(limit_reached_message(state))
 ```
 
+Before the loop, `core/fast_path.py` checks for an exact short command ("pause the music", "next song", "what's playing"). A match runs its one tool call through the same executor (policy gate, confirmation, audit, events) with no model, and the result's spoken summary is the reply; the call and result enter the history as if the model had made them (Phase 10, ADR-056).
+
 ### 4.3 Limits
 
 | Limit | Default | Why |
@@ -269,6 +271,8 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `fetch_page(url)` | 4 | safe; blocked for local addresses; confirm when private data and outside content are in context (egress) | public, untrusted |
 | `set_volume(level?, change?, mute?)`, `set_brightness(level?, change?)`, `lock_screen()` | 4 | safe | public |
 | `screenshot()` | 4 | safe | private |
+| `media_control(action)` | 10 | safe; play, pause, toggle, next, previous on the current Windows media session, the media keys otherwise | public |
+| `now_playing()` | 10 | safe; the title, artist, and app of the current media session | private |
 | `clipboard_read()` / `clipboard_write(text)` | 4 | safe | private, untrusted / public |
 | `set_timer`, `set_reminder`, `list_reminders`, `cancel_reminder(which)` | 4 | safe; cancelling more than one confirms | private |
 | `type_text(app, text, field?)`, `click(app, target)`, `press_keys(app, keys)` | 6 | confirm, or safe inside trusted apps except destructive targets and closing keys; always confirm in messaging apps and terminals; blocked in Registry Editor, consoles, sign-in prompts, password managers, and password fields | public |
@@ -389,6 +393,7 @@ stateDiagram-v2
 - **Capture:** sounddevice at 16 kHz mono in 80 ms frames, callback thread feeding an asyncio queue (`voice/audio.py`). Device names resolve to the MME entry, which accepts 16 kHz directly.
 - **One reader:** `VoiceSession._frame_loop` (`voice/session.py`) routes every frame to the push-to-talk buffer, the endpointer, or the wake word detector, depending on what the session is doing.
 - **Push-to-talk:** hold a hotkey, speak after the beep, release. The microphone is open only while the key is held. Hotkeys use Win32 `RegisterHotKey` on their own thread; releases are detected by polling the key (`platform/hotkeys.py`).
+- **Dictation (Phase 10):** hold `dictation.hotkey` (Ctrl+Alt+D), speak, release. The session records like push-to-talk (`Capture.DICTATION`), Whisper transcribes without the command hint, and `voice/dictation.py` formats the text by rules (spoken punctuation, fillers, capitals) and inserts it in the focused window: typed as Unicode when short, pasted through a borrowed clipboard (kept out of Win+V history, then restored) when long. The agent never sees dictated text; line breaks are Shift+Enter (ADR-054, RISKS.md R39).
 - **Wake word (opt-in, `--wake`):** openWakeWord "hey jarvis" with the ONNX backend (TFLite is not supported on Windows). The microphone stays open in this mode.
 - **Endpointing:** Silero VAD probabilities per frame feed `Endpointer` (`voice/endpoint.py`), which ends the recording after 0.8 s of silence, after 12 s, or if nothing was said within 5 s.
 - **STT:** faster-whisper `small.en`, CPU `int8`, 8 threads, with a short vocabulary hint (app names). Silent or tiny clips are skipped, and Whisper's typical silence hallucinations ("Thank you.") are dropped.
@@ -547,7 +552,7 @@ jarvis/
     tray.py                   the tray icon (pystray) and its menu
     services.py               shared helpers tools use (TTS, app index, search backend)
     config.py
-    core/                     agent loop, executor (gate + confirm + audit), tool routing, events,
+    core/                     agent loop, executor (gate + confirm + audit), tool routing, fast path, events,
                               channel, prompts
     llm/                      OpenAI-compatible client, tool-call text parser, router and privacy guard
     tools/
@@ -569,13 +574,15 @@ jarvis/
       messaging/              contact book and vCard import, send_whatsapp, call_contact, WhatsApp Web and desktop,
                               WhatsApp Web selectors
       notifications/          store and allowlist, watcher (polling), read_notifications
-      system/                 volume, brightness, lock, screenshot, clipboard, timers and reminders
+      system/                 volume, brightness, lock, screenshot, clipboard, timers and reminders,
+                              media (play, pause, next, now playing)
     voice/
       audio.py                microphone stream, player, earcons, device resolution, mic check
       session.py              the voice loop (states, frame routing, turns, confirmations)
       channel.py              VoiceChannel: spoken confirmations and questions
       stt.py, wake.py         faster-whisper; openWakeWord and Silero VAD
       endpoint.py, phrases.py end-of-speech logic; stop words, yes/no, transcript cleanup
+      dictation.py            dictation: text rules, typing or pasting into the focused app
       models.py, runner.py    model downloads; `jarvis voice` and `jarvis setup-voice`
       tts/                    TTS interface, Piper, SAPI, engine factory
     storage/                  sqlite connection, migrations, repositories
@@ -586,7 +593,8 @@ jarvis/
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
                               COM thread, volume, display (brightness, lock, screenshot), clipboard,
                               UI Automation (uia.py), synthetic keys and clicks (sendinput.py),
-                              the notification center (notifications.py), Startup shortcut (startup.py)
+                              the notification center (notifications.py), Startup shortcut (startup.py),
+                              media sessions and media keys (media.py)
   tests/
     unit/                     tools with mocks, policy, router, registry, bridge
     integration/              sqlite, real Ollama (marked, optional)

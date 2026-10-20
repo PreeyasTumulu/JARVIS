@@ -373,6 +373,9 @@ async def _when_ready(
         if voice.wake_enabled:
             talk += ', or say "Hey Jarvis"'
         lines.append(f"{talk}. {escape(cfg.stop_hotkey)} stops.")
+        dictation = runtime.app.settings.dictation
+        if dictation.enabled:
+            lines.append(f"Hold {escape(dictation.hotkey)} to dictate into any app.")
     lines.append("Ctrl+C here quits.")
     console.print("\n".join(lines))
     if open_browser:

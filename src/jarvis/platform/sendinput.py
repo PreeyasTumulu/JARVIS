@@ -145,6 +145,17 @@ def press_combo(modifiers: Sequence[int], key: int) -> None:
     _send(items)
 
 
+def wait_for_keys_released(vks: Sequence[int], timeout_s: float) -> bool:
+    """Wait until none of the keys is physically held, so synthetic text is not read as a
+    shortcut (a held Ctrl turns typed letters into commands). False if they stayed down."""
+    deadline = time.monotonic() + timeout_s
+    while any(user32.GetAsyncKeyState(vk) & 0x8000 for vk in vks):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.02)
+    return True
+
+
 def click_at(x: int, y: int) -> None:
     """Left click at screen coordinates (physical pixels; the process is DPI aware)."""
     user32.SetCursorPos(x, y)

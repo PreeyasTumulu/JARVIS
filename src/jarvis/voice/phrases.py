@@ -68,3 +68,9 @@ def clean_transcript(text: str) -> str:
     if normalize(text) in _HALLUCINATIONS:
         return ""
     return strip_wake_word(text)
+
+
+def clean_dictation(text: str) -> str:
+    """Dictated text keeps everything except the one word Whisper invents for near silence."""
+    text = " ".join(text.split())
+    return "" if normalize(text) == "you" else text

@@ -1,5 +1,8 @@
 """The voice loop: push-to-talk or wake word, speech to text, the agent, and spoken replies.
 
+Dictation shares the microphone and Whisper but not the agent: its hotkey records like
+push-to-talk, and the text goes to the focused app instead of to the model (ADR-054).
+
 Everything runs on the asyncio loop. Hotkeys arrive from their own thread through
 `loop.call_soon_threadsafe(session.on_hotkey, ...)`; blocking model calls (Whisper, openWakeWord,
 Silero) run in worker threads. The microphone has a single reader, `_frame_loop`, which routes
@@ -22,6 +25,7 @@ from jarvis.config import Settings
 from jarvis.core.agent import Agent, TurnStatus
 from jarvis.core.events import EventBus, TranscriptHeard, VoiceStateChanged
 from jarvis.voice.audio import FRAME_MS, Audio
+from jarvis.voice.dictation import DictationError
 from jarvis.voice.endpoint import Endpoint, Endpointer
 from jarvis.voice.phrases import is_stop_command
 from jarvis.voice.stt import Transcript
@@ -52,6 +56,7 @@ class Capture(StrEnum):
     NONE = "none"
     PUSH_TO_TALK = "push_to_talk"
     ENDPOINT = "endpoint"  # after the wake word: record until the speaker pauses
+    DICTATION = "dictation"  # like push-to-talk, but the text is typed into the focused app
 
 
 class AudioIn(Protocol):
@@ -66,7 +71,11 @@ class AudioIn(Protocol):
 
 class SpeechToText(Protocol):
     def load(self) -> None: ...
-    def transcribe(self, audio: Audio) -> Transcript: ...
+    def transcribe(self, audio: Audio, *, dictation: bool = False) -> Transcript: ...
+
+
+class Dictation(Protocol):
+    def insert(self, text: str) -> str: ...  # blocking; "typed", "pasted", or "" for nothing
 
 
 class WakeWord(Protocol):
@@ -98,6 +107,7 @@ class VoiceSession:
         cues: Cues,
         wake: WakeWord | None = None,
         vad: VoiceActivity | None = None,
+        dictation: Dictation | None = None,
     ) -> None:
         if (wake is None) != (vad is None):
             raise ValueError("Wake word mode needs both a wake word detector and a VAD")
@@ -110,6 +120,7 @@ class VoiceSession:
         self._cues = cues
         self._wake = wake
         self._vad = vad
+        self._dictation = dictation
         self._state = VoiceState.IDLE
         self._muted = False
         self._idle = asyncio.Event()
@@ -199,6 +210,8 @@ class VoiceSession:
         """Called on the event loop thread (via call_soon_threadsafe)."""
         if name == "ptt":
             self._spawn(self._ptt_down() if phase == "down" else self._ptt_up())
+        elif name == "dictate":
+            self._spawn(self._dictate_down() if phase == "down" else self._dictate_up())
         elif name == "stop" and phase == "down":
             self._spawn(self.stop())
 
@@ -276,6 +289,61 @@ class VoiceSession:
                 await self._close_mic()
         self._spawn(self._process(audio))
 
+    # Dictation
+
+    async def _dictate_down(self) -> None:
+        if self._muted or self._dictation is None:
+            return
+        async with self._ptt_lock:
+            if self._pending_answer is not None and not self._pending_answer.done():
+                await self._cues.cancelled()  # a question is waiting: answer it, not dictate
+                return
+            if self._state is VoiceState.SPEAKING:
+                await self._tts.stop()
+            if self._capture is not Capture.NONE:
+                self._end_capture()
+            await self._open_mic()
+            await self._cues.listening()
+            self._begin_capture(Capture.DICTATION)
+            await self._set_state(VoiceState.LISTENING, "dictating: release to type")
+
+    async def _dictate_up(self) -> None:
+        async with self._ptt_lock:
+            if self._capture is not Capture.DICTATION:
+                return
+            await asyncio.sleep(FRAME_MS / 1000)  # let the last frame arrive
+            audio = self._end_capture()
+            if not self.wake_enabled:
+                await self._close_mic()
+        self._spawn(self._dictate(audio))
+
+    async def _dictate(self, audio: Audio) -> None:
+        """Transcribe and insert. The agent never sees dictated text, and nothing is spoken
+        unless the text could not be inserted."""
+        assert self._dictation is not None
+        await self._set_state(VoiceState.TRANSCRIBING, "dictation")
+        transcript = await asyncio.to_thread(self._stt.transcribe, audio, dictation=True)
+        text = transcript.text
+        if not text or is_stop_command(text):
+            await self._nothing_heard()
+            return
+        try:
+            how = await asyncio.to_thread(self._dictation.insert, text)
+        except DictationError as exc:
+            await self._set_state(self._rest_state)
+            await self._speak(str(exc))
+            return
+        except Exception:
+            log.exception("Dictation failed")
+            await self._set_state(self._rest_state)
+            await self._speak("I couldn't type that. The details are in the log file.")
+            return
+        log.info(
+            "Dictation: %d characters %s in %d ms", len(text), how or "dropped", transcript.stt_ms
+        )
+        if self._state is VoiceState.TRANSCRIBING:
+            await self._set_state(self._rest_state)
+
     # Microphone routing
 
     async def _open_mic(self) -> None:
@@ -319,7 +387,7 @@ class VoiceSession:
             log.info("Microphone reopened")
 
     async def _route(self, frame: Audio) -> None:
-        if self._capture is Capture.PUSH_TO_TALK:
+        if self._capture in (Capture.PUSH_TO_TALK, Capture.DICTATION):
             self._buffer.append(frame)
         elif self._capture is Capture.ENDPOINT:
             await self._feed_endpointer(frame)

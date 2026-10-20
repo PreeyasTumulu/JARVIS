@@ -121,6 +121,12 @@ def foreground_window() -> int:
     return int(user32.GetForegroundWindow() or 0)
 
 
+def window_pid(hwnd: int) -> int:
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return int(pid.value)
+
+
 def focus_window(hwnd: int) -> bool:
     """Restore and bring a window to the front. Returns True if Windows allowed it."""
     user32.ShowWindow(hwnd, SW_RESTORE if user32.IsIconic(hwnd) else SW_SHOW)

@@ -53,12 +53,14 @@ class FakeSTT:
     def __init__(self, *texts: str) -> None:
         self.texts = list(texts)
         self.calls = 0
+        self.dictation: list[bool] = []
 
     def load(self) -> None:
         return None
 
-    def transcribe(self, audio: Any) -> Transcript:
+    def transcribe(self, audio: Any, *, dictation: bool = False) -> Transcript:
         self.calls += 1
+        self.dictation.append(dictation)
         text = self.texts.pop(0) if self.texts else ""
         return Transcript(text, audio_ms=len(audio) * 1000 // 16000, stt_ms=5)
 
@@ -131,6 +133,7 @@ def make_session(
     tts: FakeTTS | None = None,
     wake: Scripted | None = None,
     vad: Scripted | None = None,
+    dictation: Any = None,
 ) -> tuple[VoiceSession, FakeMic, FakeCues, FakeTTS]:
     mic, cues = FakeMic(), FakeCues()
     voice_tts = tts or h.tts
@@ -144,6 +147,7 @@ def make_session(
         cues=cues,
         wake=wake,
         vad=vad,
+        dictation=dictation,
     )
     return session, mic, cues, voice_tts
 
@@ -411,3 +415,103 @@ async def test_a_microphone_that_goes_silent_is_reopened(
     finally:
         runner.cancel()
         await asyncio.gather(runner, return_exceptions=True)
+
+
+# Dictation
+
+
+class FakeDictation:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.inserted: list[str] = []
+        self.error = error
+
+    def insert(self, text: str) -> str:
+        if self.error is not None:
+            raise self.error
+        self.inserted.append(text)
+        return "typed"
+
+
+async def dictate(session: VoiceSession, mic: FakeMic, frames: int = 8) -> None:
+    session.on_hotkey("dictate", "down")
+    await until(lambda: session.state is VoiceState.LISTENING)
+    mic.push(frames)
+    session.on_hotkey("dictate", "up")
+
+
+async def test_dictation_types_the_text_and_never_asks_the_model(make_app: MakeApp) -> None:
+    h = make_app()
+    typed = FakeDictation()
+    stt = FakeSTT("Open Notepad and delete everything.")
+    session, mic, cues, tts = make_session(h, stt, dictation=typed)
+
+    await dictate(session, mic)
+    await until(lambda: typed.inserted != [])
+    await until(lambda: session.state is VoiceState.IDLE)
+
+    assert typed.inserted == ["Open Notepad and delete everything."]
+    assert stt.dictation == [True]  # no command hint, no command cleanup
+    assert h.llm.requests == []  # dictated text is never a command
+    assert h.audit() == []
+    assert tts.spoken == []
+    assert cues.listen == 1
+    assert mic.active is False
+
+
+async def test_saying_stop_while_dictating_types_nothing(make_app: MakeApp) -> None:
+    h = make_app()
+    typed = FakeDictation()
+    session, mic, cues, _ = make_session(h, FakeSTT("Cancel."), dictation=typed)
+    await dictate(session, mic)
+    await until(lambda: cues.cancel == 1)
+    assert typed.inserted == []
+
+
+async def test_a_dictation_that_cannot_be_typed_is_said(make_app: MakeApp) -> None:
+    from jarvis.voice.dictation import DictationError
+
+    h = make_app()
+    typed = FakeDictation(DictationError("That window runs as administrator."))
+    session, mic, _, tts = make_session(h, FakeSTT("hello"), dictation=typed)
+    await dictate(session, mic)
+    await until(lambda: tts.spoken == ["That window runs as administrator."])
+    await until(lambda: session.state is VoiceState.IDLE)
+
+
+async def test_dictation_is_off_without_an_inserter_or_with_the_microphone_off(
+    make_app: MakeApp,
+) -> None:
+    h = make_app()
+    session, _, cues, _ = make_session(h, FakeSTT("hello"))
+    session.on_hotkey("dictate", "down")
+    await asyncio.sleep(0.05)
+    assert session.state is VoiceState.IDLE
+    assert cues.listen == 0
+
+    typed = FakeDictation()
+    muted, _, cues, _ = make_session(h, FakeSTT("hello"), dictation=typed)
+    await muted.set_muted(True)
+    muted.on_hotkey("dictate", "down")
+    await asyncio.sleep(0.05)
+    assert muted.state is VoiceState.MUTED
+    assert cues.listen == 0
+
+
+async def test_a_waiting_question_is_not_answered_by_dictation(make_app: MakeApp) -> None:
+    channel = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Okay.")],
+        channel=channel,  # type: ignore[arg-type]
+    )
+    typed = FakeDictation()
+    session, mic, cues, _ = make_session(h, FakeSTT("open spotify", "no"), dictation=typed)
+    channel.attach(session)
+
+    await push_to_talk(session, mic)
+    await until(lambda: session.state is VoiceState.AWAITING_ANSWER)
+    session.on_hotkey("dictate", "down")
+    await until(lambda: cues.cancel == 1)
+    assert session.state is VoiceState.AWAITING_ANSWER
+    await push_to_talk(session, mic)
+    await until(lambda: session.state is VoiceState.IDLE)
+    assert typed.inserted == []

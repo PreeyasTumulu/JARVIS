@@ -20,6 +20,11 @@ _user32.GetClipboardData.argtypes = [wintypes.UINT]
 _user32.GetClipboardData.restype = wintypes.HANDLE
 _user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
 _user32.SetClipboardData.restype = wintypes.HANDLE
+_user32.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
+_user32.RegisterClipboardFormatW.restype = wintypes.UINT
+_user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+_user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+_user32.CountClipboardFormats.restype = ctypes.c_int
 _kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
 _kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
 _kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
@@ -57,8 +62,17 @@ def get_text() -> str | None:
         _user32.CloseClipboard()
 
 
-def set_text(text: str) -> None:
-    data = text.encode("utf-16-le") + b"\x00\x00"
+# Formats that keep a value out of Win+V history and the cloud clipboard, and tell clipboard
+# managers to skip it (Microsoft's "Cloud Clipboard and Clipboard History Formats").
+_PRIVATE_FORMATS = (
+    "ExcludeClipboardContentFromMonitorProcessing",
+    "CanIncludeInClipboardHistory",
+    "CanUploadToCloudClipboard",
+)
+_ZERO_DWORD = bytes(4)
+
+
+def _put(fmt: int, data: bytes) -> None:
     handle = _kernel32.GlobalAlloc(GMEM_MOVEABLE, len(data))
     if not handle:
         raise OSError("Could not allocate clipboard memory")
@@ -68,11 +82,36 @@ def set_text(text: str) -> None:
         raise OSError("Could not lock clipboard memory")
     ctypes.memmove(pointer, data, len(data))
     _kernel32.GlobalUnlock(handle)
+    if not _user32.SetClipboardData(fmt, handle):
+        _kernel32.GlobalFree(handle)  # on success Windows owns the memory
+        raise OSError("Windows refused the clipboard data")
+
+
+def set_text(text: str, *, private: bool = False) -> None:
+    """Put text on the clipboard. `private` keeps it out of clipboard history (dictation)."""
     _open()
     try:
         _user32.EmptyClipboard()
-        if not _user32.SetClipboardData(CF_UNICODETEXT, handle):
-            _kernel32.GlobalFree(handle)  # on success Windows owns the memory
-            raise OSError("Windows refused the clipboard data")
+        _put(CF_UNICODETEXT, text.encode("utf-16-le") + bytes(2))
+        if private:
+            for name in _PRIVATE_FORMATS:
+                _put(_user32.RegisterClipboardFormatW(name), _ZERO_DWORD)
     finally:
         _user32.CloseClipboard()
+
+
+def clear() -> None:
+    _open()
+    try:
+        _user32.EmptyClipboard()
+    finally:
+        _user32.CloseClipboard()
+
+
+def holds_other_data() -> bool:
+    """True when the clipboard holds something that is not text (an image, files), which
+    Jarvis could not put back after borrowing the clipboard."""
+    return bool(
+        _user32.CountClipboardFormats() > 0
+        and not _user32.IsClipboardFormatAvailable(CF_UNICODETEXT)
+    )

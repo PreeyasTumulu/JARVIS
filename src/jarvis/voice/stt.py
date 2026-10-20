@@ -14,7 +14,7 @@ import numpy as np
 from jarvis.config import VoiceSettings
 from jarvis.voice.audio import SAMPLE_RATE, Audio, rms
 from jarvis.voice.models import whisper_dir
-from jarvis.voice.phrases import clean_transcript
+from jarvis.voice.phrases import clean_dictation, clean_transcript
 
 log = logging.getLogger(__name__)
 
@@ -61,8 +61,12 @@ class Transcriber:
                 "Whisper %s loaded in %.1fs", self._cfg.stt_model, time.perf_counter() - started
             )
 
-    def transcribe(self, audio: Audio) -> Transcript:
-        """Blocking. Returns empty text for clips that are too short or silent."""
+    def transcribe(self, audio: Audio, *, dictation: bool = False) -> Transcript:
+        """Blocking. Returns empty text for clips that are too short or silent.
+
+        Dictation skips the command vocabulary hint, which would pull ordinary sentences
+        toward app names, and keeps phrases a command would drop ("thank you", "Jarvis").
+        """
         audio_ms = len(audio) * 1000 // SAMPLE_RATE
         if audio_ms < MIN_AUDIO_MS or rms(audio) < MIN_RMS:
             return Transcript("", audio_ms, 0)
@@ -72,7 +76,7 @@ class Transcriber:
             audio.astype(np.float32) / 32768.0,
             language=self._cfg.stt_language,
             beam_size=self._cfg.stt_beam_size,
-            initial_prompt=self._cfg.stt_hint or None,
+            initial_prompt=None if dictation else (self._cfg.stt_hint or None),
             condition_on_previous_text=False,
             without_timestamps=True,
             vad_filter=False,  # endpointing already trimmed the clip
@@ -82,5 +86,5 @@ class Transcriber:
             for segment in segments
             if not (segment.no_speech_prob > 0.6 and segment.avg_logprob < -1.0)
         ]
-        text = clean_transcript(" ".join(parts))
+        text = clean_dictation(" ".join(parts)) if dictation else clean_transcript(" ".join(parts))
         return Transcript(text, audio_ms, int((time.perf_counter() - started) * 1000))

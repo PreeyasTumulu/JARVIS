@@ -246,6 +246,16 @@ class VoiceSettings(_Section):
     earcons: bool = True
 
 
+class DictationSettings(_Section):
+    """Hold a hotkey, speak, and the text is inserted at the cursor (ADR-054)."""
+
+    enabled: bool = True
+    hotkey: str = "ctrl+alt+d"
+    paste_over_chars: int = Field(default=200, ge=0)  # longer text is pasted; 0 always pastes
+    spoken_commands: bool = True  # "new line", "comma", "full stop", "question mark"
+    remove_fillers: bool = True  # "um", "uh"
+
+
 def default_data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
     return Path(base) / "Jarvis"
@@ -273,6 +283,7 @@ class Settings(_Section):
     phone: PhoneSettings = PhoneSettings()
     tts: TTSSettings = TTSSettings()
     voice: VoiceSettings = VoiceSettings()
+    dictation: DictationSettings = DictationSettings()
     data_dir: Path = Field(default_factory=default_data_dir)
 
     @property

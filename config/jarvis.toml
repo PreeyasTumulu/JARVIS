@@ -217,6 +217,14 @@ ntfy_topic = ""              # a long random name, in local.toml; anyone who kno
 twilio_from = ""             # a Twilio number allowed to call yours
 twilio_flow_sid = ""         # the Studio flow imported from docs/twilio-ask-flow.json
 
+[dictation]
+# Hold the hotkey, speak, release: the text appears where the cursor is, in any app (ADR-054).
+enabled = true
+hotkey = "ctrl+alt+d"
+paste_over_chars = 200       # longer text is pasted (clipboard restored, kept out of Win+V history); 0 always pastes
+spoken_commands = true       # "new line", "new paragraph", "comma", "full stop", "question mark"
+remove_fillers = true        # drop "um" and "uh"
+
 [tts]
-engine = "piper"             # "piper", or "sapi" (built-in Windows voice); falls back to sapi if Piper is not installed
+engine = "piper"            # "piper", or "sapi" (built-in Windows voice); falls back to sapi if Piper is not installed
 rate = 0                     # -10 (slow) to 10 (fast)

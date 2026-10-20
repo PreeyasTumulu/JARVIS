@@ -24,6 +24,7 @@ from jarvis.voice.audio import (
     rms,
 )
 from jarvis.voice.channel import VoiceChannel
+from jarvis.voice.dictation import Inserter
 from jarvis.voice.models import ensure_piper_voice, ensure_wake_models
 from jarvis.voice.session import VoiceSession
 from jarvis.voice.stt import Transcriber
@@ -70,9 +71,12 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
 
 
 def hotkey_bindings(settings: Settings) -> dict[str, Hotkey]:
-    """The push-to-talk and stop hotkeys from config. Raises ValueError for a bad one."""
+    """Push-to-talk, stop, and dictation hotkeys from config. Raises ValueError for a bad one."""
     cfg = settings.voice
-    return {"ptt": parse_hotkey(cfg.ptt_hotkey), "stop": parse_hotkey(cfg.stop_hotkey)}
+    bindings = {"ptt": parse_hotkey(cfg.ptt_hotkey), "stop": parse_hotkey(cfg.stop_hotkey)}
+    if settings.dictation.enabled:
+        bindings["dictate"] = parse_hotkey(settings.dictation.hotkey)
+    return bindings
 
 
 def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> VoiceSession:
@@ -87,6 +91,7 @@ def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> Voice
         cues=Earcons(AudioPlayer(), enabled=cfg.earcons),
         wake=WakeWordDetector(cfg.wake_word, settings.models_dir) if wake_enabled else None,
         vad=SileroVAD(settings.models_dir, cfg.wake_word) if wake_enabled else None,
+        dictation=Inserter(settings.dictation) if settings.dictation.enabled else None,
     )
 
 
@@ -110,13 +115,13 @@ def start_hotkeys(
     loop: asyncio.AbstractEventLoop,
     console: Console,
 ) -> HotkeyListener:
-    """Register push-to-talk and stop system wide; events reach the session on its loop."""
+    """Register the hotkeys system wide; events reach the session on its loop."""
     bindings = hotkey_bindings(settings)
 
     def on_hotkey(name: str, phase: str) -> None:  # runs on the hotkey thread
         loop.call_soon_threadsafe(session.on_hotkey, name, phase)
 
-    hotkeys = HotkeyListener(bindings, on_hotkey, hold={"ptt"})
+    hotkeys = HotkeyListener(bindings, on_hotkey, hold={"ptt", "dictate"})
     hotkeys.start()
     for name in hotkeys.failed:
         console.print(
@@ -135,6 +140,10 @@ def _print_banner(console: Console, settings: Settings, wake_enabled: bool) -> N
     ]
     if wake_enabled:
         lines.insert(1, 'Or say [bold]"Hey Jarvis"[/bold], wait for the beep, and speak.')
+    if settings.dictation.enabled:
+        lines.append(
+            f"[bold]Hold {escape(settings.dictation.hotkey)}[/bold] to dictate into any app."
+        )
     lines.append("Confirmations: say yes or no, or press y or n here. Ctrl+C quits.")
     console.print("\n".join(lines))
 

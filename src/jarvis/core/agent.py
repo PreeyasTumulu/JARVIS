@@ -29,7 +29,7 @@ from jarvis.core.events import (
 from jarvis.core.executor import CallOutcome, ToolExecutor
 from jarvis.core.fast_path import fast_call
 from jarvis.core.prompts import related_memories, system_prompt
-from jarvis.core.tool_routing import ALWAYS, matched_groups, select_tools
+from jarvis.core.tool_routing import ALWAYS, matched_groups, needs_meaning, select_tools
 from jarvis.llm.router import CLOUD_TOOLS, Router
 from jarvis.llm.types import ChatModel, LLMError, ToolCall
 from jarvis.services import Services
@@ -242,7 +242,7 @@ class Agent:
             session_id=self.session_id,
             turn_id=turn_id,
         )
-        schemas = self._tool_schemas()
+        schemas = await self._tool_schemas()
         for iteration in range(1, agent_cfg.max_iterations + 1):
             reply = await self._llm.complete(self._model_messages(), schemas)
             stage_times["llm_ms"] = stage_times.get("llm_ms", 0) + reply.latency_ms
@@ -407,7 +407,7 @@ class Agent:
                 self._router.failed(model, str(exc))
         return None
 
-    def _tool_schemas(self) -> list[dict[str, Any]]:
+    async def _tool_schemas(self) -> list[dict[str, Any]]:
         """Tools for this turn, chosen from the request text (see core/tool_routing.py)."""
         if self._settings.agent.tool_routing == "all":
             return self._registry.schemas()
@@ -420,7 +420,13 @@ class Agent:
             # remember, the model saved the fact a second time instead of answering.
             wanted = {"list_memories", *ALWAYS}
             return [tool.schema() for tool in self._registry if tool.name in wanted]
-        return [tool.schema() for tool in select_tools(request, self._registry)]
+        meant: list[str] = []
+        semantic = self._services.semantic
+        if semantic is not None and needs_meaning(request, self._registry):
+            meant = await semantic.groups(request)
+            if meant:
+                log.info("Routed by meaning to %s", ", ".join(meant))
+        return [tool.schema() for tool in select_tools(request, self._registry, meant)]
 
     def _context_flags(self) -> ContextFlags:
         """Whether private or outside content is in the context the model is working from.

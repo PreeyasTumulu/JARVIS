@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from jarvis.config import Settings
+from jarvis.core.semantic_routing import SemanticRouter
 from jarvis.storage.db import Database
 from jarvis.storage.repositories import Preferences
 from jarvis.tools.apps.index import AppIndex, AppStore
@@ -42,6 +43,7 @@ class Services:
     mail: Mailbox
     calendar: Calendar
     mcp: McpHub
+    semantic: SemanticRouter | None = None
 
     async def aclose(self) -> None:
         await self.mcp.aclose()
@@ -75,4 +77,9 @@ def build_services(settings: Settings, db: Database) -> Services:
         mail=Mailbox(settings.mail),
         calendar=Calendar(settings.calendar),
         mcp=McpHub(settings.mcp, log_dir=settings.data_dir / "logs"),
+        semantic=SemanticRouter(
+            settings.agent, settings.llm.providers["local"].base_url, settings.data_dir / "cache"
+        )
+        if settings.agent.semantic_routing and "local" in settings.llm.providers
+        else None,
     )

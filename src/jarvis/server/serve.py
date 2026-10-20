@@ -156,6 +156,10 @@ async def _serve(
         await app.start_background(session.announce if session else _speaker(app, console))
         # MCP servers (Docker) connect while the page loads, not on the first command.
         background.append(asyncio.create_task(app.agent.prepare_tools(), name="mcp"))
+        if app.services.semantic is not None:
+            background.append(
+                asyncio.create_task(app.services.semantic.warm(), name="semantic-routing")
+            )
 
         bridge_token = None
         if app.settings.bridge.enabled:

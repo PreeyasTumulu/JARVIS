@@ -23,7 +23,8 @@ from pathlib import Path
 
 from jarvis.config import load_settings
 from jarvis.core.prompts import system_prompt
-from jarvis.core.tool_routing import select_tools
+from jarvis.core.semantic_routing import SemanticRouter
+from jarvis.core.tool_routing import needs_meaning, select_tools
 from jarvis.llm.client import LLMClient
 from jarvis.llm.types import LLMError
 from jarvis.tools.catalog import build_registry
@@ -136,6 +137,13 @@ CASES = [
     case("what's on my calendar today", "calendar_events", arg=("day", "today")),
     case("what's my next meeting", "calendar_events", arg=("day", "next")),
     case("am I free on friday", "calendar_events", arg=("day", "friday")),
+    # Phase 13: paraphrases with none of the keywords (semantic routing's job)
+    case("what have I got lined up tomorrow", "calendar_events"),
+    case("anything booked for friday evening", "calendar_events"),
+    case("is it going to pour in mumbai later", "weather", arg=("place", "mumbai")),
+    case("it's too loud, bring it down", "set_volume"),
+    case("has anybody tried to reach me", "read_notifications", "read_mail"),
+    case("drop my sister a line saying I'm home", "send_whatsapp"),
 ]
 
 # Phase 12: GitHub through its MCP server (run with --mcp). For "my repo" a first call to
@@ -211,13 +219,20 @@ def unload_all_models() -> None:
         pass
 
 
-async def run_model(model: str, routing: str, mcp: bool = False) -> Report:
+async def run_model(model: str, routing: str, mcp: bool = False, semantic: bool = True) -> Report:
     unload_all_models()
     settings = load_settings()
     provider = settings.llm.active().model_copy(update={"model": model})
     client = LLMClient(provider)
     registry = build_registry()
     cases = list(CASES)
+    meaning = (
+        SemanticRouter(
+            settings.agent, settings.llm.providers["local"].base_url, settings.data_dir / "cache"
+        )
+        if semantic
+        else None
+    )
     hub = McpHub(settings.mcp, log_dir=settings.data_dir / "logs")
     if mcp:
         added = register_all(registry, hub, await hub.start(), hub.configured())
@@ -232,8 +247,13 @@ async def run_model(model: str, routing: str, mcp: bool = False) -> Report:
 
     for item in cases:
         messages = [system, {"role": "user", "content": item.text}]
+        meant = (
+            await meaning.groups(item.text)
+            if meaning is not None and needs_meaning(item.text, registry)
+            else []
+        )
         offered = (
-            [tool.schema() for tool in select_tools(item.text, registry)]
+            [tool.schema() for tool in select_tools(item.text, registry, meant)]
             if routing == "keywords"
             else tools
         )
@@ -330,12 +350,15 @@ async def main() -> None:
     parser.add_argument("--out", type=Path, default=ROOT / "docs" / "benchmarks" / "latest.md")
     parser.add_argument("--routing", choices=["keywords", "all"], default="keywords")
     parser.add_argument("--mcp", action="store_true", help="add the MCP servers' tools")
+    parser.add_argument(
+        "--no-semantic", action="store_true", help="keywords only (no embedding routing)"
+    )
     args = parser.parse_args()
 
     reports = []
     for model in args.models:
         print(f"== {model}")
-        reports.append(await run_model(model, args.routing, args.mcp))
+        reports.append(await run_model(model, args.routing, args.mcp, not args.no_semantic))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render(reports, args.routing), encoding="utf-8")
     print(f"\nWrote {args.out}")

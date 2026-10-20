@@ -12,6 +12,7 @@ the weather" sees the weather tool rather than web search as well.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from jarvis.tools.registry import Registry, Tool
@@ -183,14 +184,25 @@ def matched_groups(text: str) -> list[str]:
     return specific or matched
 
 
-def select_tools(text: str, registry: Registry) -> list[Tool]:
+def needs_meaning(text: str, registry: Registry) -> bool:
+    """True when keywords found nothing specific: no group but the plain question words,
+    and no MCP server's keywords. Then semantic routing may help (ADR-063)."""
+    lowered = text.casefold()
+    if any(tool.route is not None and tool.route.search(lowered) for tool in registry):
+        return False
+    return not [name for name in matched_groups(text) if not GROUPS[name].fallback]
+
+
+def select_tools(text: str, registry: Registry, meant: Sequence[str] = ()) -> list[Tool]:
     """Tools for a request. MCP tools are offered only when their server's keywords match,
-    never as part of "everything", so a big server cannot crowd out the built-in tools."""
+    never as part of "everything", so a big server cannot crowd out the built-in tools.
+    `meant` are groups semantic routing found when keywords found none."""
     lowered = text.casefold()
     routed = [tool for tool in registry if tool.route is not None]
     keyed = [tool for tool in routed if tool.route and tool.route.search(lowered)]
     matched = [group for group in GROUPS.values() if group.pattern.search(lowered)]
     specific = [group for group in matched if not group.fallback]
+    specific += [GROUPS[name] for name in meant if name in GROUPS]
     chosen = specific or ([] if keyed else matched)
     if not chosen and not keyed:
         return [tool for tool in registry if tool.route is None]

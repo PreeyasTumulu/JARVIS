@@ -125,12 +125,12 @@ def test_whisper_loads_the_downloaded_copy_without_the_network(
     monkeypatch.setitem(
         sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisper)
     )
-    Transcriber(VoiceSettings(), tmp_path).load()
+    Transcriber(VoiceSettings(stt_device="cpu"), tmp_path).load()
     assert calls == [calls[0]]
     assert calls[0]["local_files_only"] is True
 
     calls.clear()
-    Transcriber(VoiceSettings(stt_model="missing"), tmp_path).load()
+    Transcriber(VoiceSettings(stt_model="missing", stt_device="cpu"), tmp_path).load()
     assert [c.get("local_files_only", False) for c in calls] == [True, False]  # then downloads
 
 

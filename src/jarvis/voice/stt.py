@@ -1,8 +1,12 @@
-"""Speech to text with faster-whisper. Runs on the CPU by default to leave the GPU for the LLM."""
+"""Speech to text with faster-whisper. Runs on the CPU by default to leave the GPU for the LLM.
+
+`stt_device = "cuda"` needs the `gpu` extra (cuBLAS and cuDNN as pip packages, ADR-062).
+"""
 
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -22,6 +26,23 @@ MIN_AUDIO_MS = 300
 MIN_RMS = 60.0  # below this the clip is effectively silence
 
 
+def add_cuda_libraries() -> bool:
+    """Let CTranslate2 find cuBLAS and cuDNN from pip's NVIDIA packages, which keep their DLLs in
+    site-packages/nvidia/*/bin where Windows does not look. False when they are not installed."""
+    try:
+        import nvidia  # the namespace package of nvidia-cublas-cu12 and nvidia-cudnn-cu12
+    except ImportError:
+        return False
+    found = False
+    for base in getattr(nvidia, "__path__", []):
+        for folder in sorted(Path(base).glob("*/bin")):
+            found = True
+            os.environ["PATH"] = f"{folder}{os.pathsep}{os.environ.get('PATH', '')}"
+            if hasattr(os, "add_dll_directory"):
+                os.add_dll_directory(str(folder))
+    return found
+
+
 @dataclass(frozen=True)
 class Transcript:
     text: str
@@ -35,31 +56,65 @@ class Transcriber:
         self._models_dir = models_dir
         self._model: Any = None
         self._lock = threading.Lock()
+        self.device = "cpu"  # where the model ended up after load()
+        self._model_device = "cpu"
 
     def load(self) -> None:
-        """Load (and on first use download) the Whisper model. Blocking; call from a thread."""
+        """Load (and on first use download) the Whisper model. Blocking; call from a thread.
+
+        "auto" uses the GPU when the `gpu` extra is installed and CUDA works, else the CPU; "cuda"
+        insists on trying the GPU. Either way a GPU that fails (a missing DLL only shows up on the
+        first transcription) means the CPU, never no speech at all.
+        """
         with self._lock:
             if self._model is not None:
                 return
-            from faster_whisper import WhisperModel
+            device = self._cfg.stt_device
+            if device != "cpu" and not add_cuda_libraries():
+                if device == "cuda":
+                    log.warning("Whisper on the GPU needs: uv sync --extra gpu; using the CPU")
+                device = "cpu"
+            if device != "cpu":
+                try:
+                    self._model = self._open(device)
+                    # Segments are lazy: only consuming them runs the GPU (and loads cuBLAS).
+                    warm = np.zeros(SAMPLE_RATE, dtype=np.float32)
+                    list(self._model.transcribe(warm, beam_size=1, language="en")[0])
+                except Exception as exc:
+                    log.warning("Whisper could not run on the GPU (%s); using the CPU", exc)
+                    self._model = None
+            if self._model is None:
+                self._model = self._open("cpu")
+            self.device = "cpu" if device == "cpu" or self._model_device == "cpu" else "cuda"
 
-            started = time.perf_counter()
-            options: dict[str, Any] = {
-                "device": self._cfg.stt_device,
-                "compute_type": self._cfg.stt_compute_type,
-                "cpu_threads": self._cfg.stt_cpu_threads,
-                "download_root": str(whisper_dir(self._models_dir)),
-            }
-            try:
-                # The downloaded copy first: at login the network may not be up yet, and asking
-                # Hugging Face for updates on every start only adds delay.
-                self._model = WhisperModel(self._cfg.stt_model, local_files_only=True, **options)
-            except Exception:
-                log.info("Whisper %s is not downloaded yet; fetching it", self._cfg.stt_model)
-                self._model = WhisperModel(self._cfg.stt_model, **options)
-            log.info(
-                "Whisper %s loaded in %.1fs", self._cfg.stt_model, time.perf_counter() - started
-            )
+    def _open(self, device: str) -> Any:
+        from faster_whisper import WhisperModel
+
+        started = time.perf_counter()
+        compute = self._cfg.stt_compute_type
+        if device != "cpu" and compute == "int8":
+            compute = "int8_float16"  # int8 weights, float16 maths: the fast GPU setting
+        options: dict[str, Any] = {
+            "device": "cuda" if device != "cpu" else "cpu",
+            "compute_type": compute,
+            "cpu_threads": self._cfg.stt_cpu_threads,
+            "download_root": str(whisper_dir(self._models_dir)),
+        }
+        try:
+            # The downloaded copy first: at login the network may not be up yet, and asking
+            # Hugging Face for updates on every start only adds delay.
+            model = WhisperModel(self._cfg.stt_model, local_files_only=True, **options)
+        except Exception:
+            log.info("Whisper %s is not downloaded yet; fetching it", self._cfg.stt_model)
+            model = WhisperModel(self._cfg.stt_model, **options)
+        self._model_device = options["device"]
+        log.info(
+            "Whisper %s loaded on the %s in %.1fs",
+            self._cfg.stt_model,
+            "GPU" if options["device"] == "cuda" else "CPU",
+            time.perf_counter() - started,
+        )
+        return model
 
     def transcribe(self, audio: Audio, *, dictation: bool = False) -> Transcript:
         """Blocking. Returns empty text for clips that are too short or silent.

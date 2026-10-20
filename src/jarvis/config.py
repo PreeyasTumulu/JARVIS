@@ -35,6 +35,11 @@ class AgentSettings(_Section):
     history_turns: int = Field(default=8, ge=0)
     max_tool_result_chars: int = Field(default=4000, ge=200)
     tool_routing: Literal["keywords", "all"] = "keywords"
+    # When no keyword matches, pick tool groups by meaning with an embedding model (ADR-063).
+    semantic_routing: bool = True
+    semantic_model: str = "nomic-embed-text"
+    semantic_threshold: float = Field(default=0.62, gt=0, lt=1)
+    semantic_timeout_s: float = Field(default=2.0, gt=0)
 
 
 class ProviderSettings(_Section):
@@ -228,7 +233,7 @@ class VoiceSettings(_Section):
     ptt_hotkey: str = "ctrl+alt+j"
     stop_hotkey: str = "ctrl+alt+x"
     stt_model: str = "small.en"
-    stt_device: Literal["cpu", "cuda", "auto"] = "cpu"
+    stt_device: Literal["cpu", "cuda", "auto"] = "auto"  # auto: the GPU with the gpu extra
     stt_compute_type: str = "int8"
     stt_cpu_threads: int = Field(default=8, ge=0)  # 0 lets CTranslate2 decide
     stt_beam_size: int = Field(default=1, ge=1, le=10)

@@ -1,0 +1,10 @@
+# Keeps the GitHub Actions used by CI up to date. Python packages are pinned in uv.lock and
+# updated by hand, so each update gets the full test suite and a look at the changelog.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"

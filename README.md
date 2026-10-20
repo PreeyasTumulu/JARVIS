@@ -9,7 +9,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 to 15 (dictation and media; mail and calendar; MCP servers; faster speech and routing; recall and the briefing; screen reading), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
+> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 to 16 (dictation and media; mail and calendar; MCP servers; faster speech and routing; recall and the briefing; screen reading; release polish), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -71,12 +71,11 @@ Needs Windows 11, [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.
 ```powershell
 git clone https://github.com/PreeyasTumulu/JARVIS.git
 cd JARVIS
-uv sync --extra voice --extra piper
-ollama pull hermes3:8b
-ollama create jarvis-hermes3 -f config/ollama/hermes3-8b.Modelfile
-uv run jarvis setup-voice
+powershell -ExecutionPolicy Bypass -File .\install.ps1     # checks, installs, downloads; -DryRun to only look
 uv run jarvis serve --wake
 ```
+
+The installer asks before installing uv or Ollama with winget, uses the GPU for speech recognition when it finds an NVIDIA card, and never overwrites your `config/local.toml` or `.env`. The manual steps are in [SETUP.md](docs/SETUP.md).
 
 Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the weather". Hold `Ctrl+Alt+D` to dictate into the app you are typing in. `Ctrl+Alt+X` or "stop" cancels. `uv run jarvis startup enable` starts it at every login in the tray. Add contacts with `uv run jarvis contacts add "Amma" "+91 98765 43210" --alias Mom`.
 
@@ -109,6 +108,7 @@ About 765 tests run in CI on Windows, including 54 end-to-end scenarios that dri
 | [Research](docs/RESEARCH.md) | Similar projects, phone calls, small models, feature ideas |
 | [Demo](docs/DEMO.md) | A five-minute demo script |
 | [Contributing](CONTRIBUTING.md), [Security](SECURITY.md) | How to help, how to report a problem |
+| [Changelog](CHANGELOG.md) | Every version, phase by phase |
 
 ## License
 

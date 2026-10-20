@@ -406,6 +406,12 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** you chose the automatic fallback, OCR clicks that always ask, and the window or the whole screen when asked. Windows OCR is already on the laptop, needs no model or download beyond small pip packages, and reads a window in about 0.4 seconds and the whole screen in about 0.3.
 - **Cost:** reading a window this way brings it to the front. OCR mistakes small or stylized text ("12" came back as "1 2"), cannot read text covered by another window, and a click by position can land on something that moved; that is why OCR clicks always ask and look again first.
 
+### ADR-068: A one-command installer, and release hygiene
+
+- **Decision:** `install.ps1` (Windows PowerShell 5.1, no extra tools) checks Windows, uv, and Ollama; offers to install a missing uv or Ollama with winget, only after a yes (never in `-NonInteractive` or `-DryRun`); runs `uv sync` with the voice and Piper extras, plus `gpu` when an NVIDIA GPU is found; pulls the chosen model and `nomic-embed-text` and creates the model alias; creates `.env` and `config/local.toml` from their templates without ever overwriting them; downloads the speech models. Every step is skipped when already done, so it can be run again. `-DryRun` only reports, and CI runs it. The repository gains CHANGELOG.md (every phase as a version), issue and pull request templates (asking reporters to leave private content out), CODEOWNERS, Dependabot for GitHub Actions, and docs/RELEASING.md for merging the stacked phases and tagging after review. No release is published and no tag is pushed until the review.
+- **Why:** these were the open-source polish steps recommended after Phase 15, and you asked for the next phase to follow the recommendations without asking. Eight manual setup commands became one, and a stranger's first report arrives with the version, the area, and no private data.
+- **Cost:** the installer cannot be tested end to end on a clean machine in CI (no Ollama or GPU there), only its dry run; it was run for real on this laptop. Python dependencies are not under Dependabot because uv.lock updates deserve the full test suite and a human look.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

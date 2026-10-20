@@ -1,0 +1,22 @@
+name: Feature request
+description: Something you would like Jarvis to do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would say
+      description: The command or situation, in your own words.
+      placeholder: '"Jarvis, read me the last message in the family group."'
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+      description: What you do today instead, and how often.
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and privacy
+      description: Does it send, delete, buy, or change anything? Does it read private content (messages, files, screen)? Jarvis asks before anything risky and keeps private content off the cloud; say what you would expect here.

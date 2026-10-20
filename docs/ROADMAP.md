@@ -22,6 +22,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 13 | Faster and smaller | Built on `phase/13-faster` (stacked on Phase 12), waiting for your test | v1.4.0 |
 | 14 | Memory by meaning, morning briefing | Built on `phase/14-memory-briefing` (stacked on Phase 13), waiting for your test | v1.5.0 |
 | 15 | Screen reading (Windows OCR) | Built on `phase/15-screen-reading` (stacked on Phase 14), waiting for your test | v1.6.0 |
+| 16 | Release polish (installer, changelog, templates) | Built on `phase/16-release-polish` (stacked on Phase 15), waiting for your review | unreleased |
 
 ## How each phase runs
 
@@ -724,6 +725,32 @@ uv run jarvis ask "click <a button's text> in <that app>"   # asks first, then c
 **Not done, needs you:** try it on a real app that shows no text (a game launcher, a canvas app, a remote desktop window).
 
 **Exit criteria:** apps that hide their text can be read and, with your yes, clicked.
+
+## Phase 16: Release polish
+
+**Scope:** the open-source polish recommended after Phase 15: a one-command installer, a changelog, contribution templates, and a release process. Built without questions, on the recommendations, as asked.
+
+**Built**
+
+- `install.ps1`: checks and sets up everything (uv, Ollama, Python packages with GPU speech recognition when possible, the models, config files from templates, speech models), asking before any winget install; `-DryRun`, `-NoVoice`, `-NonInteractive`, `-Model`. CI runs the dry run.
+- CHANGELOG.md with every phase as a version (0.0.1 to 1.6.0).
+- Issue templates (bug report with version, area, and a reminder to leave private content out; feature request with a safety question), a pull request template with the project's rules as a checklist, CODEOWNERS, and Dependabot for GitHub Actions.
+- docs/RELEASING.md: merging the stacked phases into `main` and tagging, after the review.
+- The README quick start is now the installer.
+
+**Test commands**
+
+```powershell
+.\install.ps1 -DryRun                           # reports what would run, changes nothing
+.\install.ps1                                   # the real thing; safe to run again
+uv run pytest
+```
+
+**Verified during the build:** the dry run on this laptop (every check right: Windows 11, uv, Ollama 0.40.6, the RTX 3050, the downloaded models, the existing config files kept); a real non-interactive run (packages synced with the GPU extra, speech models confirmed, config untouched).
+
+**Not done, needs you:** the GitHub release and tags, after your review (docs/RELEASING.md); README screenshots and the demo video, which need your screen.
+
+**Exit criteria:** a new user gets from clone to "Hey Jarvis" with one command plus SETUP.md for accounts.
 
 ## Beyond 1.0
 

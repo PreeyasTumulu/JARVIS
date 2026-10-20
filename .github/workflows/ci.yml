@@ -39,3 +39,7 @@ jobs:
 
       - name: No em or en dashes
         run: uv run python scripts/check_dashes.py
+
+      - name: The installer's dry run
+        shell: powershell
+        run: .\install.ps1 -DryRun -NonInteractive

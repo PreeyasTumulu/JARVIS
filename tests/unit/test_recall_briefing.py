@@ -298,3 +298,25 @@ async def test_no_offer_in_the_afternoon_or_after_a_briefing(make_app: MakeApp) 
 
 def test_calendar_url_is_the_fake_one() -> None:
     assert CALENDAR_URL.startswith("https://calendar.test/")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "what did I ask about docker last week",
+        "when did I last ask you about the weather",
+        "what was the calendar question earlier",
+    ],
+)
+def test_questions_about_past_requests_get_only_recall(make_app: MakeApp, text: str) -> None:
+    from jarvis.core.tool_routing import select_tools
+
+    offered = {tool.name for tool in select_tools(text, make_app().app.registry)}
+    assert offered == {"recall", "list_memories", "ask_user", "speak"}
+
+
+def test_what_did_i_copy_is_still_the_clipboard(make_app: MakeApp) -> None:
+    from jarvis.core.tool_routing import select_tools
+
+    offered = {tool.name for tool in select_tools("what did I copy", make_app().app.registry)}
+    assert "clipboard_read" in offered

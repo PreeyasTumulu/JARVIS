@@ -18,6 +18,14 @@ from dataclasses import dataclass
 from jarvis.tools.registry import Registry, Tool
 
 ALWAYS = ("ask_user", "speak")
+# A question about the user's own past requests: only recall, or an 8B model reaches for the
+# topic's tool instead ("when did I last ask about the weather" called weather).
+PAST_REQUEST = re.compile(
+    r"\b(what|when|which) did i (last )?(ask|say|tell|search|look up|request|check)\b"
+    r"|\bwhen did i last\b|\bdid i (ever )?(ask|tell) you\b"
+    r"|\bi asked (you )?(about|earlier|before)\b"
+    r"|\b(earlier|before|previously) i asked\b|\bquestion (i asked|earlier|before)\b"
+)
 
 
 @dataclass(frozen=True)
@@ -204,6 +212,9 @@ def select_tools(text: str, registry: Registry, meant: Sequence[str] = ()) -> li
     never as part of "everything", so a big server cannot crowd out the built-in tools.
     `meant` are groups semantic routing found when keywords found none."""
     lowered = text.casefold()
+    if PAST_REQUEST.search(lowered):
+        wanted = {"recall", "list_memories", *ALWAYS}
+        return [tool for tool in registry if tool.name in wanted]
     routed = [tool for tool in registry if tool.route is not None]
     keyed = [tool for tool in routed if tool.route and tool.route.search(lowered)]
     matched = [group for group in GROUPS.values() if group.pattern.search(lowered)]

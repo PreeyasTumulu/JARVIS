@@ -10,21 +10,40 @@ import numpy as np
 import pytest
 
 from jarvis.voice import wake, wake_training
-from jarvis.voice.runner import wake_advice
+from jarvis.voice.runner import count_tries, wake_advice
 from jarvis.voice.wake import WakeWordDetector
+
+# Half-second lines like the first real tests: speech, then the score in the pause after it.
+LOUD, PAUSE = 1500.0, 10.0
 
 
 def test_advice_for_scores_below_the_threshold() -> None:
-    tip = wake_advice([0.0, 0.25, 0.44, 0.42, 0.01], 0.5, verified=False)
-    assert "scored up to 0.44, 0.42, 0.25" in tip
+    peaks = [0.0, 0.25, 0.0, 0.44, 0.0, 0.42, 0.01]
+    loudness = [LOUD, PAUSE, LOUD, PAUSE, LOUD, PAUSE, PAUSE]
+    tip = wake_advice(peaks, loudness, 0.5, verified=False)
+    assert tip.startswith("Caught 0 of about 3 tries.")
+    assert "scored 0.44, 0.42, 0.25" in tip
     assert "uv run jarvis voice --train-wake" in tip
     assert "wake_threshold = 0.35" in tip  # 80% of the best near miss
 
 
+def test_two_of_many_is_not_called_working() -> None:
+    peaks = [0.0, 0.96] + [0.0, 0.45] * 6 + [0.0, 0.7]
+    loudness = [LOUD, PAUSE] * 8
+    tip = wake_advice(peaks, loudness, 0.5, verified=False)
+    assert tip.startswith("Caught 2 of about 8 tries.")
+    assert "--train-wake" in tip
+
+
 def test_advice_when_it_works_or_never_registers() -> None:
-    assert wake_advice([0.1, 0.93], 0.5, verified=False).startswith("It works")
-    assert "check the microphone" in wake_advice([0.0, 0.02], 0.5, verified=False)
-    assert "Train again" in wake_advice([0.3], 0.5, verified=True)
+    working = wake_advice([0.0, 0.93, 0.0, 0.9], [LOUD, PAUSE, LOUD, PAUSE], 0.5, verified=False)
+    assert working.startswith("Caught 2 of about 2 tries. It works.")
+    assert "check the microphone" in wake_advice([0.0, 0.02], [LOUD, PAUSE], 0.5, verified=False)
+    assert "Train again" in wake_advice([0.0, 0.3], [LOUD, PAUSE], 0.5, verified=True)
+
+
+def test_counting_tries() -> None:
+    assert count_tries([PAUSE, LOUD, LOUD, PAUSE, LOUD, 200.0, LOUD, PAUSE]) == 2
 
 
 class FakeModel:

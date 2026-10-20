@@ -199,7 +199,8 @@ def wake_test(settings: Settings, console: Console, *, seconds: float) -> int:
             end = time.monotonic() + seconds
             window: list[float] = []
             levels: list[float] = []
-            peaks: list[float] = []  # the best score of each half second that had one
+            peaks: list[float] = []  # the best score of each half second
+            loudness: list[float] = []  # the loudest frame of each half second
             while time.monotonic() < end:
                 frame = await asyncio.wait_for(mic.read(), timeout=3)
                 if frame is None:
@@ -209,6 +210,7 @@ def wake_test(settings: Settings, console: Console, *, seconds: float) -> int:
                 if len(window) == 6:  # about half a second
                     best, level = max(window), max(levels)
                     peaks.append(best)
+                    loudness.append(level)
                     bar = "#" * min(40, int(level / 50))
                     mark = "  [bold green]WAKE[/bold green]" if best >= cfg.wake_threshold else ""
                     console.print(f"level {level:6.0f} {bar:<40} score {best:.2f}{mark}")
@@ -222,34 +224,49 @@ def wake_test(settings: Settings, console: Console, *, seconds: float) -> int:
         finally:
             await mic.stop()
         console.print(f"{hits} wake word detection(s) in {seconds:.0f} s.")
-        console.print(wake_advice(peaks, cfg.wake_threshold, detector.verified))
+        console.print(wake_advice(peaks, loudness, cfg.wake_threshold, detector.verified))
         return 0
 
     return asyncio.run(measure())
 
 
-def wake_advice(peaks: list[float], threshold: float, verified: bool) -> str:
-    """What to do after a wake test, from the half-second peaks."""
-    tops = sorted(peaks, reverse=True)
-    near = [p for p in tops if threshold * 0.4 <= p < threshold]
-    if not tops or tops[0] < 0.1:
+SPEAKING_LEVEL = 300  # a half second this loud is speech
+QUIET_LEVEL = 150  # and one this quiet is a pause between tries
+
+
+def count_tries(loudness: list[float]) -> int:
+    """How many times you spoke: a loud half second right after a quiet one."""
+    tries, quiet = 0, True
+    for level in loudness:
+        if level >= SPEAKING_LEVEL and quiet:
+            tries += 1
+        quiet = level < QUIET_LEVEL if level < SPEAKING_LEVEL else False
+    return tries
+
+
+def wake_advice(peaks: list[float], loudness: list[float], threshold: float, verified: bool) -> str:
+    """What to do after a wake test: how many tries were caught, and the fix for the rest."""
+    if not peaks or max(peaks) < 0.1:
         return "The wake word never registered: check the microphone (level) and say it clearly."
-    if tops[0] >= threshold:
-        return "It works. If it also wakes up on its own, raise wake_threshold a little."
-    best = ", ".join(f"{p:.2f}" for p in tops[:5])
+    hits = sum(p >= threshold for p in peaks)
+    tries = max(count_tries(loudness), hits)
+    misses = sorted((p for p in peaks if threshold * 0.4 <= p < threshold), reverse=True)
+    caught = f"Caught {hits} of about {tries} tries."
+    if hits >= max(1, round(tries * 0.8)):
+        return f"{caught} It works. If it wakes up on its own, raise wake_threshold a little."
+    near = ", ".join(f"{p:.2f}" for p in misses[:5]) or "much less"
     if verified:
         return (
-            f"Your best scores were {best}, below {threshold:.2f}. Train again in your usual spot "
-            "(uv run jarvis voice --train-wake)."
+            f"{caught} The misses scored {near}, below {threshold:.2f}. Train again in your usual "
+            "spot (uv run jarvis voice --train-wake)."
         )
     tip = (
-        f'Your "Hey Jarvis" scored up to {best}, below the threshold {threshold:.2f}. The fix: '
+        f"{caught} The misses scored {near}, just below the threshold {threshold:.2f}. The fix: "
         "teach it your voice (about two minutes): uv run jarvis voice --train-wake"
     )
-    if near:
-        tip += (
-            f". A quick stopgap: wake_threshold = {max(0.2, round(near[0] * 0.8, 2))} under [voice]"
-        )
+    if misses:
+        stopgap = max(0.2, round(misses[0] * 0.8, 2))
+        tip += f". A quick stopgap: wake_threshold = {stopgap} under [voice]"
     return tip + "."
 
 

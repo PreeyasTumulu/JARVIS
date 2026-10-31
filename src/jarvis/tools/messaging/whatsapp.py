@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
@@ -38,7 +39,7 @@ WEB_URL = "https://web.whatsapp.com/send?phone={phone}&text={text}"
 DESKTOP_URL = "whatsapp://send?phone={phone}&text={text}"
 LINKED = "whatsapp.web_linked"  # preference: WhatsApp Web in Jarvis's profile is linked
 LOAD_TIMEOUT_S = 60  # WhatsApp Web syncs on first load, which can be slow
-PREFILL_TIMEOUT_S = 8
+PREFILL_TIMEOUT_S = 15
 DESKTOP_OPEN_TIMEOUT_S = 15
 VK_RETURN = 0x0D
 _DROP = {"️", "⃣", "‍"}
@@ -233,7 +234,8 @@ class WhatsAppDesktop:
         raise NotReady("the WhatsApp app did not come to the front")
 
     async def _prefilled(self, window: win.WindowInfo, message: str) -> bool:
-        for _ in range(int(PREFILL_TIMEOUT_S / 0.5)):
+        deadline = time.monotonic() + PREFILL_TIMEOUT_S  # one read can take seconds in this app
+        while time.monotonic() < deadline:
             text = await run_com(uia.focused_text, window.hwnd)
             if text and same_text(text, message):
                 return True

@@ -293,6 +293,23 @@ def focused_control(hwnd: int) -> Control | None:
     return _control(element, 0)
 
 
+def _focused_field_inside(hwnd: int) -> Any:
+    """The text field holding the focus inside this window, or None. A busy app can refuse."""
+    uia = _get()
+    try:
+        condition = uia.client.CreatePropertyCondition(uia.lib.UIA_HasKeyboardFocusPropertyId, True)
+        found = uia.client.ElementFromHandle(hwnd).FindAllBuildCache(
+            uia.lib.TreeScope_Descendants, condition, uia.cache
+        )
+        for index in range(found.Length if found else 0):
+            element = found.GetElement(index)
+            if element.CachedControlType in EDITABLE_KINDS:
+                return element
+    except Exception as exc:
+        log.debug("Could not look for the focused field: %r", exc)
+    return None
+
+
 def focused_text(hwnd: int) -> str | None:
     """The text in the focused field of this window, or None if the focus is not in it."""
     uia = _get()
@@ -302,6 +319,9 @@ def focused_text(hwnd: int) -> str | None:
         return None
     if _top_window(element) != hwnd:
         return None
+    if element.CachedControlType not in TYPABLE_KINDS:
+        # A WebView2 app reports its host pane as focused; the real field is inside it.
+        element = _focused_field_inside(hwnd) or element
     value = _cached(element, "ValueValue")
     if isinstance(value, str) and value:
         return value

@@ -251,5 +251,19 @@ async def test_hang_up_tool_reports_no_call(
 
     monkeypatch.setattr("jarvis.tools.messaging.calls.whatsapp_hang_up", nothing)
     h = make_app([reply("", ("hang_up", {})), reply("No call is on.")])
-    result = await h.app.agent.run_turn("hang up")
+    result = await h.app.agent.run_turn("could you end this call for me")
     assert "couldn't find a WhatsApp call" in (result.outcomes[0].result.error or "")
+
+
+@pytest.mark.parametrize("said", ["hang up", "Hey Jarvis, end the call please", "cut the call"])
+async def test_hang_up_runs_without_the_model(
+    make_app: MakeApp, monkeypatch: pytest.MonkeyPatch, said: str
+) -> None:
+    async def ended() -> bool:
+        return True
+
+    monkeypatch.setattr("jarvis.tools.messaging.calls.whatsapp_hang_up", ended)
+    h = make_app([])
+    result = await h.app.agent.run_turn(said)
+    assert result.outcomes[0].result.speech == "Call ended."
+    assert h.audit()[0]["tool"] == "hang_up"

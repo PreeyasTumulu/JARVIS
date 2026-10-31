@@ -57,6 +57,15 @@ NOW_PLAYING = {
     "what's the song",
     "who sings this",
 }
+HANG_UP = {
+    "hang up",
+    "hang up the call",
+    "end call",
+    "end the call",
+    "end this call",
+    "cut the call",
+    "disconnect the call",
+}
 
 
 def _phrase(text: str) -> str:
@@ -73,4 +82,6 @@ def fast_call(text: str) -> tuple[str, str] | None:
         return "now_playing", "{}"
     if phrase in BRIEFING:
         return "briefing", "{}"
+    if phrase in HANG_UP:
+        return "hang_up", "{}"
     return None

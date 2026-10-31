@@ -48,6 +48,9 @@
 # [whatsapp]
 # method = "desktop"                  # "auto" (Web once linked, else the app), "web", or "desktop"
 
+# [calls]
+# method = "phone_link"                # "whatsapp" (the desktop app) or "phone_link" (a tel: link)
+
 # [browser]
 # channel = "brave"                   # auto (default) follows your Windows default: Brave, Chrome, or Edge
 # executable = "C:/path/to/browser.exe" # any Chromium-based browser, wins over channel

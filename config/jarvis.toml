@@ -212,8 +212,13 @@ announce = true              # say "Claude is waiting for you" and "Claude finis
 phone = ""                   # "" (off), "ntfy" (a push with answer buttons), or "twilio" (a real call)
 escalate_after_s = 45        # how long the PC gets before the phone is tried
 
+[calls]
+# "whatsapp": the WhatsApp desktop app presses Voice call. "phone_link": a tel: link, which
+# dials from your paired phone. Neither falls back to the other.
+method = "whatsapp"
+
 [phone]
-number = ""                  # your own number, +91..., set it in local.toml
+number = ""                # your own number, +91..., set it in local.toml
 ntfy_server = "https://ntfy.sh"
 ntfy_topic = ""              # a long random name, in local.toml; anyone who knows it can read it
 twilio_from = ""             # a Twilio number allowed to call yours

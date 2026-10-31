@@ -224,6 +224,12 @@ class PhoneSettings(_Section):
     twilio_flow_sid: str = ""  # the Studio flow from docs/twilio-ask-flow.json
 
 
+class CallsSettings(_Section):
+    """How "call mom" reaches them (ADR-069)."""
+
+    method: Literal["whatsapp", "phone_link"] = "whatsapp"
+
+
 class TTSSettings(_Section):
     engine: Literal["piper", "sapi"] = "piper"
     piper_voice: str = "en_GB-alan-medium"
@@ -372,6 +378,7 @@ class Settings(_Section):
     server: ServerSettings = ServerSettings()
     bridge: BridgeSettings = BridgeSettings()
     phone: PhoneSettings = PhoneSettings()
+    calls: CallsSettings = CallsSettings()
     tts: TTSSettings = TTSSettings()
     voice: VoiceSettings = VoiceSettings()
     dictation: DictationSettings = DictationSettings()

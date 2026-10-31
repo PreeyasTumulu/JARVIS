@@ -16,7 +16,7 @@ from jarvis.tools.files.tools import find_file, get_selected_file, open_file, re
 from jarvis.tools.interaction import ask_user, speak
 from jarvis.tools.mail.tools import read_email, read_mail, reply_email
 from jarvis.tools.memory import forget, list_memories, remember
-from jarvis.tools.messaging.calls import call_contact
+from jarvis.tools.messaging.calls import call_contact, hang_up
 from jarvis.tools.messaging.tools import send_whatsapp
 from jarvis.tools.notifications.tools import read_notifications
 from jarvis.tools.recall import recall
@@ -83,6 +83,7 @@ def build_registry() -> Registry:
             browser_type,
             send_whatsapp,
             call_contact,
+            hang_up,
             read_notifications,
             read_mail,
             read_email,

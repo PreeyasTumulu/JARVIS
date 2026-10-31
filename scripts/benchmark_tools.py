@@ -119,6 +119,7 @@ CASES = [
     case("find running shoes on amazon", "search_site", arg=("site", "amazon")),
     case("call mom", "call_contact", arg=("contact", "mom")),
     case("phone ravi please", "call_contact", arg=("contact", "ravi")),
+    case("hang up", "hang_up"),
     # Phase 10 (exact phrases such as "pause the music" never reach the model)
     case("could you skip to the next track", "media_control", arg=("action", "next")),
     case("resume the song I was listening to", "media_control", arg=("action", "play")),

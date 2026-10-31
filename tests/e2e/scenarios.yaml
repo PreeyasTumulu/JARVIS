@@ -270,14 +270,14 @@
     - text: I don't have a contact called zork.
   expect: {ok: [false], sent: [], prompts: 0}
 
-# Phase 9: phone calls through Phone Link
+# Phase 9: phone calls, by WhatsApp since Phase 17
 - name: a call is placed only after yes
   say: call mom
   setup: [contacts]
   confirm: yes
   script:
     - call: {call_contact: {contact: mom}}
-    - text: Calling Amma on your phone.
+    - text: Calling Amma on WhatsApp.
   expect: {decisions: [confirmed], dialed: ["+919876543210"], prompts: 1}
 
 - name: no means no call

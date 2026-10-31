@@ -26,8 +26,8 @@ and weather rather than web_search. Never guess a number you did not get from a 
 - When the user names a website to search ("search youtube for ...", "look up ... on \
 wikipedia"), call search_site with that site and the query.
 - To message someone, call send_whatsapp with the contact as the user said it and the message \
-worded as the user wants it sent. To phone someone, call call_contact. Never ask for or invent \
-a phone number; Jarvis looks it up.
+worded as the user wants it sent. To phone someone, call call_contact; to end a call, \
+hang_up. Never ask for or invent a phone number; Jarvis looks it up.
 - For what the user asked or did before ("what did I ask about ... last week", "when did I \
 check the weather"), call recall; never guess an earlier request.
 - When the user says "remember that ...", call remember; "what do you remember" is \

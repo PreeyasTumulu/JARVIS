@@ -12,8 +12,10 @@ Falling back from Web to the desktop app happens only when Web never got as far 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
+import secrets
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -41,7 +43,11 @@ LINKED = "whatsapp.web_linked"  # preference: WhatsApp Web in Jarvis's profile i
 LOAD_TIMEOUT_S = 60  # WhatsApp Web syncs on first load, which can be slow
 PREFILL_TIMEOUT_S = 15
 DESKTOP_OPEN_TIMEOUT_S = 15
-VK_RETURN = 0x0D
+VK_RETURN, VK_CONTROL, VK_A, VK_BACKSPACE = 0x0D, 0x11, 0x41, 0x08
+# Exact names, buttons only: rows in the call history also say "Voice call" (ADR-069).
+VOICE_CALL = uia.Control("button", "Voice call")
+END_CALL_NAMES = ("End call", "Hang up", "Leave call")
+CALL_START_CHECKS = 5
 _DROP = {"️", "⃣", "‍"}
 
 
@@ -212,10 +218,7 @@ class WhatsAppDesktop:
                 "WhatsApp opened, but I could not see the message in its text box, so I did "
                 "not press Send"
             )
-        if await asyncio.to_thread(win.foreground_window) != window.hwnd and not (
-            await asyncio.to_thread(win.focus_window, window.hwnd)
-        ):
-            raise NotReady("Windows did not let me bring WhatsApp to the front")
+        await self._to_front(window)
         await asyncio.to_thread(sendinput.press_combo, (), VK_RETURN)
         for _ in range(10):
             await asyncio.sleep(0.5)
@@ -223,6 +226,67 @@ class WhatsAppDesktop:
             if after is not None and not same_text(after, message):
                 return Sent("desktop", SendStatus.SENT)
         return Sent("desktop", SendStatus.UNVERIFIED)
+
+    async def call(self, phone: str) -> bool:
+        """Press Voice call in this number's chat. True once a call is seen on screen.
+
+        WhatsApp may show another name than the contact book, and a link that fails leaves the
+        previous chat open, whose call button would ring the wrong person. So the link carries a
+        one-time marker: seeing it in the box proves this link opened the chat. It is cleared
+        before the call, and Enter is never pressed, so it cannot be sent.
+        """
+        marker = f"jarvis-{secrets.token_hex(3)}"
+        url = DESKTOP_URL.format(phone=phone.lstrip("+"), text=marker)
+        try:
+            await asyncio.to_thread(os.startfile, url)
+        except OSError as exc:
+            raise NotReady("the WhatsApp desktop app is not installed") from exc
+        window = await self._window()
+        if not await self._prefilled(window, marker):
+            raise NotReady("WhatsApp did not open that chat; the number may not be on WhatsApp")
+        await self._to_front(window)
+        await asyncio.to_thread(sendinput.press_combo, (VK_CONTROL,), VK_A)
+        await asyncio.to_thread(sendinput.press_combo, (), VK_BACKSPACE)
+        await asyncio.sleep(0.3)
+        if await run_com(uia.focused_text, window.hwnd) != "":
+            raise NotReady("I could not clear WhatsApp's message box")
+        await self._to_front(window)
+        try:
+            await run_com(uia.press, window.hwnd, VOICE_CALL)
+        except uia.UIAError as exc:
+            raise NotReady("I could not find WhatsApp's Voice call button") from exc
+        return await self._call_visible()
+
+    async def hang_up(self) -> bool:
+        """Press WhatsApp's end call button. False if there is none, so no call is on."""
+        for window in await self._all_windows():
+            for name in END_CALL_NAMES:
+                with contextlib.suppress(uia.UIAError):
+                    await run_com(uia.press, window.hwnd, uia.Control("button", name))
+                    return True
+        return False
+
+    async def _call_visible(self) -> bool:
+        for _ in range(CALL_START_CHECKS):
+            await asyncio.sleep(1)
+            for window in await self._all_windows():
+                content, _cut = await run_com(uia.read_window, window.hwnd, 0)
+                names = {c.name.casefold() for c in content.controls if c.kind == "button"}
+                if names & {name.casefold() for name in END_CALL_NAMES}:
+                    return True
+        return False
+
+    @staticmethod
+    async def _all_windows() -> list[win.WindowInfo]:
+        windows = await asyncio.to_thread(win.list_windows)
+        return [w for w in windows if w.exe.casefold().startswith("whatsapp")]
+
+    @staticmethod
+    async def _to_front(window: win.WindowInfo) -> None:
+        if await asyncio.to_thread(win.foreground_window) != window.hwnd and not (
+            await asyncio.to_thread(win.focus_window, window.hwnd)
+        ):
+            raise NotReady("Windows did not let me bring WhatsApp to the front")
 
     async def _window(self) -> win.WindowInfo:
         for _ in range(int(DESKTOP_OPEN_TIMEOUT_S / 0.5)):

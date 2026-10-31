@@ -140,8 +140,8 @@ GROUPS: dict[str, Group] = {
         ),
     ),
     "calls": Group(
-        ("call_contact",),
-        re.compile(r"\b(call|phone|dial|ring)\b(?! (me|him|her|them) (back|later))"),
+        ("call_contact", "hang_up"),
+        re.compile(r"\b(call|phone|dial|ring|hang up)\b(?! (me|him|her|them) (back|later))"),
     ),
     "notifications": Group(
         ("read_notifications",),

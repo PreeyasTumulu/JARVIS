@@ -238,6 +238,12 @@ def world(
     )
     world.mail = mail_server
     monkeypatch.setattr("jarvis.tools.messaging.calls.dial", world.dialed.append)
+
+    async def whatsapp_call(phone: str) -> bool:
+        world.dialed.append(phone)
+        return True
+
+    monkeypatch.setattr("jarvis.tools.messaging.calls.whatsapp_call", whatsapp_call)
     return world
 
 

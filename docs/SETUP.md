@@ -285,7 +285,9 @@ Answer a question with its number ("two") or its name; "other: ..." gives your o
   You get an urgent notification with a button per option (up to three). Permissions go to the phone only with an access token in `.env` (`NTFY_TOKEN`), because anyone who knows a topic name can post to it.
 - Twilio (paid, a real call): create an account, buy or verify a number, import [docs/twilio-ask-flow.json](twilio-ask-flow.json) as a Studio flow (Studio, Create new Flow, Import from JSON), then set `phone = "twilio"`, `[phone] number`, `twilio_from`, `twilio_flow_sid`, and `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` in `.env`. Press the option's number on the keypad, or say it.
 
-**Calls through your phone.** Pair your Android phone in Phone Link with calls turned on (Bluetooth). Then "call mom" asks "Call Amma (number ending 3210) from your phone?" and, on yes, Phone Link dials. The first time, Windows asks which app opens phone links: pick Phone Link and "Always".
+**WhatsApp calls (the default).** Keep the WhatsApp desktop app signed in. "Call mom" asks "WhatsApp call Amma (number ending 3210)?" and, on yes, opens the chat and presses Voice call; a short `jarvis-...` code appears in the message box for a moment and is cleared, never sent. "Hang up" ends the call. Leave WhatsApp in front until the call starts.
+
+**Calls through your phone.** Set `[calls] method = "phone_link"` in `config/local.toml`. Pair your Android phone in Phone Link with calls turned on (Bluetooth). Then "call mom" asks "Call Amma (number ending 3210) from your phone?" and, on yes, Phone Link dials. The first time, Windows asks which app opens phone links: pick Phone Link and "Always".
 
 ## 5j. Dictation and media (Phase 10)
 

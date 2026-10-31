@@ -19,7 +19,7 @@ A five-minute walk through what Jarvis does, in an order that tells a story: it 
 | 4 | "What's the share price of Reliance?" and "convert 100 dollars to rupees" | Two spoken answers with numbers from tools | Never guesses numbers |
 | 5 | "Remember that my manager is Ravi" then "who is my manager?" | Saved, then answered from memory without a web search | Local memory |
 | 6 | "Message friend that I will be late" | A Confirm card on the page and the spoken question; say "no" | Nothing is sent without your yes |
-| 7 | "Call friend" | "Call Demo (number ending 0000) from your phone?"; say "no" | Phone Link calls, same rule |
+| 7 | "Call friend" | "WhatsApp call Demo (number ending 0000)?"; say "no" | Calls, same rule |
 | 8 | "Think harder: why did the Roman empire fall in the west but not in the east?" | The console names `openai/gpt-oss-120b`; a fast answer | A free cloud model for public questions only |
 | 9 | "Think harder and explain what is on my clipboard" (copy a harmless sentence first) | Answered by `jarvis-hermes3` | Private content never leaves the laptop |
 | 10 | In a terminal: `uv run jarvis claude-hook test` | Jarvis asks "Which color do you like? one, Blue..."; say "two"; the terminal prints `Green` | Claude Code's questions answered by voice |

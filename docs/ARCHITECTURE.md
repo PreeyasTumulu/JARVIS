@@ -280,7 +280,8 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `read_window_text(app)` | 6 | safe (blocked for the apps above) | private, untrusted |
 | `browser_open(url, search?)`, `browser_read()`, `browser_click(target)`, `browser_type(text, target?, submit?)` | 6 | safe; submits, purchases, and deletes confirm (search boxes do not); passwords, card numbers, one-time codes, local addresses, and WhatsApp sites blocked; open and type are `egress` | private, untrusted |
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
-| `call_contact(contact)` | 9 | confirm (floor); dials a saved contact through Phone Link (`tel:`) | private |
+| `call_contact(contact)` | 9, 17 | confirm (floor); calls a saved contact by the WhatsApp app, or Phone Link if set | private |
+| `hang_up()` | 17 | safe; presses WhatsApp's end call button | private |
 | `read_notifications(person?)` | 7 | safe; only apps on `notifications.apps` | private, untrusted |
 | `read_mail(sender?, unread_only?)`, `read_email(message)` | 11 | safe; the folder is opened read-only and nothing is marked read | private, untrusted |
 | `reply_email(message, text, reply_all?)` | 11 | confirm (floor); only to the people on that email, addresses read out | private |

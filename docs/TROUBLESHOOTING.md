@@ -57,7 +57,9 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | `click` cannot find a button you can see | Some apps (Electron, WebView2) hide their controls from UI Automation. "What does <app> say" lists what Jarvis can see. |
 | A file is "blocked" | It is outside `[files] allowed_folders`, or its name looks like a secret (`.env`, `*.pem`). Add the folder in `config/local.toml`. |
 | WhatsApp says "not sent" | `uv run jarvis whatsapp login` again if your phone unlinked it; if WhatsApp Web changed, set `[whatsapp] method = "desktop"` (R27). |
-| "call mom" does nothing | Phone Link must be paired with calls on. The first `tel:` link asks which app opens it: pick Phone Link and "Always" (R36). |
+| "No call was made: WhatsApp did not open that chat" | The number may not be on WhatsApp, or WhatsApp lost focus. Keep it in front and try again (R52). |
+| "I could not clear WhatsApp's message box" | No call was made. Delete the `jarvis-...` code from that chat's box by hand and tell us (R52). |
+| "call mom" does nothing with `method = "phone_link"` | Phone Link must be paired with calls on. The first `tel:` link asks which app opens it: pick Phone Link and "Always" (R36). |
 
 ## Notifications
 

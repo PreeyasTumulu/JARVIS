@@ -6,9 +6,16 @@ Versions 0.4.0 to 1.6.0 are built on stacked `phase/<n>-<name>` branches with gr
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-31: WhatsApp calls (Phase 17)
+
 ### Added
+- `call_contact` calls through the WhatsApp desktop app by default, with a one-time marker proving the right chat opened; `[calls] method = "phone_link"` keeps the `tel:` way.
+- `hang_up` ends a WhatsApp call.
 - `install.ps1`: one command that checks for uv and Ollama (offering to install them with winget, asking first), installs the Python packages (GPU speech recognition when an NVIDIA GPU is present), downloads the models, creates `config/local.toml` and `.env` from their templates, and downloads the speech models; `-DryRun` only reports. CI runs the dry run.
 - This changelog, issue and pull request templates, CODEOWNERS, and Dependabot for GitHub Actions.
+
+### Fixed
+- Desktop WhatsApp sends stopped before pressing Send, because the app's web view reports its host pane as focused.
 
 ## [1.6.0] - 2026-10-20: Screen reading (Phase 15)
 

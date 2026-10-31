@@ -412,6 +412,12 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** these were the open-source polish steps recommended after Phase 15, and you asked for the next phase to follow the recommendations without asking. Eight manual setup commands became one, and a stranger's first report arrives with the version, the area, and no private data.
 - **Cost:** the installer cannot be tested end to end on a clean machine in CI (no Ollama or GPU there), only its dry run; it was run for real on this laptop. Python dependencies are not under Dependabot because uv.lock updates deserve the full test suite and a human look.
 
+### ADR-069: Calls through the WhatsApp desktop app
+
+- **Decision:** `call_contact` opens the contact's chat in the WhatsApp desktop app and presses its Voice call button, after the usual yes. `[calls] method = "phone_link"` keeps the `tel:` way; neither falls back to the other. The link carries a one-time marker, and the button is pressed only after the marker is seen in the message box and cleared. Only a button named exactly "Voice call" can be pressed. `hang_up` presses WhatsApp's end call button.
+- **Why:** you asked for WhatsApp calls. The app is already installed and signed in, with no pairing or call minutes. No documented link starts a call, so a button press is the way in. WhatsApp's chat header can show another name than the contact book, so names cannot prove the right chat is open, and a failed link leaves the previous chat open, whose button would ring the wrong person. The marker proves that this link opened the chat. Rows in the call history also say "Voice call", hence buttons only.
+- **Cost:** only people on WhatsApp can be called. It extends the terms-of-service risk you accepted for messages (ADR-037, R5). See R52 for what can break.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

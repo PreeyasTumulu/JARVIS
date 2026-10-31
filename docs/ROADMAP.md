@@ -23,6 +23,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 14 | Memory by meaning, morning briefing | Built on `phase/14-memory-briefing` (stacked on Phase 13), waiting for your test | v1.5.0 |
 | 15 | Screen reading (Windows OCR) | Built on `phase/15-screen-reading` (stacked on Phase 14), waiting for your test | v1.6.0 |
 | 16 | Release polish (installer, changelog, templates) | Built on `phase/16-release-polish` (stacked on Phase 15), waiting for your review | unreleased |
+| 17 | WhatsApp calls | Built on `phase/17-whatsapp-calls` (stacked on Phase 16), waiting for your test | v1.7.0 |
 
 ## How each phase runs
 
@@ -751,6 +752,33 @@ uv run pytest
 **Not done, needs you:** the GitHub release and tags, after your review (docs/RELEASING.md); README screenshots and the demo video, which need your screen.
 
 **Exit criteria:** a new user gets from clone to "Hey Jarvis" with one command plus SETUP.md for accounts.
+
+## Phase 17: WhatsApp calls
+
+**Scope:** "call mom" rings them on WhatsApp, and "hang up" ends the call.
+
+**Decisions (asked 2026-10-31):** the WhatsApp desktop app instead of Phone Link, which stays available by a setting (ADR-069).
+
+**Built**
+
+- `call_contact` opens the chat with a one-time marker, checks that it arrived, clears it, and presses Voice call. It reports honestly whether the call was seen starting.
+- `hang_up`, `[calls] method`, and `scripts/spike_whatsapp_call.py`, a read-only check of the call buttons that hides personal text.
+- Also fixed: desktop WhatsApp sends never pressed Send, because the web view reports its host pane as focused. Reading the focused field inside the window fixed it, confirmed by a real send.
+
+**Test commands**
+
+```powershell
+uv run pytest tests/unit/test_calls.py tests/unit/test_uia_focus.py
+uv run python scripts/spike_whatsapp_call.py    # with a chat open; presses nothing
+uv run jarvis ask "call single"                 # someone who expects it; answer yes
+uv run jarvis ask "hang up"
+```
+
+**Verified during the build (live, on this laptop):** the Voice call button seen as one enabled button with one on-screen position in an open chat; the message box read 8 times out of 8 with WhatsApp in front; a real message sent by you through the fixed check. Not verified live: the marker being cleared, a real call, the name of the end call button, and how a call looks to Windows.
+
+**Not done, needs a real call first:** pausing "Hey Jarvis" during a call, which depends on detecting the call (R52).
+
+**Exit criteria:** "call <contact>" rings the right person after a yes; a chat that fails to open places no call; "hang up" ends the call.
 
 ## Beyond 1.0
 

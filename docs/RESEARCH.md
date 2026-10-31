@@ -33,7 +33,7 @@ There are three different things here, with different answers.
 | Way | Cost | Status |
 |---|---|---|
 | **Phone Link** (`tel:` link, your Android phone dials over Bluetooth, you talk through the PC) | free | built: `call_contact`, asks first, needs your test (ADR-053) |
-| WhatsApp desktop call | free | possible through UI Automation (open the chat, press the call button); brittle, not built |
+| WhatsApp desktop call | free | built, the default since Phase 17 (ADR-069) |
 | Twilio "click to call" (Twilio rings you, then connects your mom) | about 1 to 3 US cents a minute to Indian mobiles ([Twilio India pricing](https://www.twilio.com/en-us/voice/pricing/in)) | not built; Phone Link covers it for free |
 
 ### "Jarvis, call me" (Jarvis reaches you when you are away from the laptop)

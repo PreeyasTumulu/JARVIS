@@ -177,7 +177,7 @@ Neither has been tried live. ntfy topics are public to anyone who knows the name
 
 ### R36. Calls through Phone Link
 
-`call_contact` depends on Phone Link being paired with an Android phone with calls allowed over Bluetooth. Windows has not picked an app for `tel:` links on this laptop, so the first call shows a picker. Whether Phone Link dials at once or shows its dialer for you to press Call depends on its version. Not tried live.
+Since Phase 17 this applies only with `[calls] method = "phone_link"`. `call_contact` then depends on Phone Link being paired with an Android phone with calls allowed over Bluetooth. Windows has not picked an app for `tel:` links on this laptop, so the first call shows a picker. Whether Phone Link dials at once or shows its dialer for you to press Call depends on its version. Not tried live.
 
 ### R37. The Claude Code bridge
 
@@ -238,6 +238,14 @@ Every command and Jarvis's answer has been kept in `jarvis.db` since Phase 1; re
 ### R51. Reading and clicking by OCR
 
 OCR reads what is visible, so a window must be in front (Jarvis brings it forward) and nothing may cover it; text in images, games, and remote desktops is read as it looks, mistakes included. A click found by OCR is a click at a position: a pop-up, a scroll, or a window that moved between the confirmation and the click could put something else there. Jarvis asks every time and reads the window again just before clicking, but it cannot see what a button does. Anything on the screen can be read, including other apps' private content; it stays local and never reaches a cloud model.
+
+### R52. WhatsApp calls press a button in the app
+
+- There is no documented link that starts a call, so Jarvis presses the button named exactly "Voice call". A WhatsApp update or a language other than English can rename it; Jarvis then says no call was made.
+- The one-time marker proves the link opened a chat, and is cleared before the call. It replaces any unsent draft in that chat. If clearing fails, the code stays in the box, unsent, and no call is made.
+- Between clearing the box and pressing the button there are about two seconds. WhatsApp must stay in front, but clicking another chat in that moment would call that chat. Keep your hands off it until the call starts.
+- The names of the end call button are a best guess until a real call shows them. If "hang up" says there is no call, end it in the app.
+- "Hey Jarvis" keeps listening during a call, so Jarvis can hear the call and be woken by it. Pausing it needs a reliable way to see a call, which needs a real call first. For now, turn the microphone off from the tray during calls.
 
 ### R11. Cancellation
 

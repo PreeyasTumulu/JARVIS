@@ -13,6 +13,7 @@ from jarvis.app import App, build_app
 from jarvis.config import Settings
 from jarvis.console import ConsoleChannel, ConsoleRenderer
 from jarvis.core.channel import FirstAnswerChannel
+from jarvis.overlay.client import start_overlay
 from jarvis.platform.hotkeys import Hotkey, HotkeyListener, parse_hotkey
 from jarvis.voice.audio import (
     SILENT_RMS,
@@ -46,6 +47,7 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
     with asyncio.Runner() as runner:
         app = build_app(settings, channel)
         app.bus.subscribe(ConsoleRenderer(console, verbose=verbose))
+        overlay = start_overlay(settings, app.bus)
         session = create_session(settings, app, wake_enabled=wake_enabled)
         voice_channel.attach(session)
         hotkeys: HotkeyListener | None = None
@@ -61,6 +63,8 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
         except KeyboardInterrupt:
             pass
         finally:
+            if overlay is not None:
+                overlay.close()
             if hotkeys is not None:
                 hotkeys.stop()
             runner.run(session.close())

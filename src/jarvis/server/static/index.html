@@ -3,30 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark">
   <title>Jarvis</title>
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/reactor.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <img class="logo" src="/static/icon.svg" alt="" width="28" height="28">
-      <span class="name">Jarvis</span>
-      <span class="meta" id="meta"></span>
-    </div>
-    <div class="indicators">
-      <span class="pill" id="voice" data-state="off" title="Voice">Voice off</span>
-      <span class="pill" id="conn" data-state="connecting">Connecting</span>
-    </div>
-  </header>
+  <!-- The reactor draws over everything but takes no clicks. -->
+  <canvas id="reactor" aria-hidden="true"></canvas>
 
-  <main class="layout">
+  <nav class="rail" aria-label="Panels">
+    <img class="mark" src="/static/icon.svg" alt="Jarvis" width="30" height="30">
+    <div class="rail-tabs" role="tablist" aria-orientation="vertical">
+      <button type="button" role="tab" id="tab-activity" aria-selected="true" aria-controls="panel-activity" title="Activity" aria-label="Activity">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+        <span class="rail-label">Activity</span>
+      </button>
+      <button type="button" role="tab" id="tab-audit" aria-selected="false" aria-controls="panel-audit" title="Audit log" aria-label="Audit log">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3"/></svg>
+        <span class="rail-label">Audit</span>
+      </button>
+      <button type="button" role="tab" id="tab-contacts" aria-selected="false" aria-controls="panel-contacts" title="Contacts" aria-label="Contacts">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 20c1-4 4-6 8-6s7 2 8 6"/></svg>
+        <span class="rail-label">Contacts</span>
+      </button>
+    </div>
+  </nav>
+
+  <main class="deck">
+    <header class="topline">
+      <h1>Jarvis</h1>
+      <span class="meta" id="meta"></span>
+      <span class="status" id="conn" data-state="connecting">Connecting</span>
+    </header>
+
+    <section class="stage" id="stage" aria-label="What Jarvis is doing">
+      <div class="dock" id="dock"></div>
+      <div class="stage-words">
+        <p class="voice-state" id="voice" data-state="off">Voice off</p>
+        <p class="live" id="live"></p>
+        <p class="hint" id="hint">Enter sends, Shift+Enter adds a line, Esc stops.</p>
+      </div>
+    </section>
+
     <section class="conversation" aria-label="Conversation">
       <div class="chat" id="chat" aria-live="polite">
         <div class="welcome" id="welcome">
-          <h1>What can I do for you?</h1>
           <p>Type a command, or use the mic. Try one of these:</p>
           <div class="suggestions" id="suggestions">
             <button type="button" class="chip">what's Reliance trading at</button>
@@ -44,7 +68,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
           <span class="sr-only">Talk</span>
         </button>
-        <textarea id="input" rows="1" placeholder="Message Jarvis" aria-label="Command"></textarea>
+        <textarea id="input" rows="1" placeholder="Tell Jarvis what to do" aria-label="Command"></textarea>
         <button type="submit" class="round send" id="send" title="Send (Enter)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.1 15 12 3.4 13.9Z"/></svg>
           <span class="sr-only">Send</span>
@@ -54,40 +78,37 @@
           <span class="sr-only">Stop</span>
         </button>
       </form>
-      <p class="hint" id="hint">Enter sends, Shift+Enter adds a line, Esc stops.</p>
     </section>
-
-    <aside class="side" aria-label="Activity">
-      <div class="tabs" role="tablist">
-        <button type="button" role="tab" id="tab-activity" aria-selected="true" aria-controls="panel-activity">Activity</button>
-        <button type="button" role="tab" id="tab-audit" aria-selected="false" aria-controls="panel-audit">Audit log</button>
-        <button type="button" role="tab" id="tab-contacts" aria-selected="false" aria-controls="panel-contacts">Contacts</button>
-      </div>
-      <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="tab-activity">
-        <p class="empty" id="log-empty">Tool calls show up here as they happen.</p>
-        <ol class="log" id="log"></ol>
-      </div>
-      <div class="panel" id="panel-audit" role="tabpanel" aria-labelledby="tab-audit" hidden>
-        <div class="panel-head">
-          <span>Last 50 tool calls</span>
-          <button type="button" class="ghost" id="audit-refresh">Refresh</button>
-        </div>
-        <ol class="audit" id="audit"></ol>
-      </div>
-      <div class="panel" id="panel-contacts" role="tabpanel" aria-labelledby="tab-contacts" hidden>
-        <form class="contact-form" id="contact-form" autocomplete="off">
-          <input id="contact-name" placeholder="Name, for example Amma" aria-label="Name" maxlength="80" required>
-          <input id="contact-phone" placeholder="Phone, for example +91 98765 43210" aria-label="Phone" maxlength="40" inputmode="tel" required>
-          <input id="contact-aliases" placeholder="Also called, for example Mom, Amma" aria-label="Other names, separated by commas" maxlength="200">
-          <div class="form-row">
-            <button type="submit" class="btn primary">Add contact</button>
-            <label class="ghost file-button">Import .vcf<input type="file" id="contact-file" accept=".vcf,text/vcard,text/x-vcard" class="sr-only"></label>
-          </div>
-          <p class="form-note" id="contact-note" hidden></p>
-        </form>
-        <ol class="contacts" id="contacts"></ol>
-      </div>
-    </aside>
   </main>
+
+  <aside class="side" aria-label="Details">
+    <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="tab-activity">
+      <h2>Activity</h2>
+      <p class="empty" id="log-empty">Tool calls show up here as they happen.</p>
+      <ol class="log" id="log"></ol>
+    </div>
+    <div class="panel" id="panel-audit" role="tabpanel" aria-labelledby="tab-audit" hidden>
+      <div class="panel-head">
+        <h2>Audit log</h2>
+        <button type="button" class="ghost" id="audit-refresh">Refresh</button>
+      </div>
+      <p class="panel-note">Last 50 tool calls</p>
+      <ol class="audit" id="audit"></ol>
+    </div>
+    <div class="panel" id="panel-contacts" role="tabpanel" aria-labelledby="tab-contacts" hidden>
+      <h2>Contacts</h2>
+      <form class="contact-form" id="contact-form" autocomplete="off">
+        <input id="contact-name" placeholder="Name, for example Amma" aria-label="Name" maxlength="80" required>
+        <input id="contact-phone" placeholder="Phone, for example +91 98765 43210" aria-label="Phone" maxlength="40" inputmode="tel" required>
+        <input id="contact-aliases" placeholder="Also called, for example Mom, Amma" aria-label="Other names, separated by commas" maxlength="200">
+        <div class="form-row">
+          <button type="submit" class="btn primary">Add contact</button>
+          <label class="ghost file-button">Import .vcf<input type="file" id="contact-file" accept=".vcf,text/vcard,text/x-vcard" class="sr-only"></label>
+        </div>
+        <p class="form-note" id="contact-note" hidden></p>
+      </form>
+      <ol class="contacts" id="contacts"></ol>
+    </div>
+  </aside>
 </body>
 </html>

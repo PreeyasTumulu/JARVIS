@@ -136,6 +136,9 @@ def build_parser() -> argparse.ArgumentParser:
     audit = sub.add_parser("audit", help="show recent tool calls from the audit log")
     audit.add_argument("--last", type=int, default=20, help="how many entries (default 20)")
 
+    overlay = sub.add_parser("overlay", help="the fullscreen effect when you say Hey Jarvis")
+    overlay.add_argument("action", choices=["demo"], help="demo: show it once, recording nothing")
+
     sub.add_parser("version", help="print the version")
     return parser
 
@@ -162,6 +165,10 @@ def main(argv: list[str] | None = None) -> int:
         return claude_hook(settings, args.action, console)
     log_file = setup_logging(settings.data_dir, verbose=args.verbose)
 
+    if args.command == "overlay":
+        from jarvis.overlay.demo import run_demo
+
+        return run_demo(settings, console)
     if args.command == "audit":
         return show_audit(settings, args.last, console)
     if args.command == "index":

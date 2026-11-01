@@ -23,7 +23,13 @@ import numpy as np
 
 from jarvis.config import Settings
 from jarvis.core.agent import Agent, TurnStatus
-from jarvis.core.events import EventBus, TranscriptHeard, VoiceStateChanged
+from jarvis.core.events import (
+    EventBus,
+    TranscriptHeard,
+    TranscriptPartial,
+    VoiceLevel,
+    VoiceStateChanged,
+)
 from jarvis.voice.audio import FRAME_MS, Audio
 from jarvis.voice.dictation import DictationError
 from jarvis.voice.endpoint import Endpoint, Endpointer
@@ -37,6 +43,18 @@ WAKE_COOLDOWN_S = 1.5  # ignore the wake word right after it fired
 ECHO_TAIL_S = 0.4  # ignore the wake word right after Jarvis stops speaking
 MIC_STALL_S = 3.0  # an open microphone that sends nothing this long has died; reopen it
 MIC_RETRY_S = 5.0  # wait between attempts while the microphone cannot be reopened
+PARTIAL_FIRST_S = 0.7  # how much speech to hold before the first live transcript
+PARTIAL_EVERY_S = 0.8  # then at most this often; a slow Whisper (the CPU) spaces itself out
+PARTIAL_BACKOFF = 3.0  # wait this many times what the last live transcript took
+LEVEL_GAIN = 2.3  # quiet speech is about 0.02 RMS and loud speech about 0.2
+
+
+def voice_level(frame: Audio) -> float:
+    """How loud a frame looks, from 0 to 1, on a curve that makes normal speech move the rings."""
+    if len(frame) == 0:
+        return 0.0
+    rms = float(np.sqrt(np.mean(np.square(frame.astype(np.float32) / 32768.0))))
+    return min(1.0, float(np.sqrt(rms)) * LEVEL_GAIN)
 
 
 class VoiceState(StrEnum):
@@ -134,6 +152,9 @@ class VoiceSession:
         self._ptt_lock = asyncio.Lock()
         self._wake_quiet_until = 0.0
         self._speech_end = 0.0
+        self._partial_task: asyncio.Task[None] | None = None
+        self._partial_due = 0.0
+        self._capture_id = 0
         self._tasks: set[asyncio.Task[Any]] = set()
         self.heard_to_action_ms: list[int] = []
 
@@ -322,6 +343,7 @@ class VoiceSession:
         unless the text could not be inserted."""
         assert self._dictation is not None
         await self._set_state(VoiceState.TRANSCRIBING, "dictation")
+        await self._live_transcript_done()
         transcript = await asyncio.to_thread(self._stt.transcribe, audio, dictation=True)
         text = transcript.text
         if not text or is_stop_command(text):
@@ -387,10 +409,14 @@ class VoiceSession:
             log.info("Microphone reopened")
 
     async def _route(self, frame: Audio) -> None:
+        if self._capture is not Capture.NONE:
+            await self._bus.publish(VoiceLevel(voice_level(frame)))
         if self._capture in (Capture.PUSH_TO_TALK, Capture.DICTATION):
             self._buffer.append(frame)
+            self._maybe_transcribe_live()
         elif self._capture is Capture.ENDPOINT:
             await self._feed_endpointer(frame)
+            self._maybe_transcribe_live()
         elif self._wake is not None and self._wake_armed():
             score = await asyncio.to_thread(self._wake.score, frame)
             if score >= self._cfg.wake_threshold:
@@ -437,6 +463,36 @@ class VoiceSession:
     def _begin_capture(self, mode: Capture) -> None:
         self._buffer = []
         self._capture = mode
+        self._capture_id += 1
+        self._partial_due = time.monotonic() + PARTIAL_FIRST_S
+
+    def _maybe_transcribe_live(self) -> None:
+        """While you speak, show what Whisper has so far. Only ever shown: the command that runs
+        comes from the final transcript. Dictation stays out, since its text is not for the page."""
+        if (
+            not self._cfg.live_transcript
+            or self._capture not in (Capture.PUSH_TO_TALK, Capture.ENDPOINT)
+            or time.monotonic() < self._partial_due
+            or (self._partial_task is not None and not self._partial_task.done())
+            or not self._buffer
+        ):
+            return
+        audio = np.concatenate(self._buffer)
+        self._partial_task = self._spawn(self._transcribe_live(audio, self._capture_id))
+
+    async def _transcribe_live(self, audio: Audio, capture_id: int) -> None:
+        started = time.monotonic()
+        transcript = await asyncio.to_thread(self._stt.transcribe, audio)
+        took = time.monotonic() - started
+        self._partial_due = time.monotonic() + max(PARTIAL_EVERY_S, took * PARTIAL_BACKOFF)
+        if capture_id == self._capture_id and self._capture is not Capture.NONE and transcript.text:
+            await self._bus.publish(TranscriptPartial(transcript.text))
+
+    async def _live_transcript_done(self) -> None:
+        """Whisper takes one job at a time here: the final one must not race the last partial."""
+        task = self._partial_task
+        if task is not None and not task.done():
+            await asyncio.wait([task])
 
     def _end_capture(self) -> Audio:
         frames, self._buffer = self._buffer, []
@@ -448,6 +504,7 @@ class VoiceSession:
 
     async def _process(self, audio: Audio) -> None:
         await self._set_state(VoiceState.TRANSCRIBING)
+        await self._live_transcript_done()
         transcript = await asyncio.to_thread(self._stt.transcribe, audio)
         if transcript.text:
             await self._bus.publish(

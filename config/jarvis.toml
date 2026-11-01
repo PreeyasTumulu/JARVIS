@@ -202,6 +202,13 @@ port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachabl
 open_browser = true          # open the page when `jarvis serve` starts
 speak_replies = false        # also say the answers to commands typed on the page
 
+[overlay]                     # the fullscreen effect when you say "Hey Jarvis" (ADR-070)
+enabled = true
+mode = "takeover"             # takeover: whole screen, then an edge glow; edge: only the glow
+dim = 0.72                    # how dark the desktop goes during a takeover, 0 to 0.9
+show_in_captures = false      # true shows it in screenshots and shares; use it to record a demo
+max_visible_s = 240           # hide if Jarvis goes silent for this long
+
 [bridge]
 # Claude Code asks you through Jarvis (install once with: uv run jarvis claude-hook install).
 enabled = true

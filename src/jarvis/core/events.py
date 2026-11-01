@@ -90,6 +90,16 @@ class TranscriptHeard:
 
 
 @dataclass(frozen=True)
+class TranscriptPartial:
+    text: str  # what Whisper has so far, shown while you speak; never acted on
+
+
+@dataclass(frozen=True)
+class VoiceLevel:
+    level: float  # 0 to 1, how loud the microphone is while recording; the audio itself stays here
+
+
+@dataclass(frozen=True)
 class NotificationsArrived:
     count: int
     apps: tuple[str, ...]  # app names only; the text stays in the database (private)
@@ -113,6 +123,8 @@ Event = (
     | TurnFinished
     | VoiceStateChanged
     | TranscriptHeard
+    | TranscriptPartial
+    | VoiceLevel
     | ReminderDue
     | NotificationsArrived
 )

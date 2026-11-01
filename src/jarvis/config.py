@@ -261,6 +261,21 @@ class VoiceSettings(_Section):
     max_utterance_s: float = Field(default=12, gt=1)
     no_speech_timeout_s: float = Field(default=5, gt=0.5)
     earcons: bool = True
+    live_transcript: bool = True  # transcribe while you speak, for the overlay and the page
+
+
+class OverlaySettings(_Section):
+    """The fullscreen effect when you say "Hey Jarvis" (ADR-070)."""
+
+    enabled: bool = True
+    # takeover: the whole screen while you speak, then an edge glow once Jarvis gets to work.
+    # edge: only the edge glow and the small panel.
+    mode: Literal["takeover", "edge"] = "takeover"
+    dim: float = Field(default=0.72, ge=0, le=0.9)  # how dark the desktop goes during a takeover
+    # Hidden from screenshots, screen shares, and Jarvis's own screen reading. Turn it on to
+    # record a demo.
+    show_in_captures: bool = False
+    max_visible_s: float = Field(default=240, gt=10)  # hide if Jarvis goes silent for this long
 
 
 class McpServerSettings(_Section):
@@ -380,6 +395,7 @@ class Settings(_Section):
     phone: PhoneSettings = PhoneSettings()
     calls: CallsSettings = CallsSettings()
     tts: TTSSettings = TTSSettings()
+    overlay: OverlaySettings = OverlaySettings()
     voice: VoiceSettings = VoiceSettings()
     dictation: DictationSettings = DictationSettings()
     data_dir: Path = Field(default_factory=default_data_dir)

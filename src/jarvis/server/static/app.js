@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const ui = {
   chat: $("chat"), welcome: $("welcome"), suggestions: $("suggestions"),
   form: $("composer"), input: $("input"), send: $("send"), stop: $("stop"), mic: $("mic"),
-  hint: $("hint"), meta: $("meta"), voice: $("voice"), conn: $("conn"),
+  hint: $("hint"), meta: $("meta"), voice: $("voice"), conn: $("conn"), live: $("live"),
   log: $("log"), logEmpty: $("log-empty"), audit: $("audit"), auditRefresh: $("audit-refresh"),
   tabActivity: $("tab-activity"), tabAudit: $("tab-audit"), tabContacts: $("tab-contacts"),
   panelActivity: $("panel-activity"), panelAudit: $("panel-audit"),
@@ -23,7 +23,8 @@ const VOICE_LABELS = {
   thinking: "Thinking", speaking: "Speaking", awaiting_answer: "Waiting for your answer",
   muted: "Mic off",
 };
-const MIC_ICON = "M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z";
+const RESTING = new Set(["idle", "off", "muted"]);
+const MIC_ICON ="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z";
 
 let ws = null;
 let everOpened = false;
@@ -134,6 +135,14 @@ function setBusy(value) {
   ui.send.hidden = value;
   ui.stop.hidden = !value;
   if (!value) for (const turn of turns.values()) dropThinking(turn);
+  moveReactor();
+}
+
+// The reactor shows the voice when the voice is doing something, and otherwise a typed command.
+function moveReactor() {
+  const state = ui.voice.dataset.state;
+  const resting = state === "idle" || state === "off" || state === "muted";
+  window.JarvisReactor.setState(resting && busy ? "thinking" : state);
 }
 
 function setVoice(info) {
@@ -151,11 +160,20 @@ function setVoice(info) {
 }
 
 function setVoiceState(state, detail) {
-  ui.voice.dataset.state = state;
-  ui.voice.textContent = VOICE_LABELS[state] || state;
+  const dictating = (detail || "").startsWith("dictat");  // text for another app, not for Jarvis
+  const speakingToJarvis = state === "listening" && !dictating;
+  if (speakingToJarvis && ui.voice.dataset.state !== "listening") {
+    ui.live.textContent = "";
+    window.JarvisReactor.wake();
+  }
+  ui.voice.dataset.state = dictating ? "idle" : state;
+  ui.voice.textContent = dictating ? "Dictating" : VOICE_LABELS[state] || state;
   ui.voice.title = detail || "";
+  document.body.classList.toggle("awake", speakingToJarvis || (state === "transcribing" && !dictating));
+  if (RESTING.has(state)) ui.live.textContent = "";
   if (state === "awaiting_answer") answering = true;
   if (state !== "listening" && micOn) setMic(false);
+  moveReactor();
 }
 
 function setMic(on) {
@@ -484,6 +502,7 @@ const handlers = {
   question_closed: closeQuestion,
   assistant_message(message) {
     const turn = turnFor(message.turn_id);
+    ui.live.textContent = "";
     dropThinking(turn);
     addToTurn(turn, replyBubble(message.text, message.text === "Stopped." ? "cancelled" : "ok"));
   },
@@ -495,8 +514,11 @@ const handlers = {
   },
   voice_state_changed(message) { setVoiceState(message.state, message.detail); },
   transcript_heard(message) {
+    ui.live.textContent = message.text;
     if (answering) note(`You said: ${message.text}`);
   },
+  transcript_partial(message) { ui.live.textContent = message.text; },
+  voice_level(message) { window.JarvisReactor.setLevel(message.level); },
   reminder_due(message) { append(el("div", "note reminder", message.text)); },
   audit(message) { renderAudit(message.rows); },
   contacts(message) {

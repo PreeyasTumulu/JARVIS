@@ -39,6 +39,7 @@ from jarvis.server.hub import WebChannel, WebHub
 from jarvis.server.runtime import Runtime
 
 if TYPE_CHECKING:
+    from jarvis.overlay.client import OverlayClient
     from jarvis.platform.hotkeys import HotkeyListener
     from jarvis.tray import Tray
     from jarvis.voice.channel import VoiceChannel
@@ -146,6 +147,7 @@ async def _serve(
     app = runtime.app
     voice = _Voice(runtime, console, voice_channel, wake=wake) if voice_channel else None
     icon: Tray | None = None
+    overlay = _start_overlay(app) if voice_channel else None
     background: list[asyncio.Task[Any]] = []
     try:
         warning = await app.llm.check()
@@ -186,6 +188,8 @@ async def _serve(
         )
         await server.serve()
     finally:
+        if overlay is not None:
+            overlay.close()
         if icon is not None:
             icon.close()
         for task in background:
@@ -290,6 +294,16 @@ async def _start_voice(
     channel.attach(session)
     hotkeys = runner.start_hotkeys(app.settings, session, asyncio.get_running_loop(), console)
     return session, hotkeys
+
+
+def _start_overlay(app: App) -> OverlayClient | None:
+    try:
+        from jarvis.overlay.client import start_overlay
+
+        return start_overlay(app.settings, app.bus)
+    except Exception as exc:  # the effect must never stop Jarvis from starting
+        log.warning("The overlay could not start: %s", exc, exc_info=True)
+        return None
 
 
 def _start_tray(

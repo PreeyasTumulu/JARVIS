@@ -128,6 +128,15 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | "The calendar link answered 404" | The secret address was reset; copy it again from Google Calendar settings. |
 | A new meeting is missing | Google refreshes the iCal feed on its own schedule, sometimes hours later (R44). |
 
+## The wake overlay
+
+- **See it without speaking:** `uv run jarvis overlay demo`.
+- **It does not appear:** look in `%LOCALAPPDATA%\Jarvis\logs\overlay.log`. "A fullscreen game or presentation is running" means it stayed out of the way on purpose. "could not start" means this computer has no OpenGL 3.3 with transparency; voice works without it.
+- **It is in the way:** `[overlay] mode = "edge"` or `enabled = false` in `config/local.toml`, or a lower `dim`.
+- **It is missing from a recording:** that is on purpose. Set `show_in_captures = true` to record a demo.
+- **`uv sync` says it cannot remove `jarvis.exe`:** a Jarvis is running. Quit it first.
+- **The rings barely move, or stay at the top:** the level curve was tuned on synthetic speech (RISKS.md R54). Tell me what you see.
+
 ## Dictation and media
 
 | Symptom | Check |

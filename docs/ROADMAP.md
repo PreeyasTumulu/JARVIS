@@ -24,6 +24,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 15 | Screen reading (Windows OCR) | Built on `phase/15-screen-reading` (stacked on Phase 14), waiting for your test | v1.6.0 |
 | 16 | Release polish (installer, changelog, templates) | Built on `phase/16-release-polish` (stacked on Phase 15), waiting for your review | unreleased |
 | 17 | WhatsApp calls | Built on `phase/17-whatsapp-calls` (stacked on Phase 16), waiting for your test | v1.7.0 |
+| 18 | New interface and wake overlay | Built on `phase/18-interface` (stacked on Phase 17), waiting for your test | v1.8.0 |
 
 ## How each phase runs
 
@@ -779,6 +780,50 @@ uv run jarvis ask "hang up"
 **Not done, needs a real call first:** pausing "Hey Jarvis" during a call, which depends on detecting the call (R52).
 
 **Exit criteria:** "call <contact>" rings the right person after a yes; a chat that fails to open places no call; "hang up" ends the call.
+
+## Phase 18: New interface and wake overlay
+
+**Scope:** when you say "Hey Jarvis", the whole screen changes, not only a page, and your words appear as you say them. A new page to match, using tasteskill.
+
+**Decisions (asked 2026-11-01, all as recommended):** a reactor with plasma edges; the full screen while you speak, then an edge glow; confirmations by voice or the page; hidden from captures, with a setting for demos (ADR-071). Native OpenGL over a web view, after measuring both (ADR-070).
+
+**Built**
+
+- `jarvis.overlay`: a separate process with a transparent window that takes no clicks and no focus, driven over a pipe; `jarvis overlay demo`; `[overlay]` settings.
+- `reactor.glsl`, one shader for the overlay and the page: domain-warped plasma, a wake shockwave with a split-colour front, and a reactor with lightning, coils, and voice bars.
+- Live transcripts and a voice level while recording (ADR-072).
+- The page rebuilt (ADR-073), with every feature kept: confirmations, questions, tool log, audit log, contacts, mic, stop.
+
+**Test commands**
+
+```powershell
+# Close any running Jarvis first: uv cannot replace jarvis.exe while it runs.
+uv sync --extra voice --extra piper --extra gpu
+uv run jarvis overlay demo                      # the whole effect, about 20 seconds; nothing recorded or run
+uv run jarvis serve --wake                      # then say "Hey Jarvis, what's the weather tomorrow"
+uv run pytest tests/unit/test_overlay.py tests/unit/test_voice_live.py
+```
+
+Try it with a light window open, say a command that opens an app (it should recede so you can watch), and "message <someone> that ..." and answer no (amber, with the exact question).
+
+**Verified during the build (live, on this laptop):** the overlay process against a test window, reading only that window's pixels: transparent with a smooth falloff, clicks pass through, never the foreground window, hidden from capture, first light 65 ms after the message, gone after hiding, exits when the pipe closes; hidden 0% CPU and visible about 21% of one core; 2 to 4 ms of GPU time a frame on the AMD GPU at 1080p. Synthetic speech through real Whisper on the GPU, the real agent with Hermes 3 8B, and the real overlay process: three partials in 3.3 s of speech and the final text 190 ms after it ended. Every overlay state judged from frames rendered over a made-up desktop, never your real screen. The page in a browser with made-up events: conversation, wake takeover, and the amber confirmation with its card clear; tasteskill's inspector at 1440, 768, and 390 with 0 FAIL. Not verified live: your own voice and microphone, the wake word actually opening it, a fullscreen game, a second monitor, and sleep and resume.
+
+**Found and fixed during the build**
+
+| Found | Fix |
+|---|---|
+| WebView2 could not be transparent | a native OpenGL window (ADR-070) |
+| A layered window with no attributes stays invisible, and "fully transparent" passed anyway | set the attributes, and test the falloff, not just one pixel |
+| The fullscreen check used 5 for presentation mode, which is the normal desktop, so the overlay never showed | 4, with a comment |
+| Waiting for vsync spun 58% of a core in the driver | no vsync on a composited window, frames paced with a sleep: 21% |
+| The plasma showed a picture frame, with creases from the corners | a soft minimum of the four edges |
+| The receded glow fogged the whole desktop | a thin line unless the screen is dark |
+| Light added to a white window was lost, so the small core vanished | a dark backing behind it |
+| Streaks fell across the conversation while idle | only while active |
+
+**Not done, needs you:** the test commands above with your own voice, restarting your running Jarvis first. A wider test on a real fullscreen game.
+
+**Exit criteria:** "Hey Jarvis" transforms the whole screen with no focus lost and clicks still working; your words appear as you speak; it recedes while Jarvis works and leaves no trace when done.
 
 ## Beyond 1.0
 

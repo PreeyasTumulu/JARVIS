@@ -410,6 +410,7 @@ stateDiagram-v2
 - **Confirmations by voice:** `VoiceChannel` speaks "Should I open Paint? Say yes or no." and waits for the next utterance. In voice mode the agent's channel is `FirstAnswerChannel(voice, keyboard)`, so typing y or n also works (ADR-022).
 - **Self-trigger:** without echo cancellation, speaker output can trigger the wake word. Wake word detection is paused while Jarvis speaks and for 0.4 s after. Barge-in uses the push-to-talk hotkey.
 - **Staying up (Phase 9):** voice that cannot start (no microphone yet at login, no network) is logged and retried by `jarvis serve` (10 s, 20 s, 40 s, 60 s, then every two minutes) with a fresh PortAudio device list; a crashed voice loop starts again; an open microphone that sends nothing for 3 s is reopened (sleep and resume, device changes); Whisper loads its downloaded copy without the network. `jarvis voice --wake-test` shows the level and the wake word score live (RISKS.md R33, R34).
+- **Live transcript (Phase 18):** while recording, Whisper also runs on what has been heard so far and `TranscriptPartial` shows it; `VoiceLevel` carries the loudness, never the audio. Only the final transcript is acted on (ADR-072).
 - **Timings:** every voice command stores `audio_ms`, `stt_ms`, `pre_turn_ms`, `llm_ms`, `first_tool_ms`, and `turn_ms` in `command_history.timings_json`; the session prints the median "end of speech to first action" when it exits.
 
 ## 9. Interfaces
@@ -438,6 +439,21 @@ FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) an
 | server to client | `contacts {contacts, note, error, added}` | Contacts tab, after every change (to every tab) |
 
 **Local UI security.** Browsers do not apply CORS to WebSockets, so any website you visit could try to connect to `ws://127.0.0.1`. The server therefore binds to `127.0.0.1` only, checks the `Origin` header, and requires a random token generated at each launch (opened for you in the URL). It also rejects a foreign `Host` header (DNS rebinding) and sends a Content-Security-Policy that forbids other sites from framing the page, so nobody can overlay an invisible Confirm button. Everything the page shows is inserted as text, never as HTML, because replies can contain text from web pages.
+
+The page (Phase 18, ADR-073) is an icon rail, the reactor with the voice state and your words as you speak, the conversation, and a side panel. `static/reactor.js` draws `static/reactor.glsl` on a fixed canvas that takes no clicks, and without WebGL 2 the page works the same with a plain ring.
+
+### 9.2a The wake overlay (Phase 18)
+
+```mermaid
+flowchart LR
+  BUS[Event bus] --> D[Director<br/>what to show]
+  D --> C[OverlayClient<br/>never blocks]
+  C -- JSON lines on a pipe --> W[python -m jarvis.overlay<br/>GLFW, moderngl]
+  W --> S[Scene: eased values]
+  S --> R[Renderer<br/>reactor.glsl, words as a texture]
+```
+
+The window has WS_EX_LAYERED and WS_EX_TRANSPARENT (clicks go through), WS_EX_NOACTIVATE and SW_SHOWNOACTIVATE (the focus stays put), WS_EX_TOOLWINDOW (not in Alt+Tab or `list_windows`), and WDA_EXCLUDEFROMCAPTURE (not in screenshots). `jarvis overlay demo` shows it once with no microphone or model. See ADR-070, ADR-071, and RISKS.md R53.
 
 ### 9.3 Tray (Phase 8)
 
@@ -597,6 +613,9 @@ jarvis/
       dictation.py            dictation: text rules, typing or pasting into the focused app
       models.py, runner.py    model downloads; `jarvis voice` and `jarvis setup-voice`
       tts/                    TTS interface, Piper, SAPI, engine factory
+    overlay/                  the wake effect: director.py (what to show), client.py (the process and pipe),
+                              window.py (the window), scene.py (animation), renderer.py, card.py (words),
+                              demo.py
     storage/                  sqlite connection, migrations, repositories
     bridge/                   the Claude Code bridge: hook.py (the hook, install), service.py (asking),
                               answers.py (matching what you said), phone.py (ntfy, Twilio)

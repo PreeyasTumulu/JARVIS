@@ -418,6 +418,35 @@ A short log of decisions that shape the project. Each one says what was decided,
 - **Why:** you asked for WhatsApp calls. The app is already installed and signed in, with no pairing or call minutes. No documented link starts a call, so a button press is the way in. WhatsApp's chat header can show another name than the contact book, so names cannot prove the right chat is open, and a failed link leaves the previous chat open, whose button would ring the wrong person. The marker proves that this link opened the chat. Rows in the call history also say "Voice call", hence buttons only.
 - **Cost:** only people on WhatsApp can be called. It extends the terms-of-service risk you accepted for messages (ADR-037, R5). See R52 for what can break.
 
+### ADR-070: The wake effect is a native OpenGL window, not a web view
+
+- **Decision:** a separate process (`jarvis.overlay`) draws a transparent, click-through, topmost window with GLFW and moderngl. It reads messages from a pipe and exits when the pipe closes. The page stays a web page.
+- **Why:** a browser page cannot change the desktop, so the effect you asked for needs a window of its own. Both ways were measured on this laptop. WebView2 through pywebview stayed an opaque #202020 sheet, even with the DWM frame extended over it, and took 2.2 s to start. GLFW gave real per-pixel alpha, started in 0.19 s, and draws on the AMD GPU, leaving the RTX 3050's 4 GB for Hermes and Whisper. Electron would also work, at the cost of a Node runtime and a build step in a project that has neither.
+- **A separate process** so a graphics driver crash cannot take voice down, and a pipe so nothing new listens on a socket and no private text crosses the network stack.
+- **Cost:** two more dependencies (glfw, moderngl), and about 114 MB of memory for the process. Hidden, it uses 0% of the CPU and draws nothing; visible, about 21% of one core. See R53.
+
+### ADR-071: What the overlay does
+
+Yours, asked 2026-11-01, all as recommended.
+
+- **Look:** a reactor core with plasma on the screen's edges. Cyan while listening, violet while thinking, gold while speaking, amber when a yes or no is needed.
+- **Coverage:** the whole screen while you speak, then an edge glow and a small panel once Jarvis gets to work, so you can see what it does to your apps. `[overlay] mode = "edge"` keeps it small throughout.
+- **Confirmations:** the overlay shows the exact question, and you answer by voice or with the page's card. It never takes a click or focus, so it cannot intercept a click meant for an app, and it cannot disturb the focus checks that WhatsApp sends and typing depend on (ADR-039 onward). A button on an always-on-top window would need a second, focusable window in the safety path.
+- **Capture:** hidden from screenshots, screen shares, and Jarvis's own screen reading through WDA_EXCLUDEFROMCAPTURE. `[overlay] show_in_captures = true` is for recording a demo.
+- **When it opens:** only for speech to Jarvis and for waiting on your answer. Typed commands, dictation, and spoken reminders never open it, and a fullscreen game or presentation keeps it hidden.
+
+### ADR-072: Live transcripts while you speak
+
+- **Decision:** during a recording Whisper also runs on what has been heard so far, at most every 0.8 s, and a slow run spaces the next one out to three times its length. The text is published as `TranscriptPartial`, for display only. The command that runs is still the final transcript, and "stop" and yes or no are matched only on it. `[voice] live_transcript = false` turns it off.
+- **Why:** you asked to see your words as you say them, and Whisper on the GPU takes about 135 ms a pass. On the CPU (about 1.4 s) the spacing keeps it to one pass in about 4 s. Dictation stays out: that text belongs to the app it is typed into.
+- **Cost:** the final transcript waits for a running partial, at most one pass. In the live test the text was ready 190 ms after the end of speech.
+
+### ADR-073: The new page, and how tasteskill was used
+
+- **Decision:** the page is rebuilt with the tasteskill app-screen rules (style `data-terminal`, seed 83454284): an icon rail, the reactor as the state indicator, the conversation as a transcript instead of chat bubbles, and flat panels with colour only on what something means. It is dark only. The page and the overlay share one shader, `static/reactor.glsl`.
+- **Departures from the skill, on purpose:** its house rules ban glows, and you asked for the opposite, so all the light comes from the reactor canvas, which is a picture rather than styling on the controls. Its dealt font comes from Google Fonts, which would make a local-first app call out to the internet and break the page's Content-Security-Policy, so the page uses Bahnschrift from Windows. Its violet ban gives way to your chosen thinking colour. Its inspector still reports 0 FAIL at 1440, 768, and 390; its two warnings are monospace on tool names and arguments, which are literal code, and the empty conversation area.
+- **Safety:** the canvas takes no clicks and dims only while you speak, never while a confirmation is waiting, so the Confirm card always stays readable. The existing security headers did not change.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

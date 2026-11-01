@@ -451,6 +451,10 @@ Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of
 
 None of this is inside the repository.
 
+## 8a. The wake overlay (Phase 18)
+
+Nothing to install beyond `uv sync`: it uses your graphics driver. `uv run jarvis overlay demo` shows it. Settings are under `[overlay]` in `config/jarvis.toml`, and its log is `logs\overlay.log`.
+
 ## 9. Troubleshooting
 
 Moved to [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

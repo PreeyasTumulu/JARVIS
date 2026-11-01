@@ -247,6 +247,21 @@ OCR reads what is visible, so a window must be in front (Jarvis brings it forwar
 - The names of the end call button are a best guess until a real call shows them. If "hang up" says there is no call, end it in the app.
 - "Hey Jarvis" keeps listening during a call, so Jarvis can hear the call and be woken by it. Pausing it needs a reliable way to see a call, which needs a real call first. For now, turn the microphone off from the tray during calls.
 
+### R53. The overlay is a window on top of everything
+
+- Checked live with a test window and only its pixels: transparent, clicks pass through, the focus stays put, hidden from capture, first light 65 ms after the message, gone after hiding. Not checked: a real fullscreen game, a second monitor, a resolution change while it is running, and sleep and resume.
+- It covers the primary monitor only.
+- Exclusive fullscreen games are not meant to be drawn over, and a topmost window could knock one out of fullscreen. Jarvis asks Windows (`SHQueryUserNotificationState`) and stays hidden during a game or presentation mode, but that answer depends on how the app presents itself, so a borderless game can still get the effect.
+- Excluding it from capture depends on Windows' compositor and is a courtesy, not a security boundary. A phone pointed at the screen sees it.
+- Its text is drawn with one font. Letters that font lacks, such as Telugu or Hindi in a contact's name, can show as boxes; the page and the voice are still right.
+- If it ever stays on screen, it hides itself after `max_visible_s` without a message, and it exits when Jarvis does. Clicks always reach your apps either way.
+
+### R54. Live transcripts add work to every recording
+
+- A partial can show words that the final transcript corrects. That is expected, and only the final text ever runs.
+- Each pass adds GPU work next to Hermes on a 4 GB card. It held in the live test; a game or a large model loaded at the same time may slow the passes down, and they then space themselves out.
+- The voice level curve was tuned on synthetic speech, which reached the top of the scale. Your microphone may need `LEVEL_GAIN` adjusted so that the rings move well.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

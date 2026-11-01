@@ -34,6 +34,7 @@ Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools
 
 - **Safety in code, not in a prompt.** Every tool has a risk floor. Sending, deleting, stopping, calling, or buying waits for your explicit yes, and the approval is bound to the exact action Jarvis showed you. Config can tighten a rule, never loosen it.
 - **Private stays local.** Messages, notifications, files, the clipboard, screen text, contacts, and memories are labelled private, and the router raises an error rather than send them to a cloud model. Tests prove it with a fake cloud that records everything.
+- **The screen answers.** Say "Hey Jarvis" and the whole desktop transforms, with your words appearing as you speak, in a window that takes no clicks and no focus.
 - **Content is data.** Text from web pages, files, notifications, and windows is wrapped as untrusted and can never approve anything. Secret-looking values are hidden before the model sees them.
 - **Everything is audited.** Every tool call, its arguments, the decision, and the result go to a local SQLite log (`jarvis audit`).
 - **Honest about Windows.** What is unreliable is written down in [RISKS.md](docs/RISKS.md), with the workaround.

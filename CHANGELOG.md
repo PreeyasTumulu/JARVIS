@@ -6,6 +6,15 @@ Versions 0.4.0 to 1.6.0 are built on stacked `phase/<n>-<name>` branches with gr
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-01: New interface and wake overlay (Phase 18)
+
+### Added
+- The wake overlay: saying "Hey Jarvis" transforms the whole screen with a reactor and plasma edges, in a window that takes no clicks and no focus and stays out of screen captures. `jarvis overlay demo` shows it; `[overlay]` configures it.
+- Live transcripts: your words appear as you speak, on the overlay and the page. `[voice] live_transcript`.
+
+### Changed
+- The web page is rebuilt: an icon rail, the reactor as the state indicator, the conversation as a transcript. Dark only. Every feature is kept.
+
 ## [1.7.0] - 2026-10-31: WhatsApp calls (Phase 17)
 
 ### Added

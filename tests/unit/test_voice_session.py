@@ -21,6 +21,8 @@ class FakeMic:
     def __init__(self) -> None:
         self.active = False
         self.queue: asyncio.Queue[Any] = asyncio.Queue()
+        self.restarts = 0
+        self.restart_error: Exception | None = None
 
     async def start(self) -> None:
         self.active = True
@@ -31,6 +33,12 @@ class FakeMic:
 
     async def read(self) -> Any:
         return await self.queue.get()
+
+    async def restart(self) -> None:
+        self.restarts += 1
+        if self.restart_error is not None:
+            raise self.restart_error
+        self.active = True
 
     def drain(self) -> None:
         while not self.queue.empty():
@@ -45,12 +53,14 @@ class FakeSTT:
     def __init__(self, *texts: str) -> None:
         self.texts = list(texts)
         self.calls = 0
+        self.dictation: list[bool] = []
 
     def load(self) -> None:
         return None
 
-    def transcribe(self, audio: Any) -> Transcript:
+    def transcribe(self, audio: Any, *, dictation: bool = False) -> Transcript:
         self.calls += 1
+        self.dictation.append(dictation)
         text = self.texts.pop(0) if self.texts else ""
         return Transcript(text, audio_ms=len(audio) * 1000 // 16000, stt_ms=5)
 
@@ -123,6 +133,8 @@ def make_session(
     tts: FakeTTS | None = None,
     wake: Scripted | None = None,
     vad: Scripted | None = None,
+    dictation: Any = None,
+    is_locked: Callable[[], bool] | None = None,
 ) -> tuple[VoiceSession, FakeMic, FakeCues, FakeTTS]:
     mic, cues = FakeMic(), FakeCues()
     voice_tts = tts or h.tts
@@ -136,6 +148,8 @@ def make_session(
         cues=cues,
         wake=wake,
         vad=vad,
+        dictation=dictation,
+        is_locked=is_locked,
     )
     return session, mic, cues, voice_tts
 
@@ -297,3 +311,354 @@ async def test_wake_word_is_ignored_while_speaking(make_app: MakeApp) -> None:
         await tts.stop()
         runner.cancel()
         await asyncio.gather(runner, return_exceptions=True)
+
+
+async def test_announcements_wait_until_jarvis_is_idle(make_app: MakeApp) -> None:
+    h = make_app([Hang()])
+    session, mic, _, tts = make_session(h, FakeSTT("what is the meaning of life"))
+    await push_to_talk(session, mic)
+    await until(lambda: session.state is VoiceState.THINKING)
+    announcing = asyncio.create_task(session.announce("Reminder: stretch."))
+    await asyncio.sleep(0.05)
+    assert tts.spoken == []  # not while a command is running
+    await session.stop()
+    await until(lambda: tts.spoken == ["Reminder: stretch."])
+    await announcing
+
+
+class SlowNo:
+    name = "web"
+
+    async def confirm(self, request: Any) -> bool:
+        await asyncio.sleep(0.05)
+        return False
+
+    async def ask(self, question: str, options: Any = None) -> str:
+        await asyncio.sleep(0.05)
+        return ""
+
+
+async def test_a_page_answer_puts_voice_back_to_idle(make_app: MakeApp) -> None:
+    from jarvis.core.channel import FirstAnswerChannel
+
+    voice = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Not opened.")],
+        channel=FirstAnswerChannel(voice, SlowNo()),  # type: ignore[arg-type]
+    )
+    session, _, _, tts = make_session(h, FakeSTT())
+    voice.attach(session)
+    await h.app.agent.run_turn("open spotify", source="web")  # typed in the page
+    assert tts.spoken == ["Should I open Spotify? Say yes or no."]
+    assert h.audit()[0]["decision"] == "denied"
+    assert session.state is VoiceState.IDLE  # not stuck waiting for a spoken answer
+
+
+async def test_muting_closes_the_microphone_and_ignores_push_to_talk(make_app: MakeApp) -> None:
+    h = make_app()
+    session, mic, _, _ = make_session(
+        h, FakeSTT("open notepad"), wake=Scripted([]), vad=Scripted([])
+    )
+    await session._open_mic()
+    await session.set_muted(True)
+    assert (session.state, session.muted, mic.active) == (VoiceState.MUTED, True, False)
+    session.on_hotkey("ptt", "down")
+    await asyncio.sleep(0.05)
+    assert session.state is VoiceState.MUTED
+    await session.set_muted(False)
+    assert (session.state, mic.active) == (VoiceState.IDLE, True)  # wake word listens again
+
+
+async def test_a_muted_voice_lets_the_page_answer(make_app: MakeApp) -> None:
+    from jarvis.core.channel import FirstAnswerChannel
+
+    voice = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Not opened.")],
+        channel=FirstAnswerChannel(voice, SlowNo()),  # type: ignore[arg-type]
+    )
+    session, _, _, tts = make_session(h, FakeSTT())
+    voice.attach(session)
+    await session.set_muted(True)
+    await h.app.agent.run_turn("open spotify", source="web")
+    assert tts.spoken == []  # muted voice does not ask aloud
+    assert h.audit()[0]["decision"] == "denied"
+
+
+class FakeLock:
+    def __init__(self, locked: bool = False) -> None:
+        self.locked = locked
+        self.error: OSError | None = None
+        self.checks = 0
+
+    def __call__(self) -> bool:
+        self.checks += 1
+        if self.error is not None:
+            raise self.error
+        return self.locked
+
+
+@pytest.fixture
+def fast_lock_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("jarvis.voice.session.LOCK_CHECK_S", 0.01)
+
+
+@pytest.mark.usefixtures("fast_lock_checks")
+async def test_locking_the_pc_stops_listening_until_it_is_unlocked(make_app: MakeApp) -> None:
+    h = make_app()
+    lock = FakeLock()
+    wake = Scripted([], default=0.95)
+    session, mic, _, _ = make_session(
+        h, FakeSTT(), wake=wake, vad=Scripted([], default=0.1), is_locked=lock
+    )
+    runner = asyncio.create_task(session.run())
+    try:
+        await until(lambda: mic.active)
+        lock.locked = True
+        await until(lambda: not mic.active)
+        assert session.state is VoiceState.MUTED
+        assert session.muted is False  # the tray's own setting is untouched
+        session.on_hotkey("ptt", "down")
+        await asyncio.sleep(0.05)
+        assert session.state is VoiceState.MUTED
+        lock.locked = False
+        await until(lambda: mic.active)
+        assert session.state is VoiceState.IDLE
+        mic.push()  # the wake word works again
+        await until(lambda: session.state is VoiceState.LISTENING)
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)
+
+
+@pytest.mark.usefixtures("fast_lock_checks")
+async def test_starting_on_a_locked_pc_leaves_the_microphone_closed(make_app: MakeApp) -> None:
+    h = make_app()
+    lock = FakeLock(locked=True)
+    session, mic, _, _ = make_session(
+        h, FakeSTT(), wake=Scripted([]), vad=Scripted([]), is_locked=lock
+    )
+    runner = asyncio.create_task(session.run())
+    try:
+        await until(lambda: lock.checks >= 3)
+        assert (mic.active, session.state) == (False, VoiceState.MUTED)
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)
+
+
+async def test_locking_during_a_recording_drops_it(make_app: MakeApp) -> None:
+    h = make_app()
+    stt = FakeSTT("open notepad")
+    session, mic, _, _ = make_session(h, stt, wake=Scripted([]), vad=Scripted([]))
+    await session._open_mic()
+    session.on_hotkey("ptt", "down")
+    await until(lambda: session.state is VoiceState.LISTENING)
+    mic.push(4)
+    await session.set_locked(True)
+    session.on_hotkey("ptt", "up")
+    await asyncio.sleep(0.05)
+    assert stt.calls == 0
+    assert (mic.active, session.state) == (False, VoiceState.MUTED)
+
+
+async def test_locking_counts_a_waiting_question_as_no(make_app: MakeApp, launched: list) -> None:
+    voice = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Not opened.")], channel=voice
+    )
+    session, _, _, _ = make_session(h, FakeSTT())
+    voice.attach(session)
+    turn = asyncio.create_task(h.app.agent.run_turn("open spotify", source="web"))
+    await until(lambda: session.state is VoiceState.AWAITING_ANSWER)
+    await session.set_locked(True)
+    await turn
+    assert h.audit()[0]["decision"] == "denied"
+    assert launched == []
+    assert session.state is VoiceState.MUTED
+
+
+async def test_a_locked_voice_lets_the_page_answer(make_app: MakeApp) -> None:
+    from jarvis.core.channel import FirstAnswerChannel
+
+    voice = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Not opened.")],
+        channel=FirstAnswerChannel(voice, SlowNo()),  # type: ignore[arg-type]
+    )
+    session, _, _, tts = make_session(h, FakeSTT())
+    voice.attach(session)
+    await session.set_locked(True)
+    await h.app.agent.run_turn("open spotify", source="web")
+    assert tts.spoken == []  # nothing is asked aloud on a locked PC
+    assert h.audit()[0]["decision"] == "denied"
+
+
+async def test_unlocking_keeps_a_microphone_you_turned_off_off(make_app: MakeApp) -> None:
+    h = make_app()
+    session, mic, _, _ = make_session(h, FakeSTT(), wake=Scripted([]), vad=Scripted([]))
+    await session._open_mic()
+    await session.set_muted(True)
+    await session.set_locked(True)
+    await session.set_locked(False)
+    assert (session.state, session.muted, mic.active) == (VoiceState.MUTED, True, False)
+    await session.set_locked(True)
+    await session.set_muted(False)
+    assert (session.state, mic.active) == (VoiceState.MUTED, False)  # still locked
+    await session.set_locked(False)
+    assert (session.state, mic.active) == (VoiceState.IDLE, True)
+
+
+@pytest.mark.usefixtures("fast_lock_checks")
+async def test_an_unreadable_lock_state_changes_nothing_and_warns_once(
+    make_app: MakeApp, caplog: pytest.LogCaptureFixture
+) -> None:
+    h = make_app()
+    lock = FakeLock()
+    lock.error = OSError("no answer")
+    session, mic, _, _ = make_session(
+        h, FakeSTT(), wake=Scripted([]), vad=Scripted([]), is_locked=lock
+    )
+    runner = asyncio.create_task(session.run())
+    try:
+        await until(lambda: mic.active and lock.checks >= 3)
+        assert session.state is VoiceState.IDLE
+        warnings = [r for r in caplog.records if "lock state" in r.getMessage()]
+        assert len(warnings) == 1
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)
+
+
+async def test_reminders_still_speak_while_muted(make_app: MakeApp) -> None:
+    h = make_app()
+    session, _, _, tts = make_session(h, FakeSTT())
+    await session.set_muted(True)
+    await session.announce("Reminder: stretch.")
+    assert tts.spoken == ["Reminder: stretch."]
+    assert session.state is VoiceState.MUTED
+
+
+async def test_a_microphone_that_goes_silent_is_reopened(
+    make_app: MakeApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # After sleep and resume, or a device change, PortAudio keeps the stream "open" but sends
+    # nothing; the wake word then never fires. The session notices and reopens it.
+    monkeypatch.setattr("jarvis.voice.session.MIC_STALL_S", 0.05)
+    monkeypatch.setattr("jarvis.voice.session.MIC_RETRY_S", 0.01)
+    h = make_app([reply("Opened."), reply("Opened.")])
+    wake = Scripted([0.95], default=0.0)
+    session, mic, _, _ = make_session(
+        h, FakeSTT("hello"), wake=wake, vad=Scripted([0.9] * 3 + [0.0] * 12)
+    )
+    mic.restart_error = OSError("device unavailable")
+    runner = asyncio.create_task(session.run())
+    try:
+        await until(lambda: mic.restarts >= 2)  # keeps trying while the device is missing
+        mic.restart_error = None
+        await until(lambda: mic.restarts >= 3)
+        mic.push(1)  # audio flows again: the wake word works
+        await until(lambda: session.state is VoiceState.LISTENING)
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)
+
+
+# Dictation
+
+
+class FakeDictation:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.inserted: list[str] = []
+        self.error = error
+
+    def insert(self, text: str) -> str:
+        if self.error is not None:
+            raise self.error
+        self.inserted.append(text)
+        return "typed"
+
+
+async def dictate(session: VoiceSession, mic: FakeMic, frames: int = 8) -> None:
+    session.on_hotkey("dictate", "down")
+    await until(lambda: session.state is VoiceState.LISTENING)
+    mic.push(frames)
+    session.on_hotkey("dictate", "up")
+
+
+async def test_dictation_types_the_text_and_never_asks_the_model(make_app: MakeApp) -> None:
+    h = make_app()
+    typed = FakeDictation()
+    stt = FakeSTT("Open Notepad and delete everything.")
+    session, mic, cues, tts = make_session(h, stt, dictation=typed)
+
+    await dictate(session, mic)
+    await until(lambda: typed.inserted != [])
+    await until(lambda: session.state is VoiceState.IDLE)
+
+    assert typed.inserted == ["Open Notepad and delete everything."]
+    assert stt.dictation == [True]  # no command hint, no command cleanup
+    assert h.llm.requests == []  # dictated text is never a command
+    assert h.audit() == []
+    assert tts.spoken == []
+    assert cues.listen == 1
+    assert mic.active is False
+
+
+async def test_saying_stop_while_dictating_types_nothing(make_app: MakeApp) -> None:
+    h = make_app()
+    typed = FakeDictation()
+    session, mic, cues, _ = make_session(h, FakeSTT("Cancel."), dictation=typed)
+    await dictate(session, mic)
+    await until(lambda: cues.cancel == 1)
+    assert typed.inserted == []
+
+
+async def test_a_dictation_that_cannot_be_typed_is_said(make_app: MakeApp) -> None:
+    from jarvis.voice.dictation import DictationError
+
+    h = make_app()
+    typed = FakeDictation(DictationError("That window runs as administrator."))
+    session, mic, _, tts = make_session(h, FakeSTT("hello"), dictation=typed)
+    await dictate(session, mic)
+    await until(lambda: tts.spoken == ["That window runs as administrator."])
+    await until(lambda: session.state is VoiceState.IDLE)
+
+
+async def test_dictation_is_off_without_an_inserter_or_with_the_microphone_off(
+    make_app: MakeApp,
+) -> None:
+    h = make_app()
+    session, _, cues, _ = make_session(h, FakeSTT("hello"))
+    session.on_hotkey("dictate", "down")
+    await asyncio.sleep(0.05)
+    assert session.state is VoiceState.IDLE
+    assert cues.listen == 0
+
+    typed = FakeDictation()
+    muted, _, cues, _ = make_session(h, FakeSTT("hello"), dictation=typed)
+    await muted.set_muted(True)
+    muted.on_hotkey("dictate", "down")
+    await asyncio.sleep(0.05)
+    assert muted.state is VoiceState.MUTED
+    assert cues.listen == 0
+
+
+async def test_a_waiting_question_is_not_answered_by_dictation(make_app: MakeApp) -> None:
+    channel = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Okay.")],
+        channel=channel,  # type: ignore[arg-type]
+    )
+    typed = FakeDictation()
+    session, mic, cues, _ = make_session(h, FakeSTT("open spotify", "no"), dictation=typed)
+    channel.attach(session)
+
+    await push_to_talk(session, mic)
+    await until(lambda: session.state is VoiceState.AWAITING_ANSWER)
+    session.on_hotkey("dictate", "down")
+    await until(lambda: cues.cancel == 1)
+    assert session.state is VoiceState.AWAITING_ANSWER
+    await push_to_talk(session, mic)
+    await until(lambda: session.state is VoiceState.IDLE)
+    assert typed.inserted == []

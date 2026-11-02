@@ -1,4 +1,5 @@
-"""One client for every model: any OpenAI-compatible endpoint (Ollama locally, cloud later)."""
+"""One client for every model: any OpenAI-compatible endpoint (Ollama locally, Groq and
+OpenRouter in the cloud)."""
 
 from __future__ import annotations
 
@@ -78,12 +79,15 @@ class LLMClient:
             text, calls = parse_text_tool_calls(text)
             parsed_from_text = bool(calls)
 
+        usage = getattr(response, "usage", None)
         return LLMReply(
             text=text,
             model=cast(str, response.model or self._provider.model),
             latency_ms=latency_ms,
             tool_calls=calls,
             parsed_from_text=parsed_from_text,
+            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
         )
 
     async def check(self) -> str | None:

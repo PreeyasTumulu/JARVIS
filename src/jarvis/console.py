@@ -17,6 +17,7 @@ from jarvis.core.events import (
     AssistantMessage,
     Event,
     ModelReplied,
+    ReminderDue,
     ToolCallFinished,
     ToolCallStarted,
     TranscriptHeard,
@@ -36,6 +37,8 @@ async def read_line() -> str:
     """Read a line without blocking the event loop, so Ctrl+C and timeouts still work."""
     if sys.platform != "win32" or not sys.stdin.isatty():
         line: str = await asyncio.to_thread(sys.stdin.readline)
+        if not line:
+            raise EOFError
         return line.rstrip("\r\n")
 
     import msvcrt
@@ -91,6 +94,8 @@ class ConsoleChannel:
     async def _read(self) -> str:
         try:
             return await read_line()
+        except EOFError:
+            return ""  # input closed: no answer, which means no
         except asyncio.CancelledError:
             self._console.print()  # another channel (voice) answered first; end the prompt line
             raise
@@ -119,6 +124,8 @@ class ConsoleRenderer:
                 console.print(f"    {mark} {escape(summary)} [dim]{decision}, {ms} ms[/dim]")
             case AssistantMessage(text=text):
                 console.print(f"[bold green]jarvis[/bold green] > {escape(text)}")
+            case ReminderDue(text=text):
+                console.print(f"\n[bold magenta]reminder[/bold magenta] > {escape(text)}")
             case TurnFinished(status=status, latency_ms=ms, timings=timings) if self._verbose:
                 detail = f" {timings}" if timings else ""
                 console.print(f"  [dim]turn {status} in {ms / 1000:.1f}s{detail}[/dim]")

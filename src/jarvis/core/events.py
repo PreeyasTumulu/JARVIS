@@ -44,6 +44,14 @@ class ConfirmationRequested:
 
 
 @dataclass(frozen=True)
+class ConfirmationResolved:
+    turn_id: str
+    request_id: str
+    decision: str  # confirmed, denied, timeout, or cancelled
+    via: str | None = None  # the channel that answered
+
+
+@dataclass(frozen=True)
 class ToolCallFinished:
     turn_id: str
     call_id: str
@@ -81,16 +89,44 @@ class TranscriptHeard:
     stt_ms: int
 
 
+@dataclass(frozen=True)
+class TranscriptPartial:
+    text: str  # what Whisper has so far, shown while you speak; never acted on
+
+
+@dataclass(frozen=True)
+class VoiceLevel:
+    level: float  # 0 to 1, how loud the microphone is while recording; the audio itself stays here
+
+
+@dataclass(frozen=True)
+class NotificationsArrived:
+    count: int
+    apps: tuple[str, ...]  # app names only; the text stays in the database (private)
+
+
+@dataclass(frozen=True)
+class ReminderDue:
+    reminder_id: int
+    kind: str  # timer or reminder
+    text: str  # what Jarvis says
+
+
 Event = (
     TurnStarted
     | ModelReplied
     | ToolCallStarted
     | ConfirmationRequested
+    | ConfirmationResolved
     | ToolCallFinished
     | AssistantMessage
     | TurnFinished
     | VoiceStateChanged
     | TranscriptHeard
+    | TranscriptPartial
+    | VoiceLevel
+    | ReminderDue
+    | NotificationsArrived
 )
 Handler = Callable[[Event], Awaitable[None] | None]
 

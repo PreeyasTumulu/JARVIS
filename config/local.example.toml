@@ -10,6 +10,7 @@
 # unlisted_apps = "block"
 
 # safe_to_close = ["Calculator", "Settings", "File Explorer", "Spotify"]
+# trusted_ui_apps = ["Notepad", "Calculator"]  # type, click, and press keys without asking
 
 # [apps.aliases]
 # "music" = "Spotify"
@@ -32,3 +33,33 @@
 # stop_hotkey = "ctrl+alt+x"
 # wake_word_enabled = true            # same as: uv run jarvis voice --wake
 # stt_model = "base.en"               # about 3x faster than small.en, a little less accurate
+
+# [weather]
+# home = "Hyderabad"                  # used when you ask without naming a place
+
+# [market]
+# crypto_currency = "INR"             # "bitcoin price" in rupees
+# [market.aliases]
+# "reliance" = "RELIANCE.NS"          # skip the symbol search for names you use often
+
+# [contacts]
+# default_country_code = "91"         # for numbers saved without one, like 98765 43210
+
+# [whatsapp]
+# method = "desktop"                  # "auto" (Web once linked, else the app), "web", or "desktop"
+
+# [calls]
+# method = "phone_link"                # "whatsapp" (the desktop app) or "phone_link" (a tel: link)
+
+# [browser]
+# channel = "brave"                   # auto (default) follows your Windows default: Brave, Chrome, or Edge
+# executable = "C:/path/to/browser.exe" # any Chromium-based browser, wins over channel
+# channel = "chromium"                # Playwright's Chromium (uv run playwright install chromium)
+
+# [notifications]
+# apps = ["WhatsApp"]                 # only these apps' notifications are read and kept
+# keep_days = 3
+
+# [router]
+# escalate = "explicit"               # the cloud only when you say "think harder"; "never" turns it off
+# cloud = ["groq"]                    # or [] to keep everything local

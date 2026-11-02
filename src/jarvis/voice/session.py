@@ -1,5 +1,8 @@
 """The voice loop: push-to-talk or wake word, speech to text, the agent, and spoken replies.
 
+Dictation shares the microphone and Whisper but not the agent: its hotkey records like
+push-to-talk, and the text goes to the focused app instead of to the model (ADR-054).
+
 Everything runs on the asyncio loop. Hotkeys arrive from their own thread through
 `loop.call_soon_threadsafe(session.on_hotkey, ...)`; blocking model calls (Whisper, openWakeWord,
 Silero) run in worker threads. The microphone has a single reader, `_frame_loop`, which routes
@@ -12,7 +15,7 @@ import asyncio
 import logging
 import statistics
 import time
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -20,8 +23,15 @@ import numpy as np
 
 from jarvis.config import Settings
 from jarvis.core.agent import Agent, TurnStatus
-from jarvis.core.events import EventBus, TranscriptHeard, VoiceStateChanged
+from jarvis.core.events import (
+    EventBus,
+    TranscriptHeard,
+    TranscriptPartial,
+    VoiceLevel,
+    VoiceStateChanged,
+)
 from jarvis.voice.audio import FRAME_MS, Audio
+from jarvis.voice.dictation import DictationError
 from jarvis.voice.endpoint import Endpoint, Endpointer
 from jarvis.voice.phrases import is_stop_command
 from jarvis.voice.stt import Transcript
@@ -31,6 +41,21 @@ log = logging.getLogger(__name__)
 
 WAKE_COOLDOWN_S = 1.5  # ignore the wake word right after it fired
 ECHO_TAIL_S = 0.4  # ignore the wake word right after Jarvis stops speaking
+MIC_STALL_S = 3.0  # an open microphone that sends nothing this long has died; reopen it
+MIC_RETRY_S = 5.0  # wait between attempts while the microphone cannot be reopened
+LOCK_CHECK_S = 1.0  # how often to ask Windows whether the PC is locked
+PARTIAL_FIRST_S = 0.7  # how much speech to hold before the first live transcript
+PARTIAL_EVERY_S = 0.8  # then at most this often; a slow Whisper (the CPU) spaces itself out
+PARTIAL_BACKOFF = 3.0  # wait this many times what the last live transcript took
+LEVEL_GAIN = 2.3  # quiet speech is about 0.02 RMS and loud speech about 0.2
+
+
+def voice_level(frame: Audio) -> float:
+    """How loud a frame looks, from 0 to 1, on a curve that makes normal speech move the rings."""
+    if len(frame) == 0:
+        return 0.0
+    rms = float(np.sqrt(np.mean(np.square(frame.astype(np.float32) / 32768.0))))
+    return min(1.0, float(np.sqrt(rms)) * LEVEL_GAIN)
 
 
 class VoiceState(StrEnum):
@@ -40,12 +65,17 @@ class VoiceState(StrEnum):
     THINKING = "thinking"
     SPEAKING = "speaking"
     AWAITING_ANSWER = "awaiting_answer"
+    MUTED = "muted"  # the microphone is off (tray or locked PC): no push-to-talk, no wake word
+
+
+RESTING = (VoiceState.IDLE, VoiceState.MUTED)  # nothing going on; a reminder may speak
 
 
 class Capture(StrEnum):
     NONE = "none"
     PUSH_TO_TALK = "push_to_talk"
     ENDPOINT = "endpoint"  # after the wake word: record until the speaker pauses
+    DICTATION = "dictation"  # like push-to-talk, but the text is typed into the focused app
 
 
 class AudioIn(Protocol):
@@ -54,12 +84,17 @@ class AudioIn(Protocol):
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
     async def read(self) -> Audio | None: ...
+    async def restart(self) -> None: ...
     def drain(self) -> None: ...
 
 
 class SpeechToText(Protocol):
     def load(self) -> None: ...
-    def transcribe(self, audio: Audio) -> Transcript: ...
+    def transcribe(self, audio: Audio, *, dictation: bool = False) -> Transcript: ...
+
+
+class Dictation(Protocol):
+    def insert(self, text: str) -> str: ...  # blocking; "typed", "pasted", or "" for nothing
 
 
 class WakeWord(Protocol):
@@ -91,6 +126,8 @@ class VoiceSession:
         cues: Cues,
         wake: WakeWord | None = None,
         vad: VoiceActivity | None = None,
+        dictation: Dictation | None = None,
+        is_locked: Callable[[], bool] | None = None,
     ) -> None:
         if (wake is None) != (vad is None):
             raise ValueError("Wake word mode needs both a wake word detector and a VAD")
@@ -103,7 +140,14 @@ class VoiceSession:
         self._cues = cues
         self._wake = wake
         self._vad = vad
+        self._dictation = dictation
         self._state = VoiceState.IDLE
+        self._muted = False
+        self._is_locked = is_locked
+        self._locked = False
+        self._lock_check_failed = False
+        self._idle = asyncio.Event()
+        self._idle.set()
         self._capture = Capture.NONE
         self._buffer: list[Audio] = []
         self._endpointer: Endpointer | None = None
@@ -113,6 +157,9 @@ class VoiceSession:
         self._ptt_lock = asyncio.Lock()
         self._wake_quiet_until = 0.0
         self._speech_end = 0.0
+        self._partial_task: asyncio.Task[None] | None = None
+        self._partial_due = 0.0
+        self._capture_id = 0
         self._tasks: set[asyncio.Task[Any]] = set()
         self.heard_to_action_ms: list[int] = []
 
@@ -123,6 +170,68 @@ class VoiceSession:
     @property
     def wake_enabled(self) -> bool:
         return self._wake is not None
+
+    @property
+    def muted(self) -> bool:
+        return self._muted
+
+    async def set_muted(self, muted: bool) -> None:
+        """Turn the microphone off or on (the tray's Microphone item). Speaking still works."""
+        if muted == self._muted:
+            return
+        was_off = self._mic_off
+        self._muted = muted
+        await self._mic_changed(was_off, "microphone off")
+
+    async def set_locked(self, locked: bool) -> None:
+        """Close the microphone while the PC is locked, whatever the tray says (ADR-074).
+
+        A spoken yes approves things and Jarvis does not know whose voice it is, so a question
+        still waiting counts as no.
+        """
+        if locked == self._locked:
+            return
+        was_off = self._mic_off
+        self._locked = locked
+        log.info("Voice input is %s", "off: the PC is locked" if locked else "back: PC unlocked")
+        if locked and self._pending_answer is not None and not self._pending_answer.done():
+            self._pending_answer.set_result("")
+        await self._mic_changed(was_off, "PC locked")
+
+    @property
+    def _mic_off(self) -> bool:
+        return self._muted or self._locked
+
+    async def _mic_changed(self, was_off: bool, detail: str) -> None:
+        if self._mic_off == was_off:
+            return
+        if self._mic_off:
+            if self._capture is not Capture.NONE:
+                self._end_capture()
+            await self._close_mic()
+            await self._set_state(VoiceState.MUTED, detail)
+        else:
+            if self.wake_enabled:
+                await self._open_mic()
+            await self._set_state(VoiceState.IDLE)
+
+    async def _check_lock(self) -> None:
+        assert self._is_locked is not None
+        try:
+            locked = await asyncio.to_thread(self._is_locked)
+        except OSError as exc:
+            # Keep the last known state: turning voice off here could leave it off for good.
+            if not self._lock_check_failed:
+                log.warning("Could not read the lock state (%s); voice stays as it is", exc)
+            self._lock_check_failed = True
+            return
+        self._lock_check_failed = False
+        await self.set_locked(locked)
+
+    async def _watch_lock(self) -> None:
+        while True:
+            await asyncio.sleep(LOCK_CHECK_S)
+            await self._check_lock()
 
     # Lifecycle
 
@@ -139,9 +248,12 @@ class VoiceSession:
     async def run(self) -> None:
         """Run until cancelled. In wake word mode the microphone stays open."""
         try:
-            if self.wake_enabled:
+            if self._is_locked is not None:
+                await self._check_lock()
+                self._spawn(self._watch_lock())
+            if self.wake_enabled and not self._mic_off:
                 await self._open_mic()
-            await self._set_state(VoiceState.IDLE)
+            await self._set_state(self._rest_state)
             await asyncio.Event().wait()
         finally:
             await self.close()
@@ -170,6 +282,8 @@ class VoiceSession:
         """Called on the event loop thread (via call_soon_threadsafe)."""
         if name == "ptt":
             self._spawn(self._ptt_down() if phase == "down" else self._ptt_up())
+        elif name == "dictate":
+            self._spawn(self._dictate_down() if phase == "down" else self._dictate_up())
         elif name == "stop" and phase == "down":
             self._spawn(self.stop())
 
@@ -182,10 +296,27 @@ class VoiceSession:
         if self._pending_answer is not None and not self._pending_answer.done():
             self._pending_answer.set_result("")
         await self._cues.cancelled()
-        await self._set_state(VoiceState.IDLE, "stopped")
+        await self._set_state(self._rest_state, "stopped")
+
+    async def announce(self, text: str) -> None:
+        """Say something Jarvis brings up on its own (a reminder) without talking over anyone."""
+        while self._state not in RESTING:
+            await self._idle.wait()
+        await self._speak(text)
 
     async def ask_and_listen(self, prompt: str) -> str:
-        """Speak a question and return the next thing the user says (used for confirmations)."""
+        """Speak a question and return the next thing the user says (used for confirmations).
+
+        The question may belong to a command typed in the web UI, and the page may answer
+        first; either way the session goes back to the state it was in before asking.
+        """
+        if self._mic_off:
+            # Voice drops out of the race; the page or the terminal answers instead.
+            raise RuntimeError("The microphone is off.")
+        before = self._state
+        resume: VoiceState = (
+            before if before in (VoiceState.IDLE, VoiceState.THINKING) else VoiceState.THINKING
+        )
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
         self._pending_answer = future
         try:
@@ -199,16 +330,23 @@ class VoiceSession:
                     await self._start_listening()
             return await future
         finally:
+            answered_here = future.done() and not future.cancelled()
             if self._pending_answer is future:
                 self._pending_answer = None
             if not future.done():
                 future.cancel()
-            if self._state is VoiceState.AWAITING_ANSWER:
-                await self._set_state(VoiceState.THINKING)
+            if not answered_here and self._capture is Capture.ENDPOINT:
+                self._end_capture()  # another channel answered: stop recording the answer
+            if resume is VoiceState.IDLE:
+                resume = self._rest_state  # the microphone may have gone off during the question
+            if self._state is not resume and self._state is not VoiceState.SPEAKING:
+                await self._set_state(resume)
 
     # Push-to-talk
 
     async def _ptt_down(self) -> None:
+        if self._mic_off:
+            return
         async with self._ptt_lock:
             await self._interrupt()
             await self._open_mic()
@@ -227,6 +365,62 @@ class VoiceSession:
                 await self._close_mic()
         self._spawn(self._process(audio))
 
+    # Dictation
+
+    async def _dictate_down(self) -> None:
+        if self._mic_off or self._dictation is None:
+            return
+        async with self._ptt_lock:
+            if self._pending_answer is not None and not self._pending_answer.done():
+                await self._cues.cancelled()  # a question is waiting: answer it, not dictate
+                return
+            if self._state is VoiceState.SPEAKING:
+                await self._tts.stop()
+            if self._capture is not Capture.NONE:
+                self._end_capture()
+            await self._open_mic()
+            await self._cues.listening()
+            self._begin_capture(Capture.DICTATION)
+            await self._set_state(VoiceState.LISTENING, "dictating: release to type")
+
+    async def _dictate_up(self) -> None:
+        async with self._ptt_lock:
+            if self._capture is not Capture.DICTATION:
+                return
+            await asyncio.sleep(FRAME_MS / 1000)  # let the last frame arrive
+            audio = self._end_capture()
+            if not self.wake_enabled:
+                await self._close_mic()
+        self._spawn(self._dictate(audio))
+
+    async def _dictate(self, audio: Audio) -> None:
+        """Transcribe and insert. The agent never sees dictated text, and nothing is spoken
+        unless the text could not be inserted."""
+        assert self._dictation is not None
+        await self._set_state(VoiceState.TRANSCRIBING, "dictation")
+        await self._live_transcript_done()
+        transcript = await asyncio.to_thread(self._stt.transcribe, audio, dictation=True)
+        text = transcript.text
+        if not text or is_stop_command(text):
+            await self._nothing_heard()
+            return
+        try:
+            how = await asyncio.to_thread(self._dictation.insert, text)
+        except DictationError as exc:
+            await self._set_state(self._rest_state)
+            await self._speak(str(exc))
+            return
+        except Exception:
+            log.exception("Dictation failed")
+            await self._set_state(self._rest_state)
+            await self._speak("I couldn't type that. The details are in the log file.")
+            return
+        log.info(
+            "Dictation: %d characters %s in %d ms", len(text), how or "dropped", transcript.stt_ms
+        )
+        if self._state is VoiceState.TRANSCRIBING:
+            await self._set_state(self._rest_state)
+
     # Microphone routing
 
     async def _open_mic(self) -> None:
@@ -240,7 +434,12 @@ class VoiceSession:
 
     async def _frame_loop(self) -> None:
         while True:
-            frame = await self._mic.read()
+            try:
+                frame = await asyncio.wait_for(self._mic.read(), timeout=MIC_STALL_S)
+            except TimeoutError:
+                if self._mic.active:
+                    await self._recover_mic()
+                continue
             if frame is None:
                 if self._mic.active:
                     continue  # a stale end marker from before the microphone was reopened
@@ -250,11 +449,29 @@ class VoiceSession:
             except Exception:
                 log.exception("Voice frame handling failed")
 
+    async def _recover_mic(self) -> None:
+        """The stream went quiet without closing (sleep, a device change): open it again."""
+        log.warning("The microphone sent no audio for %.0fs; reopening it", MIC_STALL_S)
+        if self._capture is not Capture.NONE:
+            self._end_capture()
+            await self._set_state(self._rest_state, "microphone reconnected")
+        try:
+            await self._mic.restart()
+        except Exception as exc:
+            log.warning("Could not reopen the microphone (%s); trying again shortly", exc)
+            await asyncio.sleep(MIC_RETRY_S)
+        else:
+            log.info("Microphone reopened")
+
     async def _route(self, frame: Audio) -> None:
-        if self._capture is Capture.PUSH_TO_TALK:
+        if self._capture is not Capture.NONE:
+            await self._bus.publish(VoiceLevel(voice_level(frame)))
+        if self._capture in (Capture.PUSH_TO_TALK, Capture.DICTATION):
             self._buffer.append(frame)
+            self._maybe_transcribe_live()
         elif self._capture is Capture.ENDPOINT:
             await self._feed_endpointer(frame)
+            self._maybe_transcribe_live()
         elif self._wake is not None and self._wake_armed():
             score = await asyncio.to_thread(self._wake.score, frame)
             if score >= self._cfg.wake_threshold:
@@ -301,6 +518,36 @@ class VoiceSession:
     def _begin_capture(self, mode: Capture) -> None:
         self._buffer = []
         self._capture = mode
+        self._capture_id += 1
+        self._partial_due = time.monotonic() + PARTIAL_FIRST_S
+
+    def _maybe_transcribe_live(self) -> None:
+        """While you speak, show what Whisper has so far. Only ever shown: the command that runs
+        comes from the final transcript. Dictation stays out, since its text is not for the page."""
+        if (
+            not self._cfg.live_transcript
+            or self._capture not in (Capture.PUSH_TO_TALK, Capture.ENDPOINT)
+            or time.monotonic() < self._partial_due
+            or (self._partial_task is not None and not self._partial_task.done())
+            or not self._buffer
+        ):
+            return
+        audio = np.concatenate(self._buffer)
+        self._partial_task = self._spawn(self._transcribe_live(audio, self._capture_id))
+
+    async def _transcribe_live(self, audio: Audio, capture_id: int) -> None:
+        started = time.monotonic()
+        transcript = await asyncio.to_thread(self._stt.transcribe, audio)
+        took = time.monotonic() - started
+        self._partial_due = time.monotonic() + max(PARTIAL_EVERY_S, took * PARTIAL_BACKOFF)
+        if capture_id == self._capture_id and self._capture is not Capture.NONE and transcript.text:
+            await self._bus.publish(TranscriptPartial(transcript.text))
+
+    async def _live_transcript_done(self) -> None:
+        """Whisper takes one job at a time here: the final one must not race the last partial."""
+        task = self._partial_task
+        if task is not None and not task.done():
+            await asyncio.wait([task])
 
     def _end_capture(self) -> Audio:
         frames, self._buffer = self._buffer, []
@@ -312,6 +559,7 @@ class VoiceSession:
 
     async def _process(self, audio: Audio) -> None:
         await self._set_state(VoiceState.TRANSCRIBING)
+        await self._live_transcript_done()
         transcript = await asyncio.to_thread(self._stt.transcribe, audio)
         if transcript.text:
             await self._bus.publish(
@@ -355,7 +603,7 @@ class VoiceSession:
             if result.text:
                 await self._speak(result.text)
         if self._state in (VoiceState.THINKING, VoiceState.SPEAKING):
-            await self._set_state(VoiceState.IDLE)
+            await self._set_state(self._rest_state)
 
     async def _finish_previous_turn(self) -> None:
         task = self._turn_task
@@ -392,14 +640,22 @@ class VoiceSession:
             if self._state is VoiceState.SPEAKING and previous is not VoiceState.SPEAKING:
                 await self._set_state(previous)
 
+    @property
+    def _rest_state(self) -> VoiceState:
+        return VoiceState.MUTED if self._mic_off else VoiceState.IDLE
+
     async def _nothing_heard(self) -> None:
         await self._cues.cancelled()
-        await self._set_state(VoiceState.IDLE, "nothing heard")
+        await self._set_state(self._rest_state, "nothing heard")
 
     # Helpers
 
     async def _set_state(self, state: VoiceState, detail: str = "") -> None:
         self._state = state
+        if state in RESTING:
+            self._idle.set()
+        else:
+            self._idle.clear()
         await self._bus.publish(VoiceStateChanged(state=state, detail=detail))
 
     def _spawn(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:

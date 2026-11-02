@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 
-from jarvis.core.agent import TurnStatus
+from jarvis.core.agent import EMPTY_REPLY_NUDGE, NOT_UNDERSTOOD, TurnStatus
 from jarvis.core.events import AssistantMessage, ToolCallFinished, ToolCallStarted
 from jarvis.llm.types import LLMError
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolResult
 from jarvis.tools.registry import Registry, tool
 from jarvis.tools.web.search import SearchHit
-from tests.conftest import FakeChannel, FakeSearch, Hang, MakeApp, reply
+from tests.conftest import FakeChannel, FakeDesktop, FakeSearch, Hang, MakeApp, reply
 
 
 async def test_plain_answer_needs_no_tools(make_app: MakeApp) -> None:
@@ -40,7 +40,7 @@ async def test_tool_call_then_answer_is_audited(make_app: MakeApp, launched: lis
 
     tool_message = h.llm.requests[1][-1]
     assert tool_message["role"] == "tool"
-    assert json.loads(tool_message["content"])["ok"] is True
+    assert json.loads(tool_message["content"].splitlines()[0])["ok"] is True
 
     kinds = [type(e) for e in h.events]
     assert kinds.index(ToolCallStarted) < kinds.index(ToolCallFinished)
@@ -221,3 +221,54 @@ async def test_history_is_trimmed_at_turn_boundaries(make_app: MakeApp) -> None:
         await h.app.agent.run_turn(f"question {i}")
     users = [m["content"] for m in h.app.agent.messages if m["role"] == "user"]
     assert users == ["question 3", "question 4", "question 5"]
+
+
+async def test_an_empty_reply_is_retried_once_with_a_nudge(make_app: MakeApp) -> None:
+    h = make_app([reply(""), reply("", ("open_app", {"name": "notepad"})), reply("Opened.")])
+    result = await h.app.agent.run_turn("close the calculator")
+    assert result.text == "Opened."
+    assert h.llm.requests[1][-1] == {"role": "user", "content": EMPTY_REPLY_NUDGE}
+    assert EMPTY_REPLY_NUDGE not in json.dumps(h.app.agent.messages)  # never kept in history
+
+
+async def test_nothing_twice_is_not_reported_as_done(make_app: MakeApp) -> None:
+    h = make_app([reply(""), reply("  ")])
+    result = await h.app.agent.run_turn("close the calculator")
+    assert result.text == NOT_UNDERSTOOD
+    assert h.audit() == []
+
+
+async def test_turns_from_different_channels_wait_for_each_other(make_app: MakeApp) -> None:
+    h = make_app([Hang(), reply("Second.")])
+    first = asyncio.create_task(h.app.agent.run_turn("slow one", source="web"))
+    await asyncio.sleep(0.01)
+    second = asyncio.create_task(h.app.agent.run_turn("quick one", source="voice"))
+    await asyncio.sleep(0.01)
+    assert len(h.llm.requests) == 1  # the voice turn waits instead of sharing the history
+    assert h.app.agent.cancel()
+    assert (await first).status is TurnStatus.CANCELLED
+    assert (await second).text == "Second."
+    roles = [m["role"] for m in h.app.agent.messages]
+    assert roles == ["user", "assistant", "user", "assistant"]
+
+
+async def test_a_result_with_a_summary_asks_for_a_short_reply(make_app: MakeApp) -> None:
+    # Weather was read out field by field ("the weather code is 3") in 14 seconds.
+    h = make_app([reply("", ("set_volume", {"level": 30})), reply("Volume is at 30.")])
+    await h.app.agent.run_turn("set the volume to 30")
+    tool_message = next(m for m in h.llm.requests[1] if m["role"] == "tool")
+    assert "The summary is the answer" in tool_message["content"]
+
+
+async def test_a_result_with_a_long_list_asks_for_a_short_reply(
+    make_app: MakeApp, desktop: FakeDesktop
+) -> None:
+    from jarvis.platform.uia import Control
+
+    window = desktop.add("Untitled - Notepad", "notepad.exe")
+    desktop.controls[window.hwnd] = [Control("button", f"Button {i}") for i in range(12)]
+    desktop.lines[window.hwnd] = ["hello"]
+    h = make_app([reply("", ("read_window_text", {"app": "notepad"})), reply("It says hello.")])
+    await h.app.agent.run_turn("what does notepad say")
+    tool_message = next(m for m in h.llm.requests[1] if m["role"] == "tool")
+    assert "two or three short spoken sentences" in tool_message["content"]

@@ -1,13 +1,18 @@
-"""SQLite connection and schema migrations (tracked with PRAGMA user_version)."""
+"""SQLite connection, schema migrations (tracked with PRAGMA user_version), and recovery from a
+damaged file (moved aside untouched, readable rows copied into a fresh database)."""
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 # Append new migrations to the end. Never edit one that has shipped.
 MIGRATIONS: list[str] = [
@@ -83,6 +88,89 @@ MIGRATIONS: list[str] = [
         item_count INTEGER NOT NULL
     );
     """,
+    # 4: data API cache, and timers and reminders
+    """
+    CREATE TABLE api_cache (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        fetched_at REAL NOT NULL,
+        expires_at REAL NOT NULL
+    );
+
+    CREATE TABLE reminders (
+        id INTEGER PRIMARY KEY,
+        kind TEXT NOT NULL,
+        message TEXT NOT NULL,
+        due_at REAL NOT NULL,
+        created_at REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        fired_at REAL
+    );
+
+    CREATE INDEX idx_reminders_due ON reminders (status, due_at);
+    """,
+    # 5: contacts and their spoken aliases (an alias may name several people on purpose)
+    """
+    CREATE TABLE contacts (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL UNIQUE,
+        phone TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE contact_aliases (
+        alias_key TEXT NOT NULL,
+        alias TEXT NOT NULL,
+        contact_id INTEGER NOT NULL REFERENCES contacts (id) ON DELETE CASCADE,
+        PRIMARY KEY (alias_key, contact_id)
+    );
+    """,
+    # 6: notifications from allowed apps (private; deleted after notifications.keep_days)
+    """
+    CREATE TABLE notifications (
+        id INTEGER PRIMARY KEY,
+        win_id INTEGER NOT NULL,
+        app_id TEXT NOT NULL,
+        app TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        seen_at TEXT NOT NULL,
+        read_at TEXT,
+        UNIQUE (app_id, win_id, created_at)
+    );
+
+    CREATE INDEX idx_notifications_created ON notifications (created_at);
+    """,
+    # 7: things the user asked Jarvis to remember, and cloud requests counted per day
+    """
+    CREATE TABLE memories (
+        id INTEGER PRIMARY KEY,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE cloud_usage (
+        day TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        requests INTEGER NOT NULL DEFAULT 0,
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (day, provider)
+    );
+    """,
+    # 8: vectors for searching memories and past commands by meaning (Phase 14)
+    """
+    CREATE TABLE embeddings (
+        kind TEXT NOT NULL,
+        ref_id INTEGER NOT NULL,
+        model TEXT NOT NULL,
+        vector BLOB NOT NULL,
+        PRIMARY KEY (kind, ref_id, model)
+    );
+    """,
 ]
 
 
@@ -95,16 +183,43 @@ class Database:
 
     def __init__(self, path: Path | str) -> None:
         self.path = path
+        self.recovered_from: Path | None = None  # set when a damaged file was moved aside
+        self.journal_mode = "memory"
         if isinstance(path, Path):
             path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists() and not healthy(path):
+                self.recovered_from = set_aside(path)
         # Autocommit mode; multi-statement changes use explicit transactions.
         self.conn = sqlite3.connect(str(path), isolation_level=None, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.lock = threading.RLock()
         if str(path) != ":memory:":
-            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.journal_mode = self._set_journal_mode()
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.migrate()
+        if self.recovered_from is not None:
+            saved = salvage(self.recovered_from, self)
+            log.warning(
+                "Jarvis's database was damaged. It was moved to %s and a new one was started; "
+                "%s rows were copied over. Indexes rebuild themselves.",
+                self.recovered_from,
+                sum(saved.values()),
+            )
+
+    def _set_journal_mode(self) -> str:
+        """WAL where it is safe, the rollback journal where SQLite has the WAL-reset bug.
+
+        SQLite 3.7.0 to 3.51.2 can corrupt a WAL database when two connections (here, two
+        Jarvis processes, such as the one started at login and `jarvis ask`) write or
+        checkpoint at the same instant. That damaged jarvis.db twice (ADR-048). The rollback
+        journal is not affected. Switching needs the file to itself, so if another Jarvis
+        holds it open, the mode it has stays until the next start.
+        """
+        wanted = "wal" if wal_is_safe(sqlite3.sqlite_version_info) else "delete"
+        mode = str(self.conn.execute(f"PRAGMA journal_mode={wanted}").fetchone()[0]).lower()
+        if mode != wanted:
+            log.warning("Could not switch the database to %s mode; it stays in %s", wanted, mode)
+        return mode
 
     @property
     def version(self) -> int:
@@ -138,3 +253,82 @@ class Database:
     def close(self) -> None:
         with self.lock:
             self.conn.close()
+
+
+def wal_is_safe(version: tuple[int, int, int]) -> bool:
+    """Whether this SQLite has the WAL-reset fix (3.51.3, or the backports 3.50.7 and 3.44.6)."""
+    return (
+        version >= (3, 51, 3)
+        or (3, 50, 7) <= version < (3, 51, 0)
+        or (3, 44, 6) <= version < (3, 45, 0)
+    )
+
+
+# What is worth copying out of a damaged database. Indexes and the API cache rebuild themselves.
+SALVAGE_TABLES = (
+    "preferences",
+    "command_history",
+    "audit_log",
+    "reminders",
+    "contacts",
+    "contact_aliases",
+    "notifications",
+    "memories",
+)
+
+
+def healthy(path: Path) -> bool:
+    """Whether SQLite can read every page of the file (a quick check takes milliseconds)."""
+    try:
+        conn = sqlite3.connect(str(path))
+        try:
+            return bool(conn.execute("PRAGMA quick_check(1)").fetchone()[0] == "ok")
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return False
+
+
+def set_aside(path: Path) -> Path:
+    """Rename a damaged database (and its WAL files) out of the way, untouched."""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    target = path.with_name(f"{path.name}.corrupt-{stamp}")
+    for suffix in ("", "-wal", "-shm"):
+        source = Path(f"{path}{suffix}")
+        if source.exists():
+            source.replace(Path(f"{target}{suffix}"))
+    return target
+
+
+def salvage(broken: Path, db: Database) -> dict[str, int]:
+    """Copy every row that can still be read from a damaged database into a fresh one."""
+    saved: dict[str, int] = {}
+    try:
+        old = sqlite3.connect(f"file:{broken.as_posix()}?mode=ro", uri=True)
+    except sqlite3.DatabaseError:
+        return saved
+    try:
+        for table in SALVAGE_TABLES:
+            saved[table] = _copy_rows(old, db, table)
+    finally:
+        old.close()
+    return saved
+
+
+def _copy_rows(old: sqlite3.Connection, db: Database, table: str) -> int:
+    columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+    copied = 0
+    try:
+        cursor = old.execute(f"SELECT * FROM {table}")
+        names = [name for name in (d[0] for d in cursor.description) if name in columns]
+        insert = (
+            f"INSERT OR IGNORE INTO {table} ({', '.join(names)}) "
+            f"VALUES ({', '.join('?' for _ in names)})"
+        )
+        positions = [i for i, d in enumerate(cursor.description) if d[0] in columns]
+        while rows := cursor.fetchmany(200):
+            db.executemany(insert, [[row[i] for i in positions] for row in rows])
+            copied += len(rows)
+    except sqlite3.DatabaseError as exc:
+        log.warning("Stopped copying %s after %d rows: %s", table, copied, exc)
+    return copied

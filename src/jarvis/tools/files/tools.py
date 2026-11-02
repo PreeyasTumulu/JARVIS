@@ -14,6 +14,7 @@ from jarvis.tools.files.index import query_words
 from jarvis.tools.files.readers import read_document
 from jarvis.tools.files.selection import current_selection
 from jarvis.tools.registry import tool
+from jarvis.tools.secrets import hide_secrets
 
 _PATH_FILLER = {"path", "to", "users", "user", "c", "home"}
 CLEAR_LEAD = 8  # how far ahead the best search hit must be to use it without asking
@@ -106,7 +107,7 @@ async def read_file(ctx: ToolContext, path: str) -> ToolResult:
     data: dict[str, Any] = {"path": path, "text": document.text, "truncated": document.truncated}
     if document.pages is not None:
         data["pages"] = document.pages
-    return ToolResult.success(data=data)
+    return ToolResult.success(data=hide_secrets(data, "text"))
 
 
 @read_file.preparer

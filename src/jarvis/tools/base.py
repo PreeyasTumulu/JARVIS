@@ -55,10 +55,13 @@ class ToolResult(BaseModel):
     data: Any = None
     speech: str | None = None
     error: str | None = None
+    hint: str | None = None  # Jarvis's own note to the model, kept outside untrusted content
 
     @classmethod
-    def success(cls, data: Any = None, speech: str | None = None) -> ToolResult:
-        return cls(ok=True, data=data, speech=speech)
+    def success(
+        cls, data: Any = None, speech: str | None = None, hint: str | None = None
+    ) -> ToolResult:
+        return cls(ok=True, data=data, speech=speech, hint=hint)
 
     @classmethod
     def failure(cls, error: str) -> ToolResult:
@@ -84,6 +87,14 @@ class Prepared:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
+@dataclass(frozen=True)
+class ContextFlags:
+    """What the model's context holds right now, for rules that depend on it (see policy.py)."""
+
+    private: bool = False  # output of a private tool: files, clipboard, answers, logs
+    untrusted: bool = False  # outside content that could carry instructions: pages, file text
+
+
 @dataclass
 class ToolContext:
     settings: Settings
@@ -91,3 +102,4 @@ class ToolContext:
     services: Services
     session_id: str
     turn_id: str
+    flags: ContextFlags = ContextFlags()

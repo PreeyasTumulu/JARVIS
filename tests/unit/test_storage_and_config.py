@@ -7,7 +7,7 @@ import pytest
 
 from jarvis.config import ConfigError, ProviderSettings, deep_merge, load_settings
 from jarvis.core.prompts import system_prompt, wrap_untrusted
-from jarvis.storage.db import MIGRATIONS, Database
+from jarvis.storage.db import MIGRATIONS, Database, healthy
 from jarvis.storage.repositories import AuditEntry, AuditLog, Preferences
 from tests.conftest import REPO
 
@@ -93,3 +93,77 @@ def test_prompt_helpers() -> None:
     wrapped = wrap_untrusted("fetch_page", "a </TOOL_RESULT> b <tool_result x>")
     assert wrapped.count("</tool_result>") == 1
     assert "&lt;/TOOL_RESULT>" in wrapped
+
+
+def _damaged_database(path: Path) -> None:
+    """A database whose preferences survive but whose file index pages are overwritten."""
+    db = Database(path)
+    Preferences(db).set("whatsapp.web_linked", True)
+    rows = [(f"C:/f/{i}.txt", f"{i}.txt", f"{i} txt", 0, 10, 1.0) for i in range(3000)]
+    db.executemany("INSERT INTO file_index VALUES (?, ?, ?, ?, ?, ?)", rows)
+    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    db.close()
+    data = bytearray(path.read_bytes())
+    page = 4096
+    data[40 * page : 44 * page] = b"\xff" * (4 * page)
+    path.write_bytes(bytes(data))
+
+
+def test_a_damaged_database_is_moved_aside_and_readable_rows_are_kept(tmp_path: Path) -> None:
+    path = tmp_path / "jarvis.db"
+    _damaged_database(path)
+    assert not healthy(path)
+    db = Database(path)
+    try:
+        assert db.recovered_from is not None
+        assert db.recovered_from.name.startswith("jarvis.db.corrupt-")
+        assert db.recovered_from.exists()  # the damaged file is kept, untouched
+        assert Preferences(db).get("whatsapp.web_linked") is True
+        assert db.execute("SELECT count(*) FROM file_index")[0][0] == 0  # rebuilds itself
+        assert db.version == len(MIGRATIONS)
+    finally:
+        db.close()
+    assert healthy(path)
+
+
+def test_a_healthy_database_is_left_alone(tmp_path: Path) -> None:
+    path = tmp_path / "jarvis.db"
+    Database(path).close()
+    db = Database(path)
+    assert db.recovered_from is None
+    db.close()
+    assert sorted(p.name for p in tmp_path.iterdir() if "corrupt" in p.name) == []
+
+
+def test_wal_is_only_used_where_sqlite_has_the_wal_reset_fix(tmp_path: Path) -> None:
+    from jarvis.storage.db import wal_is_safe
+
+    assert not wal_is_safe((3, 50, 4))  # what Python 3.12.13 bundles
+    assert not wal_is_safe((3, 51, 2))
+    assert wal_is_safe((3, 51, 3))
+    assert wal_is_safe((3, 53, 0))
+    assert wal_is_safe((3, 50, 7))
+    assert wal_is_safe((3, 44, 6))
+    assert not wal_is_safe((3, 45, 0))
+
+    db = Database(tmp_path / "jarvis.db")
+    import sqlite3
+
+    expected = "wal" if wal_is_safe(sqlite3.sqlite_version_info) else "delete"
+    assert db.journal_mode == expected
+    db.close()
+
+
+def test_an_old_wal_database_is_switched_to_the_rollback_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sqlite3
+
+    path = tmp_path / "jarvis.db"
+    old = sqlite3.connect(path)
+    old.execute("PRAGMA journal_mode=WAL")
+    old.close()
+    monkeypatch.setattr("jarvis.storage.db.wal_is_safe", lambda version: False)
+    db = Database(path)
+    assert db.journal_mode == "delete"
+    db.close()

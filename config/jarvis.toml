@@ -4,7 +4,7 @@
 
 [agent]
 max_iterations = 6           # model calls per command before giving up
-turn_timeout_s = 120         # hard ceiling for one command
+turn_timeout_s = 180         # hard ceiling for one command (a first WhatsApp Web load is slow)
 tool_timeout_s = 20          # default per tool call, tools can override
 max_tool_calls_per_step = 4  # parallel tool calls accepted from one model reply
 history_turns = 8            # past commands kept in the conversation
@@ -18,6 +18,33 @@ base_url = "http://localhost:11434/v1"
 model = "jarvis-hermes3"     # created from config/ollama/hermes3-8b.Modelfile
 temperature = 0.2
 timeout_s = 120
+
+# Free cloud models for heavy questions that touch only public data (ADR-045). Private content
+# (files, messages, notifications, clipboard, screen, memory) never goes to them.
+[llm.providers.groq]
+base_url = "https://api.groq.com/openai/v1"
+model = "openai/gpt-oss-120b"
+api_key_env = "GROQ_API_KEY"   # free account at console.groq.com, no card
+temperature = 0.3
+timeout_s = 30
+max_tokens = 2000              # it reasons before answering; the reply itself stays short
+
+[llm.providers.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+model = "nvidia/nemotron-3-ultra-550b-a55b:free"
+api_key_env = "OPENROUTER_API_KEY"  # free account at openrouter.ai; free models change, see docs
+temperature = 0.3
+timeout_s = 45
+max_tokens = 2000
+
+[router]
+cloud = ["groq", "openrouter"]  # tried in order; then the local model. [] keeps everything local
+escalate = "auto"            # "auto": "think harder" or a heavy public question; "explicit"; "never"
+cooldown_s = 300             # a provider that failed or hit its limit is skipped this long
+
+[router.daily_requests]
+groq = 900                   # its free tier allows 1,000 a day for gpt-oss-120b
+openrouter = 45              # free accounts get 50 a day
 
 [safety]
 # Apps that open without asking. Others follow unlisted_apps.
@@ -37,6 +64,9 @@ unlisted_apps = "confirm"    # "confirm" or "block"
 confirm_timeout_s = 30       # no answer within this time means no
 # Apps that close without asking, unless a window title shows unsaved changes.
 safe_to_close = ["Calculator", "Settings", "File Explorer"]
+# Apps where click, type_text, and press_keys run without asking. Targets that look destructive
+# (Send, Delete, Buy, Alt+F4, ...) still ask. WhatsApp and terminals always ask, whatever this says.
+trusted_ui_apps = ["Notepad"]
 
 [safety.tool_risk_overrides]
 # Raise a tool's risk level, for example: open_app = "confirm"
@@ -96,6 +126,181 @@ everything = "auto"          # use Everything (voidtools es.exe) for search if i
 max_results = 5
 region = "us-en"
 
+[web]
+fetch_max_chars = 6000       # page text the model gets to see
+fetch_max_mb = 3             # larger downloads are cut off
+
+[market]
+# Tried in order. Providers without an API key in .env are skipped; yfinance needs none.
+# Exchange-listed symbols (RELIANCE.NS) and indices (^NSEI) always try yfinance first.
+providers = ["finnhub", "twelvedata", "alphavantage", "yfinance"]
+# When symbol search finds the same company on one of these exchanges, use that listing,
+# for example Infosys on NSE (INFY.NS) rather than its US share (INFY).
+prefer_listings = [".NS", ".BO"]
+crypto_currency = "USD"      # used when a crypto question names no currency
+
+[market.aliases]
+# Spoken names that symbol search gets wrong or that are faster to skip searching for.
+"nifty" = "^NSEI"
+"nifty 50" = "^NSEI"
+"nifty fifty" = "^NSEI"
+"bank nifty" = "^NSEBANK"
+"sensex" = "^BSESN"
+"nasdaq" = "^IXIC"
+"dow" = "^DJI"
+"dow jones" = "^DJI"
+"s&p 500" = "^GSPC"
+"s and p 500" = "^GSPC"
+"gold" = "GC=F"
+"silver" = "SI=F"
+"crude oil" = "CL=F"
+
+[weather]
+home = ""                    # your city, for example "Hyderabad"; set it in config/local.toml
+units = "celsius"            # or "fahrenheit"
+
+[system]
+screenshot_folder = "{pictures}/Screenshots"
+
+[ui]
+read_max_chars = 6000        # window text the model gets to see
+window_wait_s = 10           # how long type_text waits for an app it had to start
+ocr_fallback = true          # read the window's pixels with Windows OCR when it exposes little text
+ocr_min_chars = 40           # "little" means fewer characters than this
+
+[browser]
+# Jarvis's own browser for browser_open, browser_click, and browser_type. Its profile lives in
+# %LOCALAPPDATA%\Jarvis\browser-profile, apart from your everyday browser.
+channel = "auto"             # your Windows default if it is Brave, Chrome, or Edge; else Edge.
+                             # Or "brave", "chrome", "msedge", "chromium" (playwright install chromium)
+executable = ""              # full path to a Chromium-based browser; wins over channel
+read_max_chars = 6000        # page text the model gets to see
+max_elements = 60            # links, buttons, and fields listed for the model
+navigation_timeout_s = 30
+
+[contacts]
+default_country_code = ""    # for numbers saved without one, for example "91"; set it in local.toml
+match_threshold = 85         # 0 to 100, how close a spoken name must be to a contact or alias
+
+[whatsapp]
+# "auto": WhatsApp Web in its own profile (link it once: uv run jarvis whatsapp login), or the
+# desktop app if Web is not linked or does not load. "web" or "desktop" use only that one.
+method = "auto"
+max_chars = 1000             # longer messages are refused, so the read back stays short enough
+verify_timeout_s = 15        # wait this long for the sent tick after pressing Send
+
+[notifications]
+# Jarvis checks the Windows notification center (it cannot be told about changes, RISKS.md R4).
+enabled = true
+apps = ["WhatsApp", "Claude"]  # display names or app ids; other apps' notifications are ignored
+poll_s = 2                   # seconds between checks while Jarvis runs
+keep_days = 7                # notification text older than this is deleted
+max_read = 5                 # how many are read out at once
+
+[server]
+port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachable from the network)
+open_browser = true          # open the page when `jarvis serve` starts
+speak_replies = false        # also say the answers to commands typed on the page
+
+[overlay]                     # the fullscreen effect when you say "Hey Jarvis" (ADR-070)
+enabled = true
+mode = "takeover"             # takeover: whole screen, then an edge glow; edge: only the glow
+dim = 0.72                    # how dark the desktop goes during a takeover, 0 to 0.9
+show_in_captures = false      # true shows it in screenshots and shares; use it to record a demo
+max_visible_s = 240           # hide if Jarvis goes silent for this long
+
+[bridge]
+# Claude Code asks you through Jarvis (install once with: uv run jarvis claude-hook install).
+enabled = true
+answer_timeout_s = 120       # no answer by then: Claude Code asks you as usual
+questions = true             # Claude's multiple-choice questions, answered by voice or the page
+permissions = true           # tool permissions: a clear spoken yes allows, no denies, silence asks as usual
+announce = true              # say "Claude is waiting for you" and "Claude finished"
+phone = ""                   # "" (off), "ntfy" (a push with answer buttons), or "twilio" (a real call)
+escalate_after_s = 45        # how long the PC gets before the phone is tried
+
+[calls]
+# "whatsapp": the WhatsApp desktop app presses Voice call. "phone_link": a tel: link, which
+# dials from your paired phone. Neither falls back to the other.
+method = "whatsapp"
+
+[phone]
+number = ""                # your own number, +91..., set it in local.toml
+ntfy_server = "https://ntfy.sh"
+ntfy_topic = ""              # a long random name, in local.toml; anyone who knows it can read it
+twilio_from = ""             # a Twilio number allowed to call yours
+twilio_flow_sid = ""         # the Studio flow imported from docs/twilio-ask-flow.json
+
+[mail]
+# Gmail over IMAP and SMTP with an app password in .env as MAIL_APP_PASSWORD (SETUP.md 5k).
+address = ""                 # your address, in local.toml
+imap_host = "imap.gmail.com"
+imap_port = 993
+smtp_host = "smtp.gmail.com"
+smtp_port = 465
+folder = "INBOX"
+max_list = 5                 # emails listed at once
+body_chars = 4000            # of one email's text the model sees
+max_reply_chars = 5000
+signature = ""               # added under every reply
+
+[calendar]
+# The secret iCal address goes in .env as CALENDAR_ICS_URL (several: separate with spaces).
+cache_s = 300                # download it at most every 5 minutes
+max_events = 10
+
+[mcp]
+# Tools from MCP servers (ADR-059). Each server's tools ask first unless the server marks them
+# read-only and you set trusted = true. Only the tools listed in `tools` reach the model;
+# `uv run jarvis mcp tools <server>` shows everything a server offers.
+enabled = true
+connect_timeout_s = 60       # the first start of a Docker image is slow
+call_timeout_s = 30
+
+[mcp.servers.github]
+# GitHub's official server in Docker. Starts once GITHUB_PERSONAL_ACCESS_TOKEN is in .env.
+label = "GitHub"
+command = "docker"
+args = ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "-e", "GITHUB_TOOLSETS",
+        "ghcr.io/github/github-mcp-server:v2.0.2"]
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "$GITHUB_PERSONAL_ACCESS_TOKEN", GITHUB_TOOLSETS = "context,repos,issues,pull_requests" }
+trusted = true               # GitHub's own read-only labels are believed: reading runs, writing asks
+keywords = ["github", "git hub", "issue", "issues", "pull request", "pull requests", "pr", "prs",
+            "repo", "repos", "repository", "repositories", "commit", "commits"]
+tools = [
+  "get_me", "list_issues", "issue_read", "search_issues", "list_pull_requests",
+  "pull_request_read", "search_repositories", "list_commits",
+  "issue_write", "add_issue_comment",
+]
+
+[mcp.servers.github.params]
+# The parameters the model sees for each tool (required ones always). GitHub's full schemas
+# made each request 3 to 5 times slower on the 8B model.
+list_issues = ["owner", "repo", "state", "labels"]
+issue_read = ["owner", "repo", "issue_number", "method"]
+search_issues = ["query", "owner", "repo"]
+list_pull_requests = ["owner", "repo", "state"]
+pull_request_read = ["owner", "repo", "pullNumber", "method"]
+search_repositories = ["query"]
+list_commits = ["owner", "repo", "sha", "author"]
+issue_write = ["method", "owner", "repo", "issue_number", "title", "body", "state", "labels"]
+add_issue_comment = ["owner", "repo", "issue_number", "body"]
+
+[briefing]
+# "Good morning" or "brief me" (ADR-066). Email and messages are counts and senders only.
+parts = ["weather", "calendar", "reminders", "mail", "messages"]
+offer = true                 # offer it once a day, the first time you use Jarvis in the morning
+offer_from_hour = 6
+offer_until_hour = 12
+
+[dictation]
+# Hold the hotkey, speak, release: the text appears where the cursor is, in any app (ADR-054).
+enabled = true
+hotkey = "ctrl+alt+d"
+paste_over_chars = 200       # longer text is pasted (clipboard restored, kept out of Win+V history); 0 always pastes
+spoken_commands = true       # "new line", "new paragraph", "comma", "full stop", "question mark"
+remove_fillers = true        # drop "um" and "uh"
+
 [tts]
-engine = "sapi"              # Phase 2 adds "piper" and "kokoro"
+engine = "piper"            # "piper", or "sapi" (built-in Windows voice); falls back to sapi if Piper is not installed
 rate = 0                     # -10 (slow) to 10 (fast)

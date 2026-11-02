@@ -36,6 +36,9 @@ class Tool:
     args_model: type[BaseModel]
     fn: ToolFn
     prepare_fn: PrepareFn | None = None
+    egress: bool = False  # sends a request to an address the model chooses (see policy.py)
+    parameters: dict[str, Any] | None = None  # a JSON schema given as is (MCP tools)
+    route: re.Pattern[str] | None = None  # words that offer this tool (MCP servers' keywords)
 
     def preparer(self, fn: PrepareFn) -> PrepareFn:
         """Register a side-effect-free step that resolves and risk-rates arguments."""
@@ -43,7 +46,11 @@ class Tool:
         return fn
 
     def schema(self) -> dict[str, Any]:
-        parameters = _clean_schema(self.args_model.model_json_schema())
+        parameters = (
+            self.parameters
+            if self.parameters is not None
+            else _clean_schema(self.args_model.model_json_schema())
+        )
         return {
             "type": "function",
             "function": {
@@ -54,8 +61,31 @@ class Tool:
         }
 
     def validate(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Validate model-supplied arguments. Raises pydantic.ValidationError."""
-        return self.args_model.model_validate(raw).model_dump()
+        """Validate model-supplied arguments. Raises pydantic.ValidationError.
+
+        Small models write the word "null" (or "none", or "") for an optional argument they
+        mean to leave out; type_text then looked for a field called "null". Optional
+        arguments get a real None instead. Hermes also sometimes wraps the arguments in the
+        call itself ({"function": "reply_email", "arguments": {...}}); that is unwrapped.
+        """
+        cleaned = dict(raw)
+        inner = cleaned.get("arguments")
+        if (
+            isinstance(inner, dict)
+            and set(cleaned) <= {"function", "name", "arguments"}
+            and "arguments" not in self.args_model.model_fields
+        ):
+            cleaned = dict(inner)
+        for name, field in self.args_model.model_fields.items():
+            value = cleaned.get(name)
+            if (
+                isinstance(value, str)
+                and value.strip().casefold() in NULL_WORDS
+                and not field.is_required()
+                and _accepts_none(field.annotation)
+            ):
+                cleaned[name] = None
+        return self.args_model.model_validate(cleaned).model_dump()
 
     async def prepare(self, ctx: ToolContext, args: dict[str, Any]) -> Prepared:
         if self.prepare_fn is not None:
@@ -73,6 +103,7 @@ def tool(
     untrusted: bool = False,
     timeout_s: float | None = None,
     name: str | None = None,
+    egress: bool = False,
 ) -> Callable[[ToolFn], Tool]:
     """Turn an async function into a Tool. Sensitivity defaults to private (fail closed)."""
 
@@ -91,6 +122,7 @@ def tool(
             timeout_s=timeout_s,
             args_model=_build_args_model(fn, arg_docs),
             fn=fn,
+            egress=egress,
         )
 
     return wrap
@@ -180,6 +212,13 @@ def _build_args_model(fn: ToolFn, arg_docs: dict[str, str]) -> type[BaseModel]:
         **fields,
     )
     return model
+
+
+NULL_WORDS = {"null", "none", "nil", "undefined", ""}
+
+
+def _accepts_none(annotation: Any) -> bool:
+    return annotation is None or type(None) in typing.get_args(annotation)
 
 
 def _clean_schema(node: Any) -> Any:

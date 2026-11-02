@@ -131,3 +131,22 @@ def test_tts_falls_back_to_sapi_without_piper(
 
     monkeypatch.setitem(sys.modules, "jarvis.voice.tts.piper_engine", None)
     assert isinstance(build_tts(settings), SapiTTS)  # type: ignore[arg-type]
+
+
+class _Broken:
+    name = "voice"
+
+    async def confirm(self, request: ConfirmationRequest) -> bool:
+        raise RuntimeError("no microphone")
+
+    async def ask(self, question: str, options: Sequence[str] | None = None) -> str:
+        raise RuntimeError("no microphone")
+
+
+async def test_a_failing_channel_drops_out_of_the_race() -> None:
+    request = ConfirmationRequest("r", "open_app", "Open Paint", "d", None, 30)
+    channel = FirstAnswerChannel(_Broken(), _Channel("web", 0.01, True))
+    assert await channel.confirm(request) is True
+    assert channel.name == "web"
+    with pytest.raises(RuntimeError, match="no microphone"):
+        await FirstAnswerChannel(_Broken(), _Broken()).confirm(request)

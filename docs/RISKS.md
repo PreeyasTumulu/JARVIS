@@ -9,19 +9,35 @@ Things that are unreliable, fragile, or risky, written down before building so t
 | R1 | Hermes 3 8B does not fit in 4 GB VRAM, replies are slow | High | Medium | KV cache quantization, keep-alive, stable prompt prefix, benchmark against `hermes3:3b`, fast path for "stop" | 1 |
 | R2 | A small model picks the wrong tool or wrong arguments | Medium | Medium | Policy gate, confirmations, argument validation, benchmark suite, tool retrieval if accuracy drops | 1, 4 |
 | R3 | 16 GB RAM is tight with LLM, Whisper, Playwright, Docker Desktop, and your own apps | Medium | Medium | STT on CPU with a small model, DuckDuckGo instead of SearXNG, lazy-load voice and browser components | 2, 6 |
-| R4 | Notification listener does not work from unpackaged Python | Medium | High for Phase 7 | Feasibility spike first, polling instead of events, WhatsApp Web polling fallback | 7 |
-| R5 | WhatsApp automation breaks or risks the account | Medium | High | Human confirmation on every send, low volume, centralized selectors, deep-link fallback | 6 |
-| R6 | UI automation is flaky on some apps | High | Medium | Prefer CLI adapters, UIA only where needed, PyAutoGUI last, clear failure messages | 6 |
+| R4 | Notification listener does not work from unpackaged Python | Spike passed | High for Phase 7 | Reading and polling work, events do not: a 2 s poll, an app allowlist, text kept 7 days (ADR-044) | 7 |
+| R5 | WhatsApp automation breaks or risks the account | Medium | High | You accepted the risk (ADR-037); read back and explicit yes on every send, low volume, WhatsApp's own click-to-chat links, selectors in one file, desktop fallback, never two sends | 6 |
+| R6 | UI automation is flaky on some apps | High | Medium | Prefer CLI adapters, UIA only where needed, paced typing read back afterwards, focus checked before every burst, clear failure messages | 6 |
 | R7 | Prompt injection from web pages, files, or notifications | Medium | High | Untrusted-data wrapping, policy gate in code, confirmations cannot be answered by tool content | All |
 | R8 | Wake word false triggers, especially from Jarvis's own voice | Medium | Low | Pause wake word while speaking, threshold tuning, push-to-talk as the reliable path | 2 |
 | R9 | Unofficial data sources (yfinance, ddgs) change or rate limit | High | Low | Provider fallback chains, caching, circuit breakers | 1, 4 |
-| R10 | Other websites talking to the local UI | Low | High | 127.0.0.1 bind, Origin check, per-launch token | 5 |
+| R10 | Other websites talking to the local UI | Low | High | 127.0.0.1 bind, Origin check, per-launch token, Host check, no framing (ADR-035); verified against the running server | 5 |
 | R11 | A stuck Windows call cannot be cancelled instantly | Medium | Low | Cooperative cancellation, per-tool timeouts, work isolated on worker threads | 1, 6 |
-| R12 | Private data reaches a cloud model | Low | High | Sensitivity labels, fresh public-only cloud context, guard that raises, dedicated tests | 8 |
+| R12 | Private data reaches a cloud model | Low | High | Fresh public-only cloud context, public read-only tools, a guard that raises, private topics stay local, tests with a fake cloud that records everything (ADR-045) | 8 |
 | R13 | Microsoft Store Python hides Jarvis's data (AppData redirection) | Happened | Medium | uv-managed Python only (ADR-019), CLI warning, data moved | 2 |
 | R14 | Wrong or silent microphone, hotkeys owned by other apps | Happened | Medium | Startup mic silence check, `--list-devices`, name-based device selection, hotkey conflict warnings | 2 |
 | R15 | The model misreads tool data in its answer (said a stopped container was running) | Medium | Low | Short summaries computed in code, ask for details when it matters; revisit with a larger or cloud model | 3 |
-| R16 | Tool choice degrades as tools are added (80% first-call accuracy with 16 tools) | Happened | Medium | Keyword routing (87%), clear tool descriptions, errors that guide a retry, benchmark per phase | 3, 4 |
+| R16 | Tool choice degrades as tools are added (80% with 16 tools, 67% with 31, 77% with 40, where most misses are empty replies to the long prompt) | Happened | Medium | Keyword routing (87% in Phase 3, 89% in Phase 4, 91% in Phase 6), clear tool descriptions, errors that guide a retry, a retry for empty replies, benchmark per phase | 3, 4, 6 |
+| R17 | Prompt injection leaks private data through a web request | Low | High | `egress` tools confirm when private data and outside content are both in context (ADR-029), local addresses blocked | 4 |
+| R18 | Brightness control only reaches the built-in screen | Certain | Low | WMI covers laptop panels; external monitors get a clear message instead of a fake success | 4 |
+| R19 | Reminders do not sound when Jarvis is not running | Certain | Medium | Missed reminders are announced at the next start; start at login in Phase 8 | 4, 8 |
+| R20 | Market data is delayed, or wrong for an ambiguous name | Medium | Low | Providers report the latest price they have; the spoken name says which company was used; aliases in config | 4 |
+| R21 | Output redirected to a pipe or file crashed on non-ASCII text (cp1252) | Happened | Medium | The CLI switches redirected output to UTF-8 at startup | 5, 8 |
+| R22 | The page shows private data (files, clipboard, audit log) to whoever uses the browser | Medium | Medium | Local only, per-launch token; lock the laptop when you leave it | 5 |
+| R23 | Playwright's Chromium does not start on this Windows build | Happened | Medium | Edge is the default browser (ADR-040); Chromium stays an option | 6 |
+| R24 | The database lost pages and stopped accepting audit entries | Happened | High | Quick check at every start, damaged file kept and rows salvaged (ADR-043) | 6 |
+| R25 | An 8B model does not chain browser steps, and claims steps it did not do | Happened | Medium | Open and search in one call (ADR-038), a hint after each step, the tool log shows what really ran | 6 |
+| R26 | Websites block or challenge automated browsers | Medium | Low | Jarvis reports the page as it is and never tries to get past a bot check or CAPTCHA | 6 |
+| R27 | A WhatsApp Web update breaks sending | High | Medium | Selectors in one file, nothing is sent unless the message is seen in the box first, desktop fallback | 6 |
+| R28 | A small model fills optional arguments with the examples from their description | Happened | Medium | No example names in argument text, filler values ignored, fewer optional arguments (ADR-044) | 7 |
+| R29 | Notifications are missed or arrive without text | Medium | Medium | Poll every 2 s while Jarvis runs, store what is seen; WhatsApp desktop running with previews on | 7 |
+| R30 | Free cloud tiers change, throttle, or log prompts | High | Low | Two providers then local, daily caps under the limits, cooldown after errors, only public questions sent | 8 |
+| R31 | The local model leaks a private fact into a web search | Happened | Medium | Memories offered before web search, memories count as private, `web_search` and `open_url` are now egress tools (ADR-046) | 8 |
+| R32 | Starting at login: the microphone is always open, Ollama may not be up yet | Medium | Low | Tray Microphone switch, local-only audio, Jarvis falls back with a clear message until Ollama answers | 8 |
 
 ## Details
 
@@ -51,12 +67,28 @@ Other limits:
 
 If the spike fails: options are an MSIX "sparse package" to give the Python process an identity (complex), or WhatsApp-only notifications by polling unread chats in WhatsApp Web.
 
+**Spike results (2026-10-15, this laptop, Windows 11 build 26300, pywinrt 3.2.1, `scripts/spike_notifications.py`):**
+
+| Check | Result |
+|---|---|
+| `get_access_status()` | `ALLOWED` already, so no prompt was shown and `request_access_async()` was not needed |
+| `get_notifications_async(TOAST)` | 29 notifications from 4 apps in 70 ms; title and text readable for every one |
+| Own test toast | read back exactly (app "Windows PowerShell", both text lines) |
+| Poll and diff by id, every 0.5 s | a new toast was seen 0.6 s after it was shown |
+| `add_notification_changed` | fails with 0x80070490 "Element not found", as reported for unpackaged apps |
+| WhatsApp desktop | its notifications carry two text lines (chat or sender, then the message), so previews are on; app id `5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App` |
+| Removing a notification | works for the spike's own toasts |
+
+The spike printed only counts per app and text lengths, never other apps' text. After the build, a live check with the real allowlist kept 8 Claude and 3 WhatsApp notifications (all with text) and ignored Armoury Crate and Windows Security; the watcher stored a new notification within about 2 s without being asked. What it means: reading works from plain Python and polling is fast enough, so no MSIX package is needed; the event subscription is not available, so changes must be found by polling. Notifications stay in the center for days (the oldest here was three days old), so the first poll after a start sees a backlog, which Jarvis must treat as "already there", not new.
+
 ### R5. WhatsApp automation
 
-- WhatsApp's terms do not allow automated or unofficial clients. Automating WhatsApp Web carries a real, if small for low-volume personal use, risk of the account being restricted or banned. You should decide if this is acceptable before Phase 6.
-- WhatsApp Web's page structure changes without notice, which breaks selectors. Selectors are kept in one file so fixes are quick.
-- The desktop fallback uses the `whatsapp://send` deep link, which needs the contact's phone number and still requires pressing Enter, which Jarvis does only after your yes.
-- The Playwright profile in `%LOCALAPPDATA%\Jarvis\browser-profile` holds a logged-in WhatsApp session. Anyone with that folder can read your chats. It is never in the repository.
+- WhatsApp's terms do not allow automated or unofficial clients. Automating WhatsApp Web carries a real, if small for low-volume personal use, risk of the account being restricted or banned. You accepted this at the start of Phase 6 (ADR-037).
+- WhatsApp Web's page structure changes without notice, which breaks selectors. They are kept in `tools/messaging/selectors.py`. The signed-in selectors (message box, Send button, sent message, ticks) were written against a stand-in page (`tests/fixtures/whatsapp_web.html`) and are unconfirmed until your first real send; the logged-out page (the QR code) was checked against the real site in Edge.
+- Jarvis only presses Send after it sees exactly your message in the box, and falls back to the desktop app only when Web never got that far, so a broken selector means "not sent", never "sent twice".
+- The desktop fallback uses the `whatsapp://send` link, which needs the contact's phone number, and presses Enter only after your yes and after reading the message box through UI Automation. That read was not exercised live (it would need a real chat), and the app cannot say whether the message was delivered.
+- WhatsApp Web lives in its own profile, `%LOCALAPPDATA%\Jarvis\whatsapp-profile`, which holds a logged-in session. Anyone with that folder can read your chats. It is never in the repository, and the browser the model drives (`browser-profile`) never shares it. To unlink, remove the device in WhatsApp on your phone (Linked devices) and delete the folder.
+- Groups and contacts without a phone number cannot be messaged yet.
 
 ### R6. UI automation quirks on Windows
 
@@ -67,6 +99,9 @@ If the spike fails: options are an MSIX "sparse package" to give the Python proc
 - **Secure desktop:** UAC prompts and the lock screen cannot be automated at all. That is a Windows security boundary.
 - **COM threading:** pywinauto and Shell COM objects must stay on one thread with COM initialized. All UI work runs on a single dedicated worker thread.
 - **Generic clicks are hard to risk-rate:** a "click" can press Send or Delete. Generic UI tools require confirmation except inside apps you mark as trusted, and destructive-looking targets always confirm. This is a heuristic, not a guarantee.
+- **Typing speed (measured in Phase 6):** Windows 11 Notepad reads input late. Unicode characters sent in a burst arrive as the last one repeated ("hello world" became "hello ddddd"), and real key presses lose their Shift ("Typing" became "tping"). Jarvis types one character every 12 ms (80 ms after an emoji), about 75 a second, then reads the field back and tells you if the text does not match. Apps that do not expose their text cannot be checked, and Jarvis says it typed without having checked.
+- **Focus can move while typing:** if another window comes to the front, typing stops at the next burst of 24 characters and says how far it got, so the rest never lands in the wrong window. Up to one burst can still land before that check.
+- **Apps that hide their controls:** Electron and some WebView2 apps expose few named controls, so `click` may not find a button you can see. `read_window_text` lists what UI Automation reports.
 
 ### R7. Prompt injection
 
@@ -74,8 +109,11 @@ Any text Jarvis reads (web pages, files, window text, notifications, clipboard) 
 
 1. Side effects need a confirmation that only you can give, through a UI button, the CLI, or your voice.
 2. Blocked actions cannot be unblocked by anything the model says.
-3. Untrusted results are wrapped and tag-escaped, and the system prompt says they are data.
-4. Cloud turns never see private content.
+3. When private data and outside content are both in the conversation, requests to addresses the model picks (`fetch_page`, `open_url`) need your confirmation (ADR-029).
+4. Untrusted results are wrapped and tag-escaped, and the system prompt says they are data.
+5. Cloud turns never see private content.
+
+What is not covered: an injected instruction can still trigger `safe` actions that leak nothing, such as opening an allowlisted app, changing the volume, or putting text on the clipboard (`clipboard_write`). Pasting something you did not copy yourself into a terminal is the realistic danger there, so look before you paste.
 
 ### R8. Audio
 
@@ -84,6 +122,152 @@ Any text Jarvis reads (web pages, files, window text, notifications, clipboard) 
 - Phase 2 was verified with synthesized speech (Windows SAPI voice) through the real models, not with a person talking into the laptop's microphone. Real-room accuracy, wake word false triggers, and the 0.8 s end-of-speech pause need your testing and probably some tuning (`wake_threshold`, `vad_threshold`, `end_silence_ms`).
 - On this laptop the Windows default input is AudioRelay's virtual microphone, which is silent unless the phone app streams to it, and the ASUS noise-cancelling input was also silent during setup. `config/local.toml` points Jarvis at the Realtek array. Jarvis checks the level at startup and warns about a silent device.
 - The ASUS "AI Noise-cancelling Input" may become the better choice once the ASUS app is running, because it removes background noise before Whisper hears it.
+
+### R23. Playwright's Chromium on this Windows build
+
+Playwright's Chromium builds 1243 and 1248 fail to start on this laptop (Windows 11 build 26300) with "The application has failed to start because its side-by-side configuration is incorrect"; the Event Log says the private assembly named after the Chromium version "could not be found", though the manifest file is next to `chrome.exe`. It fails inside and outside the command sandbox, so it is the Windows build, not Jarvis. Edge, through Playwright's `msedge` channel, worked, and was the default until Jarvis followed your default browser (ADR-049, Brave works too). If a Windows update fixes this, `[browser] channel = "chromium"` brings Playwright's build back. The unused download sits in `%LOCALAPPDATA%\ms-playwright\chromium-1248` (about 440 MB) and can be deleted.
+
+### R24. The database lost pages
+
+`jarvis.db` was damaged twice, on 2026-10-15 (Phase 6) and 2026-10-19 (Phase 8). Both times SQLite could no longer read it and new audit entries failed. The second copy's header records 1,575 pages while the file holds 47: the write-ahead log no longer matched the database. The cause is SQLite's WAL-reset bug (3.7.0 to 3.51.2): two connections on one WAL database that write or checkpoint at the same instant can corrupt it, and Jarvis runs several processes on the same file (the copy started at login, `jarvis ask`, scripts). The Python that uv provides bundles SQLite 3.50.4. Jarvis now uses the rollback journal on such versions (ADR-048), which the bug does not affect, and still checks the file at every start and moves a damaged one aside (ADR-043). Both damaged files are kept as `jarvis.db.corrupt-*` in the data folder; nothing in them was readable.
+
+### R25. Small models and multi-step browsing
+
+Hermes 3 8B reliably makes one tool call per request, but after `browser_open` it usually answers instead of calling `browser_type`, and it then says it searched when it did not (three live attempts). "Open this site and search it" is therefore one call (`browser_open` with `search`). Longer flows (search, open a result, add to cart) are unreliable at this size; the tool log shows what really ran, so a claimed step that did not happen is visible. A larger model (Phase 8 cloud escalation, for public pages only) is the fix.
+
+### R26. Websites and automated browsers
+
+Jarvis's browser is visibly automated (Playwright marks it, and it starts with a fresh profile). Some sites answer with a bot check, a CAPTCHA, or a sign-in wall. Jarvis reports what the page shows and never tries to get past a bot check or solve a CAPTCHA. Amazon.in served its normal page in testing.
+
+### R27. WhatsApp Web updates
+
+WhatsApp Web changes without notice. When sending breaks, Jarvis says it did not send (it never presses Send without first seeing the message in the box), and `[whatsapp] method = "desktop"` switches to the desktop app until the selectors in `tools/messaging/selectors.py` are fixed.
+
+### R28. Small models and optional arguments
+
+When a tool's argument text has examples, Hermes 3 8B tends to copy them into the call: for "read my notifications" it called `read_notifications(app="WhatsApp", person="Ravi", include_read=true)`, the examples from the argument descriptions, and found nothing. Argument text now says "leave empty unless the user named one" without example names, the tool has one optional argument instead of three, and values like "any", "everyone", or an app name are ignored as a person. Other tools still have examples in their argument text; the benchmark has not shown the same problem there, but it is worth watching.
+
+### R29. Notifications that are missed or empty
+
+Jarvis sees only what is in the notification center when it looks: while chat, voice, or the web UI runs it looks every 2 s; otherwise only when you ask. A notification dismissed in between (or removed by WhatsApp because you read the message on your phone) is missed. WhatsApp's desktop app must be running with notifications and message previews on (WhatsApp settings, Notifications); with previews off, its notifications carry no text. Focus assist (Do not disturb) does not matter: notifications still reach the notification center.
+
+### R30. Free cloud tiers
+
+Groq's free plan allows about 1,000 requests a day for gpt-oss-120b (its page labels the table as developer-plan limits, so the free plan may be lower); OpenRouter's free accounts get about 50 requests a day across its free models, and its free roster rotates (DeepSeek had free models until mid-2026). Either can throttle (HTTP 429) or retire a model. Jarvis counts its own requests and stops under `daily_requests`, skips a provider for five minutes after an error, and falls back to the next provider and then the local model, so the worst case is a slower, local answer. Free tiers may keep prompts; that is acceptable only because a cloud turn never contains private content (ADR-045). If OpenRouter retires the Nemotron model, change `[llm.providers.openrouter] model` to another free model with tools (`https://openrouter.ai/models`, price 0).
+
+### R31. Private facts in web searches
+
+During Phase 8 testing, asked "who is my manager" with "The user's manager is Ravi" remembered, Hermes 3 8B searched the web twice, once with the remembered sentence as the query, so a private fact went to DuckDuckGo. No prompt injection was involved: the local model chose to. Jarvis now offers the memory tools instead of web search when a question matches a memory, repeats the matching fact next to the question, and treats memories as private for the egress rule, so after outside content a search or an opened address asks first. A search the model writes from private files or messages in a conversation without outside content is still sent without asking; search queries are not checked for private words.
+
+### R32. Running at login
+
+`jarvis startup enable` starts Jarvis at every login with the wake word, so the microphone is open whenever you are logged in. Audio is processed on this laptop and never stored; the tray's Microphone item closes it until you turn it back on. If Ollama is not up yet, the first command says the model server cannot be reached; Ollama normally starts at login too. A Jarvis already running (the web port is busy) makes the second start exit quietly.
+
+### R33. Voice that did not start at login
+
+On 2026-10-20 the Jarvis started at login ran without voice: its memory (221 MB, against 673 MB with voice) shows Whisper never loaded, and nothing was logged, because voice errors were printed to a console that pythonw does not have. "Hey Jarvis" could not work. The exact failure at that login is unknown; the likely ones are a microphone or audio service not ready yet (PortAudio lists devices once, so a late device is never found) and a model check that needed the network. Voice failures are now logged, `jarvis serve` retries voice (10 s, 20 s, 40 s, 60 s, then every two minutes) with a fresh device list, a crashed voice loop starts again, Whisper loads its downloaded copy without the network, and a startup that never reaches the page writes every thread's stack to `logs/startup-hang.txt`. If "Hey Jarvis" still does not answer, `logs/jarvis.log` now says why, and `uv run jarvis voice --wake-test` shows the microphone level and the wake word score live.
+
+### R34. A microphone that goes quiet
+
+After sleep and resume, or when another audio app (Voicemeeter, FxSound, AudioRelay, a Bluetooth headset) changes the devices, PortAudio can keep a stream "open" that sends no audio, and the wake word then never fires. A stream that sends nothing for 3 seconds is now reopened with a fresh device list (`voice/session.py`). This laptop has many virtual audio devices; the Realtek "Microphone Array" is the one that hears you, and it reads near silence (RMS about 7) in a quiet room, which is normal.
+
+### R35. Phone escalation (ntfy and Twilio)
+
+Neither has been tried live. ntfy topics are public to anyone who knows the name: use a long random topic, and Jarvis sends permissions that way only with `NTFY_TOKEN`. ntfy allows three buttons, so a question with more options shows the first three. Twilio calls cost money; a trial account can only call numbers you verified and plays a trial notice first; calls from a foreign number to Indian mobiles may be filtered by carriers or show as spam. The Studio flow in `docs/twilio-ask-flow.json` must keep its gather widget named `ask`, because Jarvis reads `widgets.ask.Digits` and `widgets.ask.SpeechResult`.
+
+### R36. Calls through Phone Link
+
+Since Phase 17 this applies only with `[calls] method = "phone_link"`. `call_contact` then depends on Phone Link being paired with an Android phone with calls allowed over Bluetooth. Windows has not picked an app for `tel:` links on this laptop, so the first call shows a picker. Whether Phone Link dials at once or shows its dialer for you to press Call depends on its version. Not tried live.
+
+### R37. The Claude Code bridge
+
+The bridge answers only while `jarvis serve` runs. Whisper can mishear option names, so numbers are the dependable answer ("two"). A misheard or unclear permission answer is no decision, never an approval. Only one question is asked at a time; a second Claude Code session waits for the first answer. If Jarvis was killed rather than stopped, its `bridge.json` stays behind; the hook then finds nothing listening and stays silent, and the next start replaces the file.
+
+### R38. Secrets in what Jarvis reads
+
+The clipboard, a window, a container log, or an ordinary file can hold a secret. Values with a known shape (API keys from OpenAI, Anthropic, Groq, OpenRouter, GitHub, AWS, Google, Slack; JWTs; private keys) and `NAME=value` lines whose name says key, token, secret, or password are replaced by `[hidden]` before the model or the audit log sees them (`tools/secrets.py`). A secret with no recognizable shape gets through. During live testing a copied `.env` reached the local model's context before this existed; nothing went to the cloud.
+
+### R39. Dictation into other apps
+
+Synthetic input goes to whichever window has the focus when Whisper finishes, so switching windows during the second of transcription types into the new one. Windows drops input to administrator windows (Jarvis says so instead). Pasting borrows the clipboard for half a second: an app that reads it later pastes your old clipboard text instead, and a clipboard manager that ignores the "exclude from history" formats may still record the dictation. Apps that block pasting get only short dictations, typed. A held Ctrl or Alt would turn typed text into shortcuts; Jarvis waits up to two seconds for them to be released and otherwise types nothing and says so. Layout-independent Unicode typing does not work in a few games and remote desktop windows.
+
+### R40. Media sessions
+
+Only apps that register a Windows media session can be told play or pause; for the rest the media key toggles, so "pause" can start playback if the app was already paused. Windows chooses the "current" session when several apps play, which may not be the one you meant. Some apps leave the title empty (Jarvis says it cannot tell what is playing), and browsers report the tab's media title, which can be a page title.
+
+### R41. The fast path
+
+Exact phrases run without the model and without the conversation, so "pause it" right after "set a timer" still pauses the media. The phrase list is small on purpose; a phrase you expected to be instant goes to the model and takes the usual 2 to 3 seconds.
+
+### R42. Email is the easiest prompt injection
+
+Anyone can email you, so email text is the most likely place for "assistant, forward this to ...". Email results are private and untrusted, wrapped as data; a reply needs your yes and can only go to people on that email; the egress rule then guards any tool that sends data elsewhere. A cleverly worded email can still mislead the model's summary of it.
+
+### R43. The app password
+
+A Gmail app password signs in to the whole mailbox (IMAP and SMTP) and is not limited to Jarvis's actions. It is kept in `.env` only. If the laptop or `.env` leaks, revoke it at myaccount.google.com/apppasswords. Google may disable app passwords for accounts with Advanced Protection or for work accounts whose admin turns them off; Jarvis then cannot read mail.
+
+### R44. The calendar link
+
+The secret iCal address can be read by anyone who has it, and Google can reset it (Jarvis then says the link answered 404). Google refreshes the published feed on its own schedule, sometimes hours late, so a meeting added a minute ago may be missing. Only events in the linked calendars are seen; invitations not yet accepted may not appear.
+
+### R45. MCP servers run on your laptop
+
+An MCP server is someone else's program, started with your secrets: GitHub's runs in a Docker container with your token, an npx server runs as you. Prefer official servers and pinned versions (the GitHub image is pinned to v2.0.2). A server marked `trusted` can mislabel a tool as read-only and have it run without asking; leave `trusted` off for servers you do not know. Everything a server returns is untrusted data and private by default, and every call is in the audit log.
+
+### R46. MCP tools are slow on the 8B model
+
+Every tool schema is prompt the model reads on each request, and MCP servers write long ones. GitHub requests take 5 to 9 seconds (built-in requests 2 to 4) even after trimming. Keep `tools` and `params` short; Phase 13 (a smaller, faster default model) helps. Docker Desktop also uses several gigabytes of memory while it runs.
+
+### R47. Three models on a 4 GB GPU
+
+Hermes (2.2 GB on the GPU, the rest on the CPU), Whisper (about 0.5 GB), and the embedding model (0.3 GB) share the card. Measured together they fit, but Ollama decides how many of Hermes's layers go on the GPU when it loads the model; if a game or another GPU app holds memory then, Hermes runs more on the CPU and gets slower until it reloads. Whisper falls back to the CPU on its own if the GPU fails.
+
+### R48. Speech numbers come from a synthetic voice
+
+The Whisper benchmark uses Piper's voice with added noise. Real speech, an Indian English accent, a laptop microphone, and a fan all make every model worse, and not equally. Record your own voice once (`scripts/benchmark_stt.py --record`) before changing `stt_model`.
+
+### R49. The wake word and real voices
+
+openWakeWord's "hey jarvis" model scores synthetic voices near 1.0 and real ones much lower: this laptop's first real test peaked at 0.45 against a threshold of 0.5. `jarvis voice --train-wake` fixes it for one voice (ADR-064); anyone else will rarely wake Jarvis, and push-to-talk (Ctrl+Alt+J) always works. Retrain after a big change of room or microphone.
+
+### R50. The command history is kept, and now searchable
+
+Every command and Jarvis's answer has been kept in `jarvis.db` since Phase 1; recall makes it searchable by meaning, and answers can include private content (a message read out, an email summary). It never leaves the laptop and never reaches a cloud model, but anyone with your Windows account can read the database. There is no automatic expiry yet; deleting `%LOCALAPPDATA%\Jarvis\jarvis.db` clears everything (contacts, memories, and history together).
+
+### R51. Reading and clicking by OCR
+
+OCR reads what is visible, so a window must be in front (Jarvis brings it forward) and nothing may cover it; text in images, games, and remote desktops is read as it looks, mistakes included. A click found by OCR is a click at a position: a pop-up, a scroll, or a window that moved between the confirmation and the click could put something else there. Jarvis asks every time and reads the window again just before clicking, but it cannot see what a button does. Anything on the screen can be read, including other apps' private content; it stays local and never reaches a cloud model.
+
+### R52. WhatsApp calls press a button in the app
+
+- There is no documented link that starts a call, so Jarvis presses the button named exactly "Voice call". A WhatsApp update or a language other than English can rename it; Jarvis then says no call was made.
+- The one-time marker proves the link opened a chat, and is cleared before the call. It replaces any unsent draft in that chat. If clearing fails, the code stays in the box, unsent, and no call is made.
+- Between clearing the box and pressing the button there are about two seconds. WhatsApp must stay in front, but clicking another chat in that moment would call that chat. Keep your hands off it until the call starts.
+- The names of the end call button are a best guess until a real call shows them. If "hang up" says there is no call, end it in the app.
+- "Hey Jarvis" keeps listening during a call, so Jarvis can hear the call and be woken by it. Pausing it needs a reliable way to see a call, which needs a real call first. For now, turn the microphone off from the tray during calls.
+
+### R53. The overlay is a window on top of everything
+
+- Checked live with a test window and only its pixels: transparent, clicks pass through, the focus stays put, hidden from capture, first light 65 ms after the message, gone after hiding. Not checked: a real fullscreen game, a second monitor, a resolution change while it is running, and sleep and resume.
+- It covers the primary monitor only.
+- Exclusive fullscreen games are not meant to be drawn over, and a topmost window could knock one out of fullscreen. Jarvis asks Windows (`SHQueryUserNotificationState`) and stays hidden during a game or presentation mode, but that answer depends on how the app presents itself, so a borderless game can still get the effect.
+- Excluding it from capture depends on Windows' compositor and is a courtesy, not a security boundary. A phone pointed at the screen sees it.
+- Its text is drawn with one font. Letters that font lacks, such as Telugu or Hindi in a contact's name, can show as boxes; the page and the voice are still right.
+- If it ever stays on screen, it hides itself after `max_visible_s` without a message, and it exits when Jarvis does. Clicks always reach your apps either way.
+
+### R54. Live transcripts add work to every recording
+
+- A partial can show words that the final transcript corrects. That is expected, and only the final text ever runs.
+- Each pass adds GPU work next to Hermes on a 4 GB card. It held in the live test; a game or a large model loaded at the same time may slow the passes down, and they then space themselves out.
+- The voice level curve was tuned on synthetic speech, which reached the top of the scale. Your microphone may need `LEVEL_GAIN` adjusted so that the rings move well.
+
+### R55. Voice on a locked PC
+
+- Until 2026-11-02 the wake word kept listening on a locked PC, so anyone in the room could wake it and a spoken yes could approve a confirmation. Jarvis does not recognise whose voice it is. The microphone now closes while the PC is locked (ADR-074).
+- It is checked once a second, so a wake word in the first second after locking can still start a recording. The recording is dropped at the next check.
+- Jarvis can still speak while locked: a command already running says its answer, and reminders sound. Either could say something private to whoever is in the room.
+- Windows' lock state was read correctly on a locked PC on this laptop. A real lock and unlock with Jarvis running is not verified yet. If voice stays off after unlocking, this check is the first place to look; the log says when voice goes off and comes back.
 
 ### R11. Cancellation
 

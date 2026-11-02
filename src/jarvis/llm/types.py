@@ -27,6 +27,8 @@ class LLMReply:
     latency_ms: int
     tool_calls: list[ToolCall] = field(default_factory=list)
     parsed_from_text: bool = False  # True if tool calls came from the <tool_call> text fallback
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 class LLMError(Exception):

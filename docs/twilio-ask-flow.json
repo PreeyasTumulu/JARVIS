@@ -1,0 +1,73 @@
+{
+  "description": "Jarvis asks you on the phone (bridge.phone = \"twilio\"). Import in Twilio Console: Studio, Create new Flow, Import from JSON. Keep the gather widget named ask.",
+  "states": [
+    {
+      "name": "Trigger",
+      "type": "trigger",
+      "transitions": [
+        {"event": "incomingMessage"},
+        {"event": "incomingCall"},
+        {"event": "incomingConversationMessage"},
+        {"next": "call_user", "event": "incomingRequest"},
+        {"event": "incomingParent"}
+      ],
+      "properties": {"offset": {"x": 0, "y": 0}}
+    },
+    {
+      "name": "call_user",
+      "type": "make-outgoing-call-v2",
+      "transitions": [
+        {"next": "ask", "event": "answered"},
+        {"event": "busy"},
+        {"event": "noAnswer"},
+        {"event": "failed"}
+      ],
+      "properties": {
+        "offset": {"x": 0, "y": 200},
+        "from": "{{flow.channel.address}}",
+        "to": "{{contact.channel.address}}",
+        "timeout": 45,
+        "record": false,
+        "detect_answering_machine": false
+      }
+    },
+    {
+      "name": "ask",
+      "type": "gather-input-on-call",
+      "transitions": [
+        {"next": "thanks", "event": "keypress"},
+        {"next": "thanks", "event": "speech"},
+        {"event": "timeout"}
+      ],
+      "properties": {
+        "offset": {"x": 0, "y": 400},
+        "say": "{{flow.data.q}}",
+        "voice": "Polly.Aditi",
+        "language": "en-IN",
+        "gather_language": "en-IN",
+        "loop": 2,
+        "timeout": 8,
+        "number_of_digits": 1,
+        "finish_on_key": "#",
+        "stop_gather": true,
+        "speech_timeout": "auto",
+        "speech_model": "phone_call",
+        "profanity_filter": "true"
+      }
+    },
+    {
+      "name": "thanks",
+      "type": "say-play",
+      "transitions": [{"event": "audioComplete"}],
+      "properties": {
+        "offset": {"x": 0, "y": 600},
+        "say": "Thanks. I have told Claude.",
+        "voice": "Polly.Aditi",
+        "language": "en-IN",
+        "loop": 1
+      }
+    }
+  ],
+  "initial_state": "Trigger",
+  "flags": {"allow_concurrent_calls": true}
+}

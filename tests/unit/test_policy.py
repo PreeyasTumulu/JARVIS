@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from jarvis.config import SafetySettings
-from jarvis.tools.base import Prepared, Risk, ToolContext, ToolResult
-from jarvis.tools.policy import PolicyGate, app_risk
+from jarvis.tools.base import ContextFlags, Prepared, Risk, ToolContext, ToolResult
+from jarvis.tools.policy import EXFILTRATION_REASON, PolicyDecision, PolicyGate, app_risk
 from jarvis.tools.registry import tool
 
 
@@ -46,3 +46,22 @@ def test_app_risk_follows_allowlist() -> None:
     assert reason == "Spotify is not in the app allowlist"
     blocking = SafetySettings(app_allowlist=[], unlisted_apps="block")
     assert app_risk("Spotify", blocking)[0] is Risk.BLOCKED
+
+
+@tool(risk=Risk.SAFE, egress=True)
+async def fetch(ctx: ToolContext) -> ToolResult:
+    """Fetch something from the internet."""
+    return ToolResult.success()
+
+
+def test_egress_asks_only_when_private_and_outside_content_meet() -> None:
+    gate = PolicyGate(SafetySettings())
+    prepared = Prepared(args={}, summary="s")
+    both = ContextFlags(private=True, untrusted=True)
+    assert gate.evaluate(fetch, prepared, both).risk is Risk.CONFIRM
+    assert gate.evaluate(fetch, prepared, both).reason == EXFILTRATION_REASON
+    for flags in (ContextFlags(), ContextFlags(private=True), ContextFlags(untrusted=True)):
+        assert gate.evaluate(fetch, prepared, flags).risk is Risk.SAFE
+    assert gate.evaluate(look, prepared, both).risk is Risk.SAFE  # no egress, no rule
+    blocked = Prepared(args={}, summary="s", risk=Risk.BLOCKED, reason="local address")
+    assert gate.evaluate(fetch, blocked, both) == PolicyDecision(Risk.BLOCKED, "local address")

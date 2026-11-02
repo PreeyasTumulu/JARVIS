@@ -1,0 +1,60 @@
+name: Bug report
+description: Something Jarvis did wrong, or did not do.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please leave out anything private: messages, notifications, contacts, email, and screen text never need to be in an issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you said or typed, what Jarvis did, and what you expected.
+      placeholder: |
+        I said "open notepad". Jarvis answered "Done." but nothing opened.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: |
+        1. uv run jarvis serve --wake
+        2. Say "Hey Jarvis, open notepad"
+  - type: input
+    id: version
+    attributes:
+      label: Jarvis version
+      description: The output of `uv run jarvis version`.
+      placeholder: jarvis 1.6.0
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Voice (wake word, push-to-talk, dictation, speech)
+        - The model or tool choice
+        - Apps, files, UI automation, screen reading
+        - Web, browser, search
+        - WhatsApp, calls, notifications, mail, calendar
+        - Claude Code bridge
+        - MCP servers
+        - Safety (something ran without asking, or private data went out)
+        - Setup or install
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines
+      description: From %LOCALAPPDATA%\Jarvis\logs\jarvis.log around the time it happened, with anything private removed.
+      render: text
+  - type: input
+    id: machine
+    attributes:
+      label: Windows version and GPU
+      placeholder: Windows 11 26100, RTX 3050 4 GB

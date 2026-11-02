@@ -15,11 +15,25 @@ from pydantic import ValidationError
 
 from jarvis.config import Settings
 from jarvis.core.channel import ConfirmationRequest
-from jarvis.core.events import ConfirmationRequested, EventBus, ToolCallFinished, ToolCallStarted
+from jarvis.core.events import (
+    ConfirmationRequested,
+    ConfirmationResolved,
+    EventBus,
+    ToolCallFinished,
+    ToolCallStarted,
+)
 from jarvis.core.prompts import truncate, wrap_untrusted
 from jarvis.llm.types import ToolCall
 from jarvis.storage.repositories import AuditEntry, AuditLog
-from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolError, ToolResult
+from jarvis.tools.base import (
+    ContextFlags,
+    Prepared,
+    Risk,
+    Sensitivity,
+    ToolContext,
+    ToolError,
+    ToolResult,
+)
 from jarvis.tools.policy import PolicyGate
 from jarvis.tools.registry import Registry, Tool
 
@@ -29,6 +43,16 @@ LIST_REPLY_HINT = (
     "(Reply in one or two spoken sentences: how many there are and at most three names. "
     "No list, no paths, no sizes, no dates.)"
 )
+TEXT_REPLY_HINT = (
+    "(Reply in two or three short spoken sentences with the main point, unless the user asked "
+    "for more. No lists.)"
+)
+SUMMARY_REPLY_HINT = (
+    "(The summary is the answer: say it in one or two spoken sentences. Do not read out the "
+    "data fields, codes, or units unless the user asked for them.)"
+)
+LONG_TEXT_CHARS = 400
+LONG_LIST = 8  # items in a result's list (controls, links) that small models start reciting
 
 
 class Decision(StrEnum):
@@ -55,6 +79,15 @@ class CallOutcome:
     def sensitivity(self) -> Sensitivity:
         return self.tool.sensitivity if self.tool else Sensitivity.PUBLIC
 
+    @property
+    def flags(self) -> ContextFlags:
+        """What this result adds to the model's context. Failures carry only Jarvis's own text."""
+        if not self.result.ok or self.tool is None:
+            return ContextFlags()
+        return ContextFlags(
+            private=self.tool.sensitivity is Sensitivity.PRIVATE, untrusted=self.tool.untrusted
+        )
+
     def model_content(self, max_chars: int) -> str:
         """What the model sees for this call. Untrusted output is wrapped as data."""
         if self.result.ok:
@@ -67,9 +100,23 @@ class CallOutcome:
         text = truncate(json.dumps(payload, ensure_ascii=False, default=str), max_chars)
         if self.tool is not None and self.tool.untrusted and self.result.ok:
             text = wrap_untrusted(self.call.name, text)
-        if self.result.ok and isinstance(self.result.data, list) and len(self.result.data) > 1:
+        data = self.result.data if self.result.ok else None
+        if self.result.ok and self.result.hint:
+            text += f"\n{self.result.hint}"
+        if isinstance(data, list) and len(data) > 1:
             # Small models mirror list data as long markdown lists; the reply is spoken.
             text += f"\n{LIST_REPLY_HINT}"
+        elif isinstance(data, dict) and (
+            len(str(data.get("text") or "")) > LONG_TEXT_CHARS
+            or any(isinstance(v, list) and len(v) > LONG_LIST for v in data.values())
+        ):
+            # A page or file read in full otherwise comes back as a minute-long summary, and
+            # a window's controls were recited one by one (35 seconds for "what does it say").
+            text += f"\n{TEXT_REPLY_HINT}"
+        elif isinstance(data, dict) and self.result.speech and not self.result.hint:
+            # Weather came back as a recital of every field (humidity, wind, "weather code 3")
+            # that took 14 seconds to generate; the summary already says what matters.
+            text += f"\n{SUMMARY_REPLY_HINT}"
         return text
 
     def summary(self) -> str:
@@ -170,7 +217,7 @@ class ToolExecutor:
                 args=args,
             )
 
-        verdict = self._policy.evaluate(tool, prepared)
+        verdict = self._policy.evaluate(tool, prepared, ctx.flags)
         await self._bus.publish(
             ToolCallStarted(
                 turn_id=ctx.turn_id,
@@ -203,8 +250,8 @@ class ToolExecutor:
                 return finish(
                     decision,
                     ToolResult.failure(
-                        f"The user said no to '{prepared.summary}', so it was not done. "
-                        "Acknowledge that briefly and do not retry."
+                        f"The person talking to you said no to '{prepared.summary}', so it was "
+                        "not done. Do not retry, and reply with exactly: Okay, I won't."
                     ),
                 )
             if decision is Decision.TIMEOUT:
@@ -230,12 +277,25 @@ class ToolExecutor:
             timeout_s=self._settings.safety.confirm_timeout_s,
         )
         await self._bus.publish(ConfirmationRequested(turn_id=ctx.turn_id, request=request))
+        decision = Decision.CANCELLED
         try:
             async with asyncio.timeout(request.timeout_s):
                 approved = await ctx.channel.confirm(request)
+            decision = Decision.CONFIRMED if approved is True else Decision.DENIED
         except TimeoutError:
-            return Decision.TIMEOUT
-        return Decision.CONFIRMED if approved is True else Decision.DENIED
+            decision = Decision.TIMEOUT
+        finally:
+            # Every channel (the web UI especially) needs to know the question is closed.
+            answered = decision in (Decision.CONFIRMED, Decision.DENIED)
+            await self._bus.publish(
+                ConfirmationResolved(
+                    turn_id=ctx.turn_id,
+                    request_id=request.request_id,
+                    decision=decision,
+                    via=ctx.channel.name if answered else None,
+                )
+            )
+        return decision
 
     async def _execute(self, tool: Tool, prepared: Prepared, ctx: ToolContext) -> ToolResult:
         timeout = tool.timeout_s or self._settings.agent.tool_timeout_s

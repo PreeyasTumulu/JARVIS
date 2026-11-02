@@ -94,7 +94,17 @@ def test_parse_docstring_without_args() -> None:
 ALL_TOOLS = {
     "open_app", "focus_app", "close_app", "find_file", "open_file", "read_file",
     "get_selected_file", "vscode_open", "docker_list", "docker_logs", "docker_start",
-    "docker_stop", "web_search", "open_url", "speak", "ask_user",
+    "docker_stop", "web_search", "search_site", "open_url", "fetch_page", "market_data",
+    "crypto_price",
+    "convert_currency", "weather", "set_volume", "set_brightness", "lock_screen", "screenshot",
+    "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
+    "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "read_screen",
+    "browser_open",
+    "browser_read", "browser_click", "browser_type", "send_whatsapp", "call_contact",
+    "hang_up", "media_control", "now_playing", "read_notifications", "read_mail", "read_email",
+    "reply_email", "calendar_events",
+    "remember", "list_memories", "forget", "recall", "briefing",
+    "speak", "ask_user",
 }  # fmt: skip
 
 
@@ -107,3 +117,44 @@ def test_shipped_tools_have_clean_schemas() -> None:
         for name, prop in schema["parameters"]["properties"].items():
             assert prop.get("description"), f"{item.name}.{name} has no description"
         json.dumps(schema)
+
+
+def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
+    registry = build_registry()
+    send = registry.get("send_whatsapp")
+    assert send is not None
+    assert send.risk is Risk.CONFIRM
+    assert send.sensitivity is Sensitivity.PRIVATE
+    egress = {tool.name for tool in registry if tool.egress}
+    assert egress == {
+        "fetch_page",
+        "browser_open",
+        "browser_type",
+        "web_search",
+        "open_url",
+        "search_site",
+    }
+    read = registry.get("read_window_text")
+    assert read is not None
+    assert read.untrusted
+    assert read.sensitivity is Sensitivity.PRIVATE
+
+
+def test_the_word_null_for_an_optional_argument_means_none() -> None:
+    from jarvis.tools.catalog import build_registry
+
+    registry = build_registry()
+    type_text = registry.get("type_text")
+    assert type_text is not None
+    args = type_text.validate({"app": "notepad", "text": "hi", "field": "null"})
+    assert args["field"] is None
+    assert type_text.validate({"app": "notepad", "text": "None", "field": "x"})["text"] == "None"
+
+
+def test_arguments_wrapped_in_the_call_are_unwrapped() -> None:
+    from jarvis.tools.catalog import build_registry
+
+    reply = build_registry().get("reply_email")
+    assert reply is not None
+    wrapped = {"function": "reply_email", "arguments": {"message": "Ravi", "text": "ok"}}
+    assert reply.validate(wrapped) == {"message": "Ravi", "text": "ok", "reply_all": False}

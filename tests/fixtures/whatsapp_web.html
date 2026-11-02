@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- A stand-in for WhatsApp Web, shaped like the real page as far as messaging/selectors.py
+     relies on it. Tests replace __MODE__ with chat, qr, or invalid. Not the real page. -->
+<html>
+<head><meta charset="utf-8"><title>WhatsApp</title></head>
+<body>
+<div id="app"></div>
+<script>
+  const mode = "__MODE__";
+  const params = new URLSearchParams(location.search);
+  const app = document.getElementById("app");
+  if (mode === "qr") {
+    const canvas = document.createElement("canvas");
+    canvas.setAttribute("aria-label", "Scan this QR code to link a device!");
+    canvas.width = 200;
+    canvas.height = 200;
+    app.append(canvas);
+  } else if (mode === "invalid") {
+    const side = document.createElement("div");
+    side.id = "pane-side";
+    const popup = document.createElement("div");
+    popup.setAttribute("role", "dialog");
+    popup.textContent = "Phone number shared via url is invalid.";
+    app.append(side, popup);
+  } else {
+    const side = document.createElement("div");
+    side.id = "pane-side";
+    side.setAttribute("aria-label", "Chat list");
+    const main = document.createElement("div");
+    main.id = "main";
+    const messages = document.createElement("div");
+    const footer = document.createElement("footer");
+    const box = document.createElement("div");
+    box.setAttribute("contenteditable", "true");
+    box.setAttribute("role", "textbox");
+    box.style.minHeight = "20px";
+    const send = document.createElement("button");
+    send.setAttribute("aria-label", "Send");
+    send.textContent = "Send";
+    footer.append(box, send);
+    main.append(messages, footer);
+    app.append(side, main);
+    // The real page fills the box a moment after the chat opens.
+    setTimeout(() => { box.textContent = params.get("text") || ""; }, 300);
+    send.addEventListener("click", () => {
+      const message = document.createElement("div");
+      message.className = "message-out";
+      const text = document.createElement("span");
+      text.className = "selectable-text";
+      text.textContent = box.textContent;
+      const tick = document.createElement("span");
+      tick.setAttribute("data-icon", "msg-time");
+      message.append(text, tick);
+      messages.append(message);
+      box.textContent = "";
+      setTimeout(() => tick.setAttribute("data-icon", "msg-check"), 200);
+      setTimeout(() => {
+        tick.setAttribute("data-icon", "msg-dblcheck");
+        tick.setAttribute("aria-label", " Delivered ");
+      }, 500);
+    });
+  }
+</script>
+</body>
+</html>

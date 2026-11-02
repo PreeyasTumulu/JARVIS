@@ -54,11 +54,26 @@ async def app_windows(
     return [w for w in await asyncio.to_thread(win.list_windows) if belongs(w)]
 
 
-async def _maybe_resolve(ctx: ToolContext, spoken: str) -> tuple[AppEntry | None, ToolError | None]:
+async def maybe_resolve(ctx: ToolContext, spoken: str) -> tuple[AppEntry | None, ToolError | None]:
+    """Like resolve_app, but hands back the error instead of raising (the app may still be open
+    under a name the index does not know)."""
     try:
         return await resolve_app(ctx, spoken), None
     except ToolError as exc:
         return None, exc
+
+
+async def start_and_wait(
+    ctx: ToolContext, entry: AppEntry, spoken: str, wait_s: float
+) -> win.WindowInfo:
+    """Start an app and wait for its first window."""
+    await asyncio.to_thread(launch, entry)
+    for _ in range(max(1, int(wait_s / 0.25))):
+        await asyncio.sleep(0.25)
+        windows = await app_windows(ctx, entry, spoken)
+        if windows:
+            return windows[0]
+    raise ToolError(f"{entry.name} did not open a window within {wait_s:.0f} seconds.")
 
 
 @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PUBLIC, timeout_s=30)
@@ -112,7 +127,7 @@ async def focus_app(ctx: ToolContext, name: str) -> ToolResult:
 @focus_app.preparer
 async def _prepare_focus_app(ctx: ToolContext, args: dict[str, Any]) -> Prepared:
     spoken = args["name"]
-    entry, error = await _maybe_resolve(ctx, spoken)
+    entry, error = await maybe_resolve(ctx, spoken)
     windows = await app_windows(ctx, entry, spoken)
     display = entry.name if entry else spoken
     if windows:
@@ -161,7 +176,7 @@ async def close_app(ctx: ToolContext, name: str) -> ToolResult:
 @close_app.preparer
 async def _prepare_close_app(ctx: ToolContext, args: dict[str, Any]) -> Prepared:
     spoken = args["name"]
-    entry, error = await _maybe_resolve(ctx, spoken)
+    entry, error = await maybe_resolve(ctx, spoken)
     windows = await app_windows(ctx, entry, spoken)
     if not windows:
         raise error or ToolError(f"{spoken} does not seem to be open.")

@@ -1,0 +1,7 @@
+# Jarvis alias for Qwen3 4B Instruct (2507, no thinking) with a context window large enough for
+# tool schemas. Create it with:
+#   ollama pull qwen3:4b-instruct
+#   ollama create jarvis-qwen3 -f config/ollama/qwen3-4b.Modelfile
+FROM qwen3:4b-instruct
+PARAMETER num_ctx 8192
+PARAMETER temperature 0.2

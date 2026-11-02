@@ -290,6 +290,7 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `recall(about, when?)` | 14 | safe; past commands by meaning in a time range | private, untrusted |
 | `briefing()` | 14 | safe; weather, today's calendar and reminders, unread email and message counts | private, untrusted |
 | `remember(fact)`, `list_memories()`, `forget(what)` | 8 | safe; remembering after outside content asks; forgetting always asks | private |
+| `forget_history(about?, when?)` | 19 | confirm (floor); deletes commands, answers, vectors, and those turns' audit rows | private |
 
 ## 6. Safety model
 
@@ -490,6 +491,8 @@ SQLite at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with `PRAGMA use
 | `reminders` | kind (timer or reminder), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at |
 | `memories` | text, created_at (facts you asked Jarvis to remember) |
 | `cloud_usage` | day, provider, requests, prompt and completion tokens (free-tier daily caps) |
+
+Commands, their vectors, and finished reminders are deleted after `history.keep_days`, the audit log after `history.audit_keep_days` (`storage/retention.py`, ADR-075). `secure_delete` overwrites deleted text.
 
 Everything that is personal (database, logs, the two browser profiles `browser-profile` and `whatsapp-profile`, downloaded voice models) lives under `%LOCALAPPDATA%\Jarvis\`, outside the repo, so it can never be committed by accident.
 

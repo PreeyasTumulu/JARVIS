@@ -2,11 +2,16 @@
 
 Every phase of Jarvis, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-Versions 0.4.0 to 1.6.0 are built on stacked `phase/<n>-<name>` branches with green CI and are waiting for hands-on review before they are merged to `main` and tagged. Details, test commands, and measurements for each are in [docs/ROADMAP.md](docs/ROADMAP.md); every design decision is in [docs/DECISIONS.md](docs/DECISIONS.md).
+Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they wait for a hands-on test. Details, test commands, and measurements for each are in [docs/ROADMAP.md](docs/ROADMAP.md); every design decision is in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## [Unreleased]
 
+### Added
+- Past commands, answers, and finished reminders are deleted after 90 days and the audit log after 365 (`[history]`); 0 keeps them forever (ADR-075).
+- "Forget what I asked about my doctor", "delete yesterday's commands", "clear my history": `forget_history`, after a yes.
+
 ### Changed
+- A locked PC says nothing private: speech is cut off, reminders wait until you unlock, and answers stay on the page (ADR-076).
 - The microphone closes while the PC is locked: no wake word, push-to-talk, or dictation until you unlock it, and a question waiting for a spoken answer counts as no (ADR-074).
 
 ### Fixed
@@ -127,7 +132,7 @@ Versions 0.4.0 to 1.6.0 are built on stacked `phase/<n>-<name>` branches with gr
 ### Added
 - Architecture, roadmap, setup, decisions, and risks; the repository.
 
-[Unreleased]: https://github.com/PreeyasTumulu/JARVIS/compare/v0.3.0...phase/16-release-polish
+[Unreleased]: https://github.com/PreeyasTumulu/JARVIS/compare/v0.3.0...main
 [0.3.0]: https://github.com/PreeyasTumulu/JARVIS/releases/tag/v0.3.0
 [0.2.0]: https://github.com/PreeyasTumulu/JARVIS/releases/tag/v0.2.0
 [0.1.0]: https://github.com/PreeyasTumulu/JARVIS/releases/tag/v0.1.0

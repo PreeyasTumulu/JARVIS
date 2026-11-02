@@ -454,6 +454,20 @@ Yours, asked 2026-11-01, all as recommended.
 - **How:** `WTSQuerySessionInformationW` with `WTSSessionInfoEx`, which needs no window. If Windows cannot answer, voice stays as it was and one warning is logged, because turning voice off on an error could leave it off for good.
 - **Not covered:** Jarvis can still speak while locked: a command already running finishes and says its answer, and reminders still sound.
 
+### ADR-075: Past commands expire, and you can delete them by voice
+
+- **Decision (2026-11-02, chosen without asking because you said to build everything now; easy to change):** commands, answers, their vectors, and finished reminders are deleted after 90 days, and the audit log after 365 (`[history] keep_days`, `audit_keep_days`; 0 keeps them forever). `forget_history` deletes by words or by time, always after a yes, and takes the audit rows of those turns too. The request itself is not kept, and the conversation is cleared, so "forget what I asked about my doctor" leaves no "doctor" behind. SQLite's `secure_delete` overwrites deleted text.
+- **Why:** answers can quote private content (R50), and there was no way to remove them except deleting the whole database. The first start after this deletes anything already past those ages.
+- **Words, not meaning:** recall finds by meaning, but a deletion should be easy to predict. Every word you name must appear in the command or its answer, and the question says how many and shows one.
+- **Not covered:** `jarvis.db.corrupt-*` copies from an old recovery, Windows backups, and what a page already showing the conversation keeps until it reloads.
+
+### ADR-076: Nothing private is said aloud while the PC is locked
+
+- **Decision (2026-11-02, as recommended):** locking cuts off speech at once. A reminder or a Claude Code notice says only "I have something for you. Unlock the PC to hear it", and its words wait until you unlock (the newest 10). The answer to a command still running is not said; it is on the page and in the history. The `speak` tool refuses.
+- **Why:** the microphone already closes (ADR-074), but Jarvis could still read a private reminder to whoever is in the room (R55).
+- **The cost:** a timer on a locked PC tells you something is waiting, not which timer. There is no setting: a locked PC is the case this protects.
+- **Not covered:** this lives in the voice session, so `jarvis chat` and a page with voice off do not know about the lock.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

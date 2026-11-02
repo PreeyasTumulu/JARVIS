@@ -10,21 +10,22 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 1 | Skeleton: config, model client, agent loop, registry, audit, CLI | On `main` | v0.1.0 |
 | 2 | Voice: push-to-talk, then wake word | On `main` | v0.2.0 |
 | 3 | App index, VS Code, Docker, files | On `main` | v0.3.0 |
-| 4 | Data APIs, fetch_page, system tools | Built on `phase/4-data-system`, waiting for your test | v0.4.0 |
-| 5 | Web UI with live tool log and confirm buttons | Built on `phase/5-web-ui` (stacked on Phase 4), waiting for your test | v0.5.0 |
-| 6 | UI automation, Playwright, WhatsApp | Built on `phase/6-ui-whatsapp` (stacked on Phase 5), waiting for your test | v0.6.0 |
-| 7 | Notifications (feasibility spike first) | Built on `phase/7-notifications` (stacked on Phase 6), waiting for your test | v0.7.0 |
-| 8 | Model router, memory, tray, startup, packaging | Built on `phase/8-router-tray` (stacked on Phase 7), waiting for your test | v0.8.0 |
-| 9 | Test hardening, docs, demo (plus the Claude Code bridge, Brave, calls) | Built on `phase/9-hardening` (stacked on Phase 8), waiting for your test | v1.0.0 |
-| 10 | Dictation and media | Built on `phase/10-dictation-media` (stacked on Phase 9), waiting for your test | v1.1.0 |
-| 11 | Mail and calendar | Built on `phase/11-calendar-mail` (stacked on Phase 10), waiting for your test | v1.2.0 |
-| 12 | MCP servers (GitHub first) | Built on `phase/12-mcp` (stacked on Phase 11), waiting for your test | v1.3.0 |
-| 13 | Faster and smaller | Built on `phase/13-faster` (stacked on Phase 12), waiting for your test | v1.4.0 |
-| 14 | Memory by meaning, morning briefing | Built on `phase/14-memory-briefing` (stacked on Phase 13), waiting for your test | v1.5.0 |
-| 15 | Screen reading (Windows OCR) | Built on `phase/15-screen-reading` (stacked on Phase 14), waiting for your test | v1.6.0 |
-| 16 | Release polish (installer, changelog, templates) | Built on `phase/16-release-polish` (stacked on Phase 15), waiting for your review | unreleased |
-| 17 | WhatsApp calls | Built on `phase/17-whatsapp-calls` (stacked on Phase 16), waiting for your test | v1.7.0 |
-| 18 | New interface and wake overlay | Built on `phase/18-interface` (stacked on Phase 17), waiting for your test | v1.8.0 |
+| 4 | Data APIs, fetch_page, system tools | On `main`, not tagged, waiting for your test | v0.4.0 |
+| 5 | Web UI with live tool log and confirm buttons | On `main`, not tagged, waiting for your test | v0.5.0 |
+| 6 | UI automation, Playwright, WhatsApp | On `main`, not tagged, waiting for your test | v0.6.0 |
+| 7 | Notifications (feasibility spike first) | On `main`, not tagged, waiting for your test | v0.7.0 |
+| 8 | Model router, memory, tray, startup, packaging | On `main`, not tagged, waiting for your test | v0.8.0 |
+| 9 | Test hardening, docs, demo (plus the Claude Code bridge, Brave, calls) | On `main`, not tagged, waiting for your test | v1.0.0 |
+| 10 | Dictation and media | On `main`, not tagged, waiting for your test | v1.1.0 |
+| 11 | Mail and calendar | On `main`, not tagged, waiting for your test | v1.2.0 |
+| 12 | MCP servers (GitHub first) | On `main`, not tagged, waiting for your test | v1.3.0 |
+| 13 | Faster and smaller | On `main`, not tagged, waiting for your test | v1.4.0 |
+| 14 | Memory by meaning, morning briefing | On `main`, not tagged, waiting for your test | v1.5.0 |
+| 15 | Screen reading (Windows OCR) | On `main`, not tagged, waiting for your test | v1.6.0 |
+| 16 | Release polish (installer, changelog, templates) | On `main`, not tagged, waiting for your test | unreleased |
+| 17 | WhatsApp calls | On `main`, not tagged, waiting for your test | v1.7.0 |
+| 18 | New interface and wake overlay | On `main`, not tagged, waiting for your test | v1.8.0 |
+| 19 | Privacy: history expiry, forgetting, quiet when locked | Built on `phase/19-privacy` (from `main`), waiting for your test | v1.9.0 |
 
 ## How each phase runs
 
@@ -832,6 +833,25 @@ Try it with a light window open, say a command that opens an app (it should rece
 **Not done, needs you:** the test commands above with your own voice, restarting your running Jarvis first. A wider test on a real fullscreen game.
 
 **Exit criteria:** "Hey Jarvis" transforms the whole screen with no focus lost and clicks still working; your words appear as you speak; it recedes while Jarvis works and leaves no trace when done.
+
+## Phase 19: Privacy
+
+**Goal:** what Jarvis keeps has an end date, you can delete it by voice, and a locked PC says nothing private.
+
+**Scope**
+
+- `[history] keep_days` (90) and `audit_keep_days` (365); `storage/retention.py` runs at start and once a day (ADR-075).
+- `forget_history(about, when)`: confirm floor; matches words in the command or its answer; takes vectors and audit rows; the conversation is cleared and the request is not kept.
+- Locked PC: speech cut off, reminders held until you unlock, answers left on the page, `speak` refuses (ADR-076).
+
+**Test it**
+
+1. "what's the weather", then "forget what I asked about the weather". It asks first, says how many, and "what did I ask about the weather" then finds nothing.
+2. Set a reminder for a minute away ("remind me in one minute to stretch") and lock the PC. It says only that something is waiting; unlock and it says the reminder.
+
+**Not done, needs you:** both tests with a real lock. Everything here is tested with fakes.
+
+**Exit criteria:** nothing is kept past its keep time, a forgotten command is gone from history, vectors, audit, and conversation, and a locked PC says nothing private.
 
 ## Beyond 1.0
 

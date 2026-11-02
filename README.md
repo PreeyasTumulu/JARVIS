@@ -9,7 +9,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** v1.0.0 (Phases 4 to 9) plus Phases 10 to 16 (dictation and media; mail and calendar; MCP servers; faster speech and routing; recall and the briefing; screen reading; release polish), waiting for hands-on testing before they are merged to `main`. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 18 are on `main` (v1.8.0 in the code). No release is tagged past v0.3.0 yet: real voice, the overlay, locking and unlocking, and a real call still need a hands-on test. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -24,7 +24,7 @@ Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools
 | System | "set the volume to 30", "dim the screen", "lock my computer", "take a screenshot", "set a timer for 10 minutes", "remind me to call the bank at 5" |
 | People | "message Mom that I'll be late", "call Mom", "read my notifications", "anything new from Ravi" |
 | Mail and calendar | "any new email", "read the one from Ravi", "reply that I'll send it tonight", "what's on today", "my next meeting", "am I free on Friday" |
-| Memory | "remember that my manager is Ravi", "who is my boss", "what did I ask about Docker last week", "when did I check the weather" |
+| Memory | "remember that my manager is Ravi", "who is my boss", "what did I ask about Docker last week", "when did I check the weather", "forget what I asked about my doctor" |
 | Briefing | "good morning" or "brief me": weather, today's calendar and reminders, unread email and messages |
 | Thinking | "think harder: why did the Roman empire fall in the west but not in the east" (a free cloud model) |
 | GitHub (and any MCP server) | "any open issues on JARVIS", "read issue 12", "open an issue titled ..." (asks first), "find repos about wake words" |

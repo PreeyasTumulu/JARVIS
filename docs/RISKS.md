@@ -233,7 +233,7 @@ openWakeWord's "hey jarvis" model scores synthetic voices near 1.0 and real ones
 
 ### R50. The command history is kept, and now searchable
 
-Every command and Jarvis's answer has been kept in `jarvis.db` since Phase 1; recall makes it searchable by meaning, and answers can include private content (a message read out, an email summary). It never leaves the laptop and never reaches a cloud model, but anyone with your Windows account can read the database. There is no automatic expiry yet; deleting `%LOCALAPPDATA%\Jarvis\jarvis.db` clears everything (contacts, memories, and history together).
+Every command and Jarvis's answer has been kept in `jarvis.db` since Phase 1; recall makes it searchable by meaning, and answers can include private content (a message read out, an email summary). It never leaves the laptop and never reaches a cloud model, but anyone with your Windows account can read the database. Commands now expire after 90 days and the audit log after 365, and "forget what I asked about ..." deletes on request (ADR-075). Expiry runs only while Jarvis is running. `jarvis.db.corrupt-*` files from an old recovery keep what they held; delete them yourself if you have any.
 
 ### R51. Reading and clicking by OCR
 
@@ -266,7 +266,7 @@ OCR reads what is visible, so a window must be in front (Jarvis brings it forwar
 
 - Until 2026-11-02 the wake word kept listening on a locked PC, so anyone in the room could wake it and a spoken yes could approve a confirmation. Jarvis does not recognise whose voice it is. The microphone now closes while the PC is locked (ADR-074).
 - It is checked once a second, so a wake word in the first second after locking can still start a recording. The recording is dropped at the next check.
-- Jarvis can still speak while locked: a command already running says its answer, and reminders sound. Either could say something private to whoever is in the room.
+- Speech goes quiet too (ADR-076): locking cuts it off, and a reminder says only that something is waiting. The check is once a second, so up to a second of a private sentence can still be heard. Only the voice session knows about the lock; `jarvis chat` does not.
 - Windows' lock state was read correctly on a locked PC on this laptop. A real lock and unlock with Jarvis running is not verified yet. If voice stays off after unlocking, this check is the first place to look; the log says when voice goes off and comes back.
 
 ### R11. Cancellation

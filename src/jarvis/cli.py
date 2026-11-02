@@ -11,22 +11,23 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
 from jarvis import __version__
-from jarvis.app import build_app
-from jarvis.bridge.service import bridge_running
 from jarvis.config import REPO_ROOT, ConfigError, Settings, load_settings
-from jarvis.console import ConsoleChannel, ConsoleRenderer, read_line
-from jarvis.core.agent import TurnStatus
 from jarvis.logging_setup import setup_logging
 from jarvis.storage.db import Database
 from jarvis.storage.repositories import AuditLog
-from jarvis.tools.mcp.hub import McpHub, RemoteTool
-from jarvis.voice.tts.base import TTSEngine
+
+# Claude Code runs `jarvis claude-hook` for its permission prompts and waits for it, so commands
+# that do not use the agent must not load it (3 seconds for the imports alone).
+if TYPE_CHECKING:
+    from jarvis.tools.mcp.hub import McpHub, RemoteTool
+    from jarvis.voice.tts.base import TTSEngine
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -245,6 +246,10 @@ def run_chat(
     verbose: bool,
     log_file: str,
 ) -> int:
+    from jarvis.app import build_app
+    from jarvis.console import ConsoleChannel, ConsoleRenderer, read_line
+    from jarvis.core.agent import TurnStatus
+
     with asyncio.Runner() as runner:
         app = build_app(settings, ConsoleChannel(console))
         app.bus.subscribe(ConsoleRenderer(console, verbose=verbose))
@@ -543,6 +548,8 @@ def claude_hook(
             "Removed Jarvis's hooks." if removed else "Jarvis's hooks were not installed."
         )
         return 0
+    from jarvis.bridge.service import bridge_running
+
     running = bridge_running(settings.data_dir)
     if action == "status":
         state = "installed" if hook.installed(settings_path) else "not installed"

@@ -72,3 +72,33 @@ async def test_client_omits_empty_tools_and_falls_back_to_text(tools: Any) -> No
     assert result.parsed_from_text is True
     assert result.tool_calls[0].name == "speak"
     assert result.text == ""
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"function": "reply_email", "arguments": {"message": "Ravi"}}',
+        '{"name": "reply_email", "arguments": {"message": "Ravi"}}',
+        '```json\n{"name": "reply_email", "arguments": {"message": "Ravi"}}\n```',
+    ],
+)
+def test_a_whole_reply_of_bare_json_is_a_call(text: str) -> None:
+    remaining, calls = parse_text_tool_calls(text)
+    assert remaining == ""
+    assert [(call.name, json.loads(call.arguments)) for call in calls] == [
+        ("reply_email", {"message": "Ravi"})
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"name": "Ravi"}',  # JSON the user asked for, not a call
+        '{"temperature": 30}',
+        'Here you go: {"name": "x", "arguments": {}}',
+        '{"name": "x", "arguments"',
+        "[1, 2]",
+    ],
+)
+def test_other_json_stays_text(text: str) -> None:
+    assert parse_text_tool_calls(text) == (text, [])

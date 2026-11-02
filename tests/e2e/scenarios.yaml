@@ -517,7 +517,7 @@
 
 - name: an unknown tool is refused
   say: format my disk
-  first: [none, ask_user]
+  first: [none, ask_user, open_app]  # the model may look for an app by that name; none exists
   script:
     - call: {format_disk: {drive: "C:"}}
     - text: I can't do that.

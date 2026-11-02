@@ -16,6 +16,12 @@ from pathlib import Path
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 dwmapi = ctypes.WinDLL("dwmapi")
+wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
+
+WTS_CURRENT_SESSION = wintypes.DWORD(0xFFFFFFFF)
+WTS_SESSION_INFO_EX = 25
+WTS_FLAGS_INDEX = 4  # SessionFlags, counted in 4-byte values
+WTS_SESSIONSTATE_LOCK, WTS_SESSIONSTATE_UNLOCK = 0, 1
 
 _EnumProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 user32.EnumWindows.argtypes = [_EnumProc, wintypes.LPARAM]
@@ -119,6 +125,26 @@ def process_name(pid: int) -> str:
 
 def foreground_window() -> int:
     return int(user32.GetForegroundWindow() or 0)
+
+
+def session_locked() -> bool:
+    """Whether this Windows session is locked. Raises OSError if Windows cannot say.
+
+    Read from WTSINFOEXW: a level, padding to 8 bytes, then SessionId, SessionState, SessionFlags.
+    """
+    info = ctypes.POINTER(ctypes.c_long)()
+    size = wintypes.DWORD()
+    if not wtsapi32.WTSQuerySessionInformationW(
+        None, WTS_CURRENT_SESSION, WTS_SESSION_INFO_EX, ctypes.byref(info), ctypes.byref(size)
+    ):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        flags = int(info[WTS_FLAGS_INDEX])
+    finally:
+        wtsapi32.WTSFreeMemory(info)
+    if flags not in (WTS_SESSIONSTATE_LOCK, WTS_SESSIONSTATE_UNLOCK):
+        raise OSError(f"Windows reported an unknown lock state: {flags}")
+    return flags == WTS_SESSIONSTATE_LOCK
 
 
 def window_pid(hwnd: int) -> int:

@@ -134,6 +134,7 @@ def make_session(
     wake: Scripted | None = None,
     vad: Scripted | None = None,
     dictation: Any = None,
+    is_locked: Callable[[], bool] | None = None,
 ) -> tuple[VoiceSession, FakeMic, FakeCues, FakeTTS]:
     mic, cues = FakeMic(), FakeCues()
     voice_tts = tts or h.tts
@@ -148,6 +149,7 @@ def make_session(
         wake=wake,
         vad=vad,
         dictation=dictation,
+        is_locked=is_locked,
     )
     return session, mic, cues, voice_tts
 
@@ -381,6 +383,151 @@ async def test_a_muted_voice_lets_the_page_answer(make_app: MakeApp) -> None:
     await h.app.agent.run_turn("open spotify", source="web")
     assert tts.spoken == []  # muted voice does not ask aloud
     assert h.audit()[0]["decision"] == "denied"
+
+
+class FakeLock:
+    def __init__(self, locked: bool = False) -> None:
+        self.locked = locked
+        self.error: OSError | None = None
+        self.checks = 0
+
+    def __call__(self) -> bool:
+        self.checks += 1
+        if self.error is not None:
+            raise self.error
+        return self.locked
+
+
+@pytest.fixture
+def fast_lock_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("jarvis.voice.session.LOCK_CHECK_S", 0.01)
+
+
+@pytest.mark.usefixtures("fast_lock_checks")
+async def test_locking_the_pc_stops_listening_until_it_is_unlocked(make_app: MakeApp) -> None:
+    h = make_app()
+    lock = FakeLock()
+    wake = Scripted([], default=0.95)
+    session, mic, _, _ = make_session(
+        h, FakeSTT(), wake=wake, vad=Scripted([], default=0.1), is_locked=lock
+    )
+    runner = asyncio.create_task(session.run())
+    try:
+        await until(lambda: mic.active)
+        lock.locked = True
+        await until(lambda: not mic.active)
+        assert session.state is VoiceState.MUTED
+        assert session.muted is False  # the tray's own setting is untouched
+        session.on_hotkey("ptt", "down")
+        await asyncio.sleep(0.05)
+        assert session.state is VoiceState.MUTED
+        lock.locked = False
+        await until(lambda: mic.active)
+        assert session.state is VoiceState.IDLE
+        mic.push()  # the wake word works again
+        await until(lambda: session.state is VoiceState.LISTENING)
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)
+
+
+@pytest.mark.usefixtures("fast_lock_checks")
+async def test_starting_on_a_locked_pc_leaves_the_microphone_closed(make_app: MakeApp) -> None:
+    h = make_app()
+    lock = FakeLock(locked=True)
+    session, mic, _, _ = make_session(
+        h, FakeSTT(), wake=Scripted([]), vad=Scripted([]), is_locked=lock
+    )
+    runner = asyncio.create_task(session.run())
+    try:
+        await until(lambda: lock.checks >= 3)
+        assert (mic.active, session.state) == (False, VoiceState.MUTED)
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)
+
+
+async def test_locking_during_a_recording_drops_it(make_app: MakeApp) -> None:
+    h = make_app()
+    stt = FakeSTT("open notepad")
+    session, mic, _, _ = make_session(h, stt, wake=Scripted([]), vad=Scripted([]))
+    await session._open_mic()
+    session.on_hotkey("ptt", "down")
+    await until(lambda: session.state is VoiceState.LISTENING)
+    mic.push(4)
+    await session.set_locked(True)
+    session.on_hotkey("ptt", "up")
+    await asyncio.sleep(0.05)
+    assert stt.calls == 0
+    assert (mic.active, session.state) == (False, VoiceState.MUTED)
+
+
+async def test_locking_counts_a_waiting_question_as_no(make_app: MakeApp, launched: list) -> None:
+    voice = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Not opened.")], channel=voice
+    )
+    session, _, _, _ = make_session(h, FakeSTT())
+    voice.attach(session)
+    turn = asyncio.create_task(h.app.agent.run_turn("open spotify", source="web"))
+    await until(lambda: session.state is VoiceState.AWAITING_ANSWER)
+    await session.set_locked(True)
+    await turn
+    assert h.audit()[0]["decision"] == "denied"
+    assert launched == []
+    assert session.state is VoiceState.MUTED
+
+
+async def test_a_locked_voice_lets_the_page_answer(make_app: MakeApp) -> None:
+    from jarvis.core.channel import FirstAnswerChannel
+
+    voice = VoiceChannel()
+    h = make_app(
+        [reply("", ("open_app", {"name": "spotify"})), reply("Not opened.")],
+        channel=FirstAnswerChannel(voice, SlowNo()),  # type: ignore[arg-type]
+    )
+    session, _, _, tts = make_session(h, FakeSTT())
+    voice.attach(session)
+    await session.set_locked(True)
+    await h.app.agent.run_turn("open spotify", source="web")
+    assert tts.spoken == []  # nothing is asked aloud on a locked PC
+    assert h.audit()[0]["decision"] == "denied"
+
+
+async def test_unlocking_keeps_a_microphone_you_turned_off_off(make_app: MakeApp) -> None:
+    h = make_app()
+    session, mic, _, _ = make_session(h, FakeSTT(), wake=Scripted([]), vad=Scripted([]))
+    await session._open_mic()
+    await session.set_muted(True)
+    await session.set_locked(True)
+    await session.set_locked(False)
+    assert (session.state, session.muted, mic.active) == (VoiceState.MUTED, True, False)
+    await session.set_locked(True)
+    await session.set_muted(False)
+    assert (session.state, mic.active) == (VoiceState.MUTED, False)  # still locked
+    await session.set_locked(False)
+    assert (session.state, mic.active) == (VoiceState.IDLE, True)
+
+
+@pytest.mark.usefixtures("fast_lock_checks")
+async def test_an_unreadable_lock_state_changes_nothing_and_warns_once(
+    make_app: MakeApp, caplog: pytest.LogCaptureFixture
+) -> None:
+    h = make_app()
+    lock = FakeLock()
+    lock.error = OSError("no answer")
+    session, mic, _, _ = make_session(
+        h, FakeSTT(), wake=Scripted([]), vad=Scripted([]), is_locked=lock
+    )
+    runner = asyncio.create_task(session.run())
+    try:
+        await until(lambda: mic.active and lock.checks >= 3)
+        assert session.state is VoiceState.IDLE
+        warnings = [r for r in caplog.records if "lock state" in r.getMessage()]
+        assert len(warnings) == 1
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)
 
 
 async def test_reminders_still_speak_while_muted(make_app: MakeApp) -> None:

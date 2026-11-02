@@ -15,6 +15,7 @@ from jarvis.console import ConsoleChannel, ConsoleRenderer
 from jarvis.core.channel import FirstAnswerChannel
 from jarvis.overlay.client import start_overlay
 from jarvis.platform.hotkeys import Hotkey, HotkeyListener, parse_hotkey
+from jarvis.platform.windows import session_locked
 from jarvis.voice.audio import (
     SILENT_RMS,
     AudioPlayer,
@@ -107,6 +108,7 @@ def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> Voice
         wake=wake_detector(settings) if wake_enabled else None,
         vad=SileroVAD(settings.models_dir, cfg.wake_word) if wake_enabled else None,
         dictation=Inserter(settings.dictation) if settings.dictation.enabled else None,
+        is_locked=session_locked,
     )
 
 

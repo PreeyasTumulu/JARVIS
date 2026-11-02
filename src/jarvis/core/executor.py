@@ -250,8 +250,8 @@ class ToolExecutor:
                 return finish(
                     decision,
                     ToolResult.failure(
-                        f"The user said no to '{prepared.summary}', so it was not done. "
-                        "Acknowledge that briefly and do not retry."
+                        f"The person talking to you said no to '{prepared.summary}', so it was "
+                        "not done. Do not retry, and reply with exactly: Okay, I won't."
                     ),
                 )
             if decision is Decision.TIMEOUT:

@@ -256,7 +256,7 @@ function confirmCard(message) {
   card.append(actions, timer);
   cards.set(request.request_id, card);
   addToTurn(turnFor(message.turn_id), card);
-  yes.focus({ preventScroll: true });
+  no.focus({ preventScroll: true });  // a stray Enter or Space while typing must never approve
 }
 
 function answerConfirm(requestId, approved) {
@@ -372,7 +372,8 @@ function stepFinish(message) {
     chip = turn.activity.appendChild(el("span", "step", message.tool));
   }
   chip.className = "step " + (message.ok ? "ok" : "bad");
-  chip.textContent = `${message.tool} ${message.ok ? "ok" : "failed"} ${seconds(message.duration_ms)}`;
+  const outcome = message.decision === "denied" ? "cancelled" : message.ok ? "ok" : "failed";
+  chip.textContent = `${message.tool} ${outcome} ${seconds(message.duration_ms)}`;
   chip.title = message.summary || "";
 }
 

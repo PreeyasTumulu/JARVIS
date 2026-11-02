@@ -447,6 +447,13 @@ Yours, asked 2026-11-01, all as recommended.
 - **Departures from the skill, on purpose:** its house rules ban glows, and you asked for the opposite, so all the light comes from the reactor canvas, which is a picture rather than styling on the controls. Its dealt font comes from Google Fonts, which would make a local-first app call out to the internet and break the page's Content-Security-Policy, so the page uses Bahnschrift from Windows. Its violet ban gives way to your chosen thinking colour. Its inspector still reports 0 FAIL at 1440, 768, and 390; its two warnings are monospace on tool names and arguments, which are literal code, and the empty conversation area.
 - **Safety:** the canvas takes no clicks and dims only while you speak, never while a confirmation is waiting, so the Confirm card always stays readable. The existing security headers did not change.
 
+### ADR-074: The microphone closes while the PC is locked
+
+- **Decision (asked 2026-11-02, as recommended):** Jarvis asks Windows once a second whether the session is locked. While it is, the microphone is closed, so there is no wake word, push-to-talk, or dictation, and the state shows as microphone off. Unlocking brings voice back, unless you had turned the microphone off yourself. A recording in progress is dropped, and a question waiting for a spoken answer counts as no. There is no setting to turn this off.
+- **Why:** a spoken yes approves calls and messages, and Jarvis does not know whose voice it is, so anyone near a locked PC could have used it (R55). The cost is unlocking before you can talk to Jarvis.
+- **How:** `WTSQuerySessionInformationW` with `WTSSessionInfoEx`, which needs no window. If Windows cannot answer, voice stays as it was and one warning is logged, because turning voice off on an error could leave it off for good.
+- **Not covered:** Jarvis can still speak while locked: a command already running finishes and says its answer, and reminders still sound.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

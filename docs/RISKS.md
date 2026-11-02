@@ -262,11 +262,12 @@ OCR reads what is visible, so a window must be in front (Jarvis brings it forwar
 - Each pass adds GPU work next to Hermes on a 4 GB card. It held in the live test; a game or a large model loaded at the same time may slow the passes down, and they then space themselves out.
 - The voice level curve was tuned on synthetic speech, which reached the top of the scale. Your microphone may need `LEVEL_GAIN` adjusted so that the rings move well.
 
-### R55. "Hey Jarvis" is not paused while the PC is locked
+### R55. Voice on a locked PC
 
-- The voice code does not check the lock screen, so the wake word keeps listening while the PC is locked. Found by reading the code on 2026-11-02; a spoken command on a locked PC has not been tried.
-- Anyone in the room could wake it, and a spoken yes is what approves a confirmation. Jarvis does not recognise whose voice it is. Tools that need the desktop fail on a locked PC, but spoken answers, such as reading out private data, may not.
-- The overlay opened normally on a locked PC in the test, where nobody can see it.
+- Until 2026-11-02 the wake word kept listening on a locked PC, so anyone in the room could wake it and a spoken yes could approve a confirmation. Jarvis does not recognise whose voice it is. The microphone now closes while the PC is locked (ADR-074).
+- It is checked once a second, so a wake word in the first second after locking can still start a recording. The recording is dropped at the next check.
+- Jarvis can still speak while locked: a command already running says its answer, and reminders sound. Either could say something private to whoever is in the room.
+- Windows' lock state was read correctly on a locked PC on this laptop. A real lock and unlock with Jarvis running is not verified yet. If voice stays off after unlocking, this check is the first place to look; the log says when voice goes off and comes back.
 
 ### R11. Cancellation
 

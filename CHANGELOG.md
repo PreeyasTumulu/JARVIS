@@ -6,6 +6,14 @@ Versions 0.4.0 to 1.6.0 are built on stacked `phase/<n>-<name>` branches with gr
 
 ## [Unreleased]
 
+### Changed
+- The microphone closes while the PC is locked: no wake word, push-to-talk, or dictation until you unlock it, and a question waiting for a spoken answer counts as no (ADR-074).
+
+### Fixed
+- A new confirmation card focused Confirm, so a stray Enter or Space could approve it. It now focuses Cancel.
+- After you said no, Jarvis could say "they said no", as if the other person had refused.
+- A cancelled tool showed "failed" on the page.
+
 ## [1.8.0] - 2026-11-01: New interface and wake overlay (Phase 18)
 
 ### Added

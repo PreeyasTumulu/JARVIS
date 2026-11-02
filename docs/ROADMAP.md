@@ -827,6 +827,7 @@ Try it with a light window open, say a command that opens an app (it should rece
 | A new confirmation card focused Confirm, so a stray Enter or Space could approve it (there since Phase 5) | it focuses Cancel; Confirm takes a click or Tab |
 | After a no, the model could say "they said no", as if the other person had refused | the refusal says who answered and gives the exact reply |
 | A cancelled tool showed "failed" in the conversation | it shows "cancelled" |
+| "Hey Jarvis" kept listening on a locked PC, and a spoken yes approves things | the microphone closes while locked (ADR-074, R55) |
 
 **Not done, needs you:** the test commands above with your own voice, restarting your running Jarvis first. A wider test on a real fullscreen game.
 

@@ -103,7 +103,7 @@ ALL_TOOLS = {
     "browser_read", "browser_click", "browser_type", "send_whatsapp", "call_contact",
     "hang_up", "media_control", "now_playing", "read_notifications", "read_mail", "read_email",
     "reply_email", "calendar_events",
-    "remember", "list_memories", "forget", "recall", "briefing",
+    "remember", "list_memories", "forget", "recall", "briefing", "forget_history",
     "speak", "ask_user",
 }  # fmt: skip
 

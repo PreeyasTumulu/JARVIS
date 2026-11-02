@@ -777,6 +777,10 @@ uv run jarvis ask "hang up"
 
 **Verified during the build (live, on this laptop):** the Voice call button seen as one enabled button with one on-screen position in an open chat; the message box read 8 times out of 8 with WhatsApp in front; a real message sent by you through the fixed check. Not verified live: the marker being cleared, a real call, the name of the end call button, and how a call looks to Windows.
 
+**Measured:** Hermes 3 8B 91% of 90 commands, median 3.0 s ([phase17.md](benchmarks/phase17.md)). Both call commands were right, but bare "hang up" got no tool, so exact phrases now take the fast path; "hang up" was then checked live and reaches `hang_up`.
+
+**Checked on 2026-11-02, on separate test data with a made-up contact:** answering no places no call, an unknown name is refused before any question, and "hang up" with no call on says so and presses nothing. A real call is still not verified.
+
 **Not done, needs a real call first:** pausing "Hey Jarvis" during a call, which depends on detecting the call (R52).
 
 **Exit criteria:** "call <contact>" rings the right person after a yes; a chat that fails to open places no call; "hang up" ends the call.
@@ -820,6 +824,9 @@ Try it with a light window open, say a command that opens an app (it should rece
 | The receded glow fogged the whole desktop | a thin line unless the screen is dark |
 | Light added to a white window was lost, so the small core vanished | a dark backing behind it |
 | Streaks fell across the conversation while idle | only while active |
+| A new confirmation card focused Confirm, so a stray Enter or Space could approve it (there since Phase 5) | it focuses Cancel; Confirm takes a click or Tab |
+| After a no, the model could say "they said no", as if the other person had refused | the refusal says who answered and gives the exact reply |
+| A cancelled tool showed "failed" in the conversation | it shows "cancelled" |
 
 **Not done, needs you:** the test commands above with your own voice, restarting your running Jarvis first. A wider test on a real fullscreen game.
 

@@ -262,6 +262,12 @@ OCR reads what is visible, so a window must be in front (Jarvis brings it forwar
 - Each pass adds GPU work next to Hermes on a 4 GB card. It held in the live test; a game or a large model loaded at the same time may slow the passes down, and they then space themselves out.
 - The voice level curve was tuned on synthetic speech, which reached the top of the scale. Your microphone may need `LEVEL_GAIN` adjusted so that the rings move well.
 
+### R55. "Hey Jarvis" is not paused while the PC is locked
+
+- The voice code does not check the lock screen, so the wake word keeps listening while the PC is locked. Found by reading the code on 2026-11-02; a spoken command on a locked PC has not been tried.
+- Anyone in the room could wake it, and a spoken yes is what approves a confirmation. Jarvis does not recognise whose voice it is. Tools that need the desktop fail on a locked PC, but spoken answers, such as reading out private data, may not.
+- The overlay opened normally on a locked PC in the test, where nobody can see it.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

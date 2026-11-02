@@ -31,6 +31,11 @@ FORGET_PAST = re.compile(
     r"\b(forget|delete|clear|erase|wipe|remove)\b.*"
     r"\b(history|commands?|requests?|what i (asked|said|told)|i asked|i said)\b"
 )
+# A focus session, not the focus_app tool that the word "focus" would otherwise offer.
+FOCUS_SESSION = re.compile(
+    r"\bfocus (session|mode|time|timer)\b|\bpomodoro\b|\bdeep work\b|\bstop focusing\b"
+    r"|\bend (my |the )?focus\b"
+)
 
 
 @dataclass(frozen=True)
@@ -89,14 +94,21 @@ GROUPS: dict[str, Group] = {
             "set_brightness",
             "lock_screen",
             "screenshot",
-            "clipboard_read",
-            "clipboard_write",
         ),
         re.compile(
             r"\b(volume|louder|quieter|softer|mute|unmute|sound|audio|speakers?|brightness|"
-            r"brighter|dimmer|dim|screen|display|lock|screenshot|screen ?shot|clipboard|copy|"
-            r"copied|paste)\b"
+            r"brighter|dimmer|dim|screen|display|lock|screenshot|screen ?shot)\b"
         ),
+    ),
+    "clipboard": Group(
+        (
+            "clipboard_read",
+            "clipboard_write",
+            "clipboard_history",
+            "clipboard_restore",
+            "clipboard_forget",
+        ),
+        re.compile(r"\b(clipboard|copy|copied|paste)\b"),
     ),
     "time": Group(
         ("set_timer", "set_reminder", "list_reminders", "cancel_reminder"),
@@ -225,7 +237,10 @@ def select_tools(text: str, registry: Registry, meant: Sequence[str] = ()) -> li
     never as part of "everything", so a big server cannot crowd out the built-in tools.
     `meant` are groups semantic routing found when keywords found none."""
     lowered = text.casefold()
-    if FORGET_PAST.search(lowered):
+    if FOCUS_SESSION.search(lowered):
+        wanted = {"focus_start", "focus_end", "focus_status", *ALWAYS}
+        return [tool for tool in registry if tool.name in wanted]
+    if FORGET_PAST.search(lowered) and "clipboard" not in lowered:
         wanted = {"forget_history", *ALWAYS}
         return [tool for tool in registry if tool.name in wanted]
     if PAST_REQUEST.search(lowered):

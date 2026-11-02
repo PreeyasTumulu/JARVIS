@@ -25,6 +25,7 @@ _user32.RegisterClipboardFormatW.restype = wintypes.UINT
 _user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
 _user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
 _user32.CountClipboardFormats.restype = ctypes.c_int
+_user32.GetClipboardSequenceNumber.restype = wintypes.DWORD
 _kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
 _kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
 _kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
@@ -48,18 +49,52 @@ def get_text() -> str | None:
     """The clipboard's text, or None when it holds no text (an image, files, or nothing)."""
     _open()
     try:
-        handle = _user32.GetClipboardData(CF_UNICODETEXT)
-        if not handle:
-            return None
-        pointer = _kernel32.GlobalLock(handle)
-        if not pointer:
-            return None
-        try:
-            return ctypes.wstring_at(pointer)
-        finally:
-            _kernel32.GlobalUnlock(handle)
+        return _read_text()
     finally:
         _user32.CloseClipboard()
+
+
+def _read_text() -> str | None:
+    handle = _user32.GetClipboardData(CF_UNICODETEXT)
+    if not handle:
+        return None
+    pointer = _kernel32.GlobalLock(handle)
+    if not pointer:
+        return None
+    try:
+        return ctypes.wstring_at(pointer)
+    finally:
+        _kernel32.GlobalUnlock(handle)
+
+
+def sequence_number() -> int:
+    """Changes whenever the clipboard does; asking does not touch the clipboard."""
+    return int(_user32.GetClipboardSequenceNumber())
+
+
+def get_text_for_history() -> str | None:
+    """The clipboard's text, or None when there is none or the app that copied it asked for it
+    not to be recorded, as password managers do."""
+    _open()
+    try:
+        return None if _left_out_of_history() else _read_text()
+    finally:
+        _user32.CloseClipboard()
+
+
+def _left_out_of_history() -> bool:
+    if _user32.IsClipboardFormatAvailable(_user32.RegisterClipboardFormatW(_PRIVATE_FORMATS[0])):
+        return True
+    handle = _user32.GetClipboardData(_user32.RegisterClipboardFormatW(_PRIVATE_FORMATS[1]))
+    if not handle:
+        return False
+    pointer = _kernel32.GlobalLock(handle)
+    if not pointer:
+        return True  # it asked something of us that we cannot read: leave it out
+    try:
+        return ctypes.c_uint32.from_address(pointer).value == 0
+    finally:
+        _kernel32.GlobalUnlock(handle)
 
 
 # Formats that keep a value out of Win+V history and the cloud clipboard, and tell clipboard

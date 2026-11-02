@@ -104,6 +104,8 @@ ALL_TOOLS = {
     "hang_up", "media_control", "now_playing", "read_notifications", "read_mail", "read_email",
     "reply_email", "calendar_events",
     "remember", "list_memories", "forget", "recall", "briefing", "forget_history",
+    "clipboard_history", "clipboard_restore", "clipboard_forget",
+    "focus_start", "focus_end", "focus_status",
     "speak", "ask_user",
 }  # fmt: skip
 

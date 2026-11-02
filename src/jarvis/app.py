@@ -22,6 +22,8 @@ from jarvis.tools.catalog import build_registry
 from jarvis.tools.notifications.store import NotificationWatcher
 from jarvis.tools.policy import PolicyGate
 from jarvis.tools.registry import Registry
+from jarvis.tools.system.clipboard import ClipboardHistory
+from jarvis.tools.system.focus import Focus
 from jarvis.tools.system.reminders import ReminderScheduler
 
 
@@ -47,6 +49,15 @@ class App:
         )
         scheduler = ReminderScheduler(self.services.reminders, self.bus, announce)
         self.background.append(asyncio.create_task(scheduler.run(), name="reminders"))
+        if self.services.focus is not None:
+            self.background.append(
+                asyncio.create_task(self.services.focus.run(announce), name="focus")
+            )
+        if self.settings.clipboard.history:
+            self.services.clipboard = ClipboardHistory(self.settings.clipboard)
+            self.background.append(
+                asyncio.create_task(self.services.clipboard.run(), name="clipboard")
+            )
         settings = self.settings.notifications
         if settings.enabled:
             watcher = NotificationWatcher(self.services.notifications, self.bus, settings.poll_s)
@@ -82,6 +93,8 @@ def build_app(
         services.history = history  # recall reads the same command history
     if services.prefs is None:
         services.prefs = Preferences(db)
+    if services.focus is None:
+        services.focus = Focus(services.reminders, services.notifications, services.prefs)
     llm = llm or LLMClient(settings.llm.active())
     router = router or Router(settings, db)
     executor = ToolExecutor(

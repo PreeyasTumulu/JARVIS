@@ -21,8 +21,15 @@ from jarvis.tools.messaging.tools import send_whatsapp
 from jarvis.tools.notifications.tools import read_notifications
 from jarvis.tools.recall import forget_history, recall
 from jarvis.tools.registry import Registry
-from jarvis.tools.system.clipboard import clipboard_read, clipboard_write
+from jarvis.tools.system.clipboard import (
+    clipboard_forget,
+    clipboard_history,
+    clipboard_read,
+    clipboard_restore,
+    clipboard_write,
+)
 from jarvis.tools.system.controls import lock_screen, screenshot, set_brightness, set_volume
+from jarvis.tools.system.focus import focus_end, focus_start, focus_status
 from jarvis.tools.system.media import media_control, now_playing
 from jarvis.tools.system.reminders import (
     cancel_reminder,
@@ -68,6 +75,12 @@ def build_registry() -> Registry:
             screenshot,
             clipboard_read,
             clipboard_write,
+            clipboard_history,
+            clipboard_restore,
+            clipboard_forget,
+            focus_start,
+            focus_end,
+            focus_status,
             set_timer,
             set_reminder,
             list_reminders,

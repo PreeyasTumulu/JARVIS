@@ -237,6 +237,15 @@ class CallsSettings(_Section):
     method: Literal["whatsapp", "phone_link"] = "whatsapp"
 
 
+class ClipboardSettings(_Section):
+    """ "The second last thing I copied" (ADR-077). Off until you turn it on."""
+
+    history: bool = False
+    max_items: int = Field(default=20, ge=1, le=200)  # kept in memory only, never on disk
+    max_chars: int = Field(default=20000, ge=100)  # anything longer is not kept
+    poll_s: float = Field(default=1, ge=0.2)
+
+
 class TTSSettings(_Section):
     engine: Literal["piper", "sapi"] = "piper"
     piper_voice: str = "en_GB-alan-medium"
@@ -402,6 +411,7 @@ class Settings(_Section):
     bridge: BridgeSettings = BridgeSettings()
     phone: PhoneSettings = PhoneSettings()
     calls: CallsSettings = CallsSettings()
+    clipboard: ClipboardSettings = ClipboardSettings()
     tts: TTSSettings = TTSSettings()
     overlay: OverlaySettings = OverlaySettings()
     voice: VoiceSettings = VoiceSettings()

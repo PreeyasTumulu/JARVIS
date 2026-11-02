@@ -180,6 +180,7 @@ class Reminders:
         self.clock = clock
         self.changed = asyncio.Event()
         self.running = False  # true while a scheduler is announcing reminders
+        self.quiet = False  # a focus session is on: reminders wait, timers still ring (ADR-078)
 
     def add(self, kind: str, message: str, due_at: float) -> Reminder:
         reminder = self.store.add(kind, message, due_at, self.clock())
@@ -215,7 +216,7 @@ class ReminderScheduler:
                 now = reminders.clock()
                 pending = reminders.pending()
                 for item in pending:
-                    if item.due_at <= now:
+                    if item.due_at <= now and not (reminders.quiet and item.kind == "reminder"):
                         await self._fire(item, now)
                 waits = [item.due_at - now for item in pending if item.due_at > now]
                 delay = max(0.05, min([MAX_SLEEP_S, *waits]))

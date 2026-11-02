@@ -22,6 +22,8 @@ from jarvis.tools.memory import MemoryStore
 from jarvis.tools.messaging.contacts import ContactBook
 from jarvis.tools.messaging.whatsapp import WhatsApp, WhatsAppDesktop, WhatsAppWeb
 from jarvis.tools.notifications.store import Notifications
+from jarvis.tools.system.clipboard import ClipboardHistory
+from jarvis.tools.system.focus import Focus
 from jarvis.tools.system.reminders import Reminders
 from jarvis.tools.web.search import DuckDuckGoSearch, SearchBackend
 from jarvis.voice.tts.base import TTSEngine
@@ -48,6 +50,8 @@ class Services:
     meaning: MeaningIndex | None = None  # memories and past commands by meaning
     history: HistoryLog | None = None  # set by build_app when not given
     prefs: Preferences | None = None  # small settings Jarvis keeps (set by build_app)
+    clipboard: ClipboardHistory | None = None  # only with [clipboard] history = true
+    focus: Focus | None = None  # set by build_app
     quiet_speech: bool = False  # the PC is locked: nothing private is said aloud (ADR-076)
 
     async def aclose(self) -> None:

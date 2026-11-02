@@ -66,6 +66,24 @@ HANG_UP = {
     "cut the call",
     "disconnect the call",
 }
+FOCUS_START = {
+    "start a focus session",
+    "start focus session",
+    "start my focus session",
+    "start focus mode",
+    "focus mode on",
+}
+FOCUS_END = {
+    "end focus session",
+    "end the focus session",
+    "end my focus session",
+    "stop focus session",
+    "stop the focus session",
+    "stop my focus session",
+    "end focus mode",
+    "stop focus mode",
+    "focus mode off",
+}
 
 
 def _phrase(text: str) -> str:
@@ -84,4 +102,8 @@ def fast_call(text: str) -> tuple[str, str] | None:
         return "briefing", "{}"
     if phrase in HANG_UP:
         return "hang_up", "{}"
+    if phrase in FOCUS_START:
+        return "focus_start", "{}"
+    if phrase in FOCUS_END:
+        return "focus_end", "{}"
     return None

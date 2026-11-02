@@ -75,7 +75,7 @@ class LLMClient:
 
         text = message.content or ""
         parsed_from_text = False
-        if not calls and "<tool_call>" in text:
+        if not calls:
             text, calls = parse_text_tool_calls(text)
             parsed_from_text = bool(calls)
 

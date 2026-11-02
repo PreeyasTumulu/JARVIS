@@ -76,8 +76,8 @@ Ranked by value for daily use against effort. Each would come with its own decis
 | 5 | Windows OCR fallback for apps UI Automation cannot read | covers the gaps in screen reading | small |
 | 6 | Semantic memory with `nomic-embed-text` | memories found by meaning; "what did I ask about Docker last week" | medium |
 | 7 | Media control (play, pause, next) through the system media keys | "pause the music" without knowing the app | small |
-| 8 | Focus sessions | mute notifications, start a timer, say the summary after | small |
-| 9 | Clipboard history and "paste the second last thing I copied" | handy, privacy-sensitive | small |
+| 8 | Focus sessions (built in Phase 20) | mute notifications, start a timer, say the summary after | small |
+| 9 | Clipboard history and "paste the second last thing I copied" (built in Phase 20) | handy, privacy-sensitive | small |
 | 10 | A fast intent model | lower latency and better routing | medium |
 | 11 | Barge-in with echo cancellation | interrupt Jarvis by voice, not only the hotkey | medium, hardware dependent |
 | 12 | Multi-language speech (Hindi, Telugu) | Whisper `small` (not `.en`) and a Piper voice per language | medium |

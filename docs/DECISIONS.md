@@ -468,6 +468,19 @@ Yours, asked 2026-11-01, all as recommended.
 - **The cost:** a timer on a locked PC tells you something is waiting, not which timer. There is no setting: a locked PC is the case this protects.
 - **Not covered:** this lives in the voice session, so `jarvis chat` and a page with voice off do not know about the lock.
 
+### ADR-077: Clipboard history is off by default and stays in memory
+
+- **Decision (2026-11-02, chosen without asking because you said to build everything now):** `[clipboard] history = true` keeps the last 20 things you copy, in memory only. It is emptied when the PC locks and when Jarvis stops. It leaves out what looks like a secret, what is over 20,000 characters, and what the copying app marked as not for recording (the formats password managers and Jarvis's own dictation use). `clipboard_restore` puts one back privately, so it does not come back as a new copy, and you press Ctrl+V yourself.
+- **Why off:** what you copy can be anything, including a password from an app that does not mark it. Windows' own Win+V history is a separate choice you already control. Nothing is written to disk, so a crash or the database file cannot give it away.
+- **Why not Win+V's history:** its API is meant for the app in the foreground, and Jarvis rarely is. Not measured here.
+- **Not covered:** while on, a password copied from an app that does not mark it sits in memory until the next lock, and if the model reads the list it enters the audit log, as `clipboard_read` always has. Only the first 200 characters of each are shown to the model.
+
+### ADR-078: Focus sessions quiet Jarvis, not Windows
+
+- **Decision (2026-11-02, chosen without asking):** "start a focus session for 50 minutes" (25 by default) holds Jarvis's reminders until the end. Timers still ring, commands still work, and the end says how long it was, how many messages came and from whom, and how many reminders waited. Reminders stay pending, so they survive a restart and then announce themselves as missed. The session itself is kept in the preferences.
+- **Why not Do Not Disturb:** Windows has no supported API to turn it on. The known way writes to an undocumented store and can break with any update, so it is not done (R57). Turn it on yourself from the notification panel if you want other apps quiet too.
+- **Not covered:** Claude Code's notices still speak during a session, because they are usually waiting on you.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

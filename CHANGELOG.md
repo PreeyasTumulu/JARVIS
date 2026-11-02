@@ -8,6 +8,8 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 
 ### Added
 - Past commands, answers, and finished reminders are deleted after 90 days and the audit log after 365 (`[history]`); 0 keeps them forever (ADR-075).
+- Focus sessions: reminders wait, timers still ring, and the end says what you missed (ADR-078).
+- Clipboard history, off by default and in memory only: "what did I copy earlier", "the second last thing I copied" (ADR-077).
 - "Forget what I asked about my doctor", "delete yesterday's commands", "clear my history": `forget_history`, after a yes.
 
 ### Changed

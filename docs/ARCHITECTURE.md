@@ -274,6 +274,8 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `media_control(action)` | 10 | safe; play, pause, toggle, next, previous on the current Windows media session, the media keys otherwise | public |
 | `now_playing()` | 10 | safe; the title, artist, and app of the current media session | private |
 | `clipboard_read()` / `clipboard_write(text)` | 4 | safe | private, untrusted / public |
+| `clipboard_history(count?)`, `clipboard_restore(position?)`, `clipboard_forget()` | 20 | safe; off until `[clipboard] history = true`; in memory only | private, untrusted / private / public |
+| `focus_start(minutes?, label?)`, `focus_end()`, `focus_status()` | 20 | safe; holds Jarvis's reminders, not Windows' notifications | private |
 | `set_timer`, `set_reminder`, `list_reminders`, `cancel_reminder(which)` | 4 | safe; cancelling more than one confirms | private |
 | `type_text(app, text, field?)`, `click(app, target)`, `press_keys(app, keys)` | 6 | confirm, or safe inside trusted apps except destructive targets and closing keys; always confirm in messaging apps and terminals; blocked in Registry Editor, consoles, sign-in prompts, password managers, and password fields | public |
 | `read_screen()` | 15 | safe; every screen read with Windows OCR | private, untrusted |

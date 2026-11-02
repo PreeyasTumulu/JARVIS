@@ -26,6 +26,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 17 | WhatsApp calls | On `main`, not tagged, waiting for your test | v1.7.0 |
 | 18 | New interface and wake overlay | On `main`, not tagged, waiting for your test | v1.8.0 |
 | 19 | Privacy: history expiry, forgetting, quiet when locked | Built on `phase/19-privacy` (from `main`), waiting for your test | v1.9.0 |
+| 20 | Clipboard history and focus sessions | Built on `phase/20-clipboard-focus` (stacked on Phase 19), waiting for your test | v1.10.0 |
 
 ## How each phase runs
 
@@ -852,6 +853,24 @@ Try it with a light window open, say a command that opens an app (it should rece
 **Not done, needs you:** both tests with a real lock. Everything here is tested with fakes.
 
 **Exit criteria:** nothing is kept past its keep time, a forgotten command is gone from history, vectors, audit, and conversation, and a locked PC says nothing private.
+
+## Phase 20: Clipboard history and focus sessions
+
+**Goal:** "the second last thing I copied" works without leaving anything on disk, and a focus session keeps Jarvis quiet and then says what you missed.
+
+**Scope**
+
+- `clipboard_history`, `clipboard_restore`, `clipboard_forget`, off by default (ADR-077).
+- `focus_start`, `focus_end`, `focus_status`; exact phrases skip the model (ADR-078).
+
+**Test it**
+
+1. Set `history = true` under `[clipboard]` in `config/local.toml` and restart. Copy two things, say "what did I copy earlier", then "put the second last thing I copied back on the clipboard", and press Ctrl+V.
+2. "Start a focus session for 2 minutes", then "remind me in one minute to stretch". Nothing is said at one minute. At two it says the session is over, that one reminder waited, and then the reminder.
+
+**Not done, needs you:** both tests by hand. Everything here is tested with fakes; the PC was locked during the build, and Windows refuses clipboard access then, so the real clipboard has not been read.
+
+**Exit criteria:** nothing copied reaches the disk, a marked copy is never kept, and a reminder due during a focus session is heard after it.
 
 ## Beyond 1.0
 

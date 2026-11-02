@@ -24,6 +24,7 @@ Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools
 | System | "set the volume to 30", "dim the screen", "lock my computer", "take a screenshot", "set a timer for 10 minutes", "remind me to call the bank at 5" |
 | People | "message Mom that I'll be late", "call Mom", "read my notifications", "anything new from Ravi" |
 | Mail and calendar | "any new email", "read the one from Ravi", "reply that I'll send it tonight", "what's on today", "my next meeting", "am I free on Friday" |
+| Focus and clipboard | "start a focus session for 50 minutes", "end my focus session", "what did I copy earlier", "put the second last thing I copied back on the clipboard" (clipboard history is off until you turn it on) |
 | Memory | "remember that my manager is Ravi", "who is my boss", "what did I ask about Docker last week", "when did I check the weather", "forget what I asked about my doctor" |
 | Briefing | "good morning" or "brief me": weather, today's calendar and reminders, unread email and messages |
 | Thinking | "think harder: why did the Roman empire fall in the west but not in the east" (a free cloud model) |

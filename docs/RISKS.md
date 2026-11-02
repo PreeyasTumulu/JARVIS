@@ -269,6 +269,14 @@ OCR reads what is visible, so a window must be in front (Jarvis brings it forwar
 - Speech goes quiet too (ADR-076): locking cuts it off, and a reminder says only that something is waiting. The check is once a second, so up to a second of a private sentence can still be heard. Only the voice session knows about the lock; `jarvis chat` does not.
 - Windows' lock state was read correctly on a locked PC on this laptop. A real lock and unlock with Jarvis running is not verified yet. If voice stays off after unlocking, this check is the first place to look; the log says when voice goes off and comes back.
 
+### R56. Clipboard history can hold a password
+
+It is off until you turn it on. While on, it skips secret-shaped text and anything marked as not for recording, but a password copied from an app that does not mark it stays in memory until the PC locks or Jarvis stops. Windows refuses clipboard access while the PC is locked, so reading the real marks has not been checked yet (only with fakes), nor which password managers actually mark their copies. "Forget what I copied" empties it.
+
+### R57. Focus sessions cannot silence Windows
+
+Windows offers no supported way to turn on Do Not Disturb, so other apps' pop-ups and sounds continue during a focus session. Only Jarvis's own reminders wait. Claude Code's notices still speak. The count of messages comes from the notifications Jarvis reads, so only apps on `notifications.apps`.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

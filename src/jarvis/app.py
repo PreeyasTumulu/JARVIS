@@ -17,6 +17,7 @@ from jarvis.llm.types import ChatModel
 from jarvis.services import Services, build_services
 from jarvis.storage.db import Database
 from jarvis.storage.repositories import AuditLog, HistoryLog, Preferences
+from jarvis.storage.retention import run_retention
 from jarvis.tools.catalog import build_registry
 from jarvis.tools.notifications.store import NotificationWatcher
 from jarvis.tools.policy import PolicyGate
@@ -40,7 +41,10 @@ class App:
 
     async def start_background(self, announce: Callable[[str], Awaitable[None]]) -> None:
         """Work that runs while chat, voice, or the web UI is open (not one-shot `ask`):
-        timers and reminders, and watching the notification center."""
+        timers and reminders, watching the notification center, and deleting old history."""
+        self.background.append(
+            asyncio.create_task(run_retention(self.db, self.settings.history), name="retention")
+        )
         scheduler = ReminderScheduler(self.services.reminders, self.bus, announce)
         self.background.append(asyncio.create_task(scheduler.run(), name="reminders"))
         settings = self.settings.notifications

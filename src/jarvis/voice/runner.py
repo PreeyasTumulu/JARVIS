@@ -109,6 +109,7 @@ def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> Voice
         vad=SileroVAD(settings.models_dir, cfg.wake_word) if wake_enabled else None,
         dictation=Inserter(settings.dictation) if settings.dictation.enabled else None,
         is_locked=session_locked,
+        on_locked=lambda locked: setattr(app.services, "quiet_speech", locked),
     )
 
 

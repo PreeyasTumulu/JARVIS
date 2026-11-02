@@ -19,7 +19,7 @@ from jarvis.tools.memory import forget, list_memories, remember
 from jarvis.tools.messaging.calls import call_contact, hang_up
 from jarvis.tools.messaging.tools import send_whatsapp
 from jarvis.tools.notifications.tools import read_notifications
-from jarvis.tools.recall import recall
+from jarvis.tools.recall import forget_history, recall
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.clipboard import clipboard_read, clipboard_write
 from jarvis.tools.system.controls import lock_screen, screenshot, set_brightness, set_volume
@@ -93,6 +93,7 @@ def build_registry() -> Registry:
             list_memories,
             forget,
             recall,
+            forget_history,
             briefing,
             speak,
             ask_user,

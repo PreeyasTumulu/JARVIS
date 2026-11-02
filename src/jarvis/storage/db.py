@@ -196,6 +196,9 @@ class Database:
         if str(path) != ":memory:":
             self.journal_mode = self._set_journal_mode()
         self.conn.execute("PRAGMA foreign_keys=ON")
+        self.conn.execute(
+            "PRAGMA secure_delete=ON"
+        )  # deleted text is overwritten, not just unlinked
         self.migrate()
         if self.recovered_from is not None:
             saved = salvage(self.recovered_from, self)

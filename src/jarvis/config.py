@@ -195,6 +195,13 @@ class NotificationsSettings(_Section):
     max_read: int = Field(default=5, ge=1, le=20)  # notifications read out at once
 
 
+class HistorySettings(_Section):
+    """How long past commands and the audit log are kept; 0 keeps them forever (ADR-075)."""
+
+    keep_days: float = Field(default=90, ge=0)  # commands, answers, their vectors, done reminders
+    audit_keep_days: float = Field(default=365, ge=0)
+
+
 class ServerSettings(_Section):
     port: int = Field(default=8765, ge=1024, le=65535)  # always on 127.0.0.1, never the network
     open_browser: bool = True
@@ -390,6 +397,7 @@ class Settings(_Section):
     calendar: CalendarSettings = CalendarSettings()
     mcp: McpSettings = McpSettings()
     briefing: BriefingSettings = BriefingSettings()
+    history: HistorySettings = HistorySettings()
     server: ServerSettings = ServerSettings()
     bridge: BridgeSettings = BridgeSettings()
     phone: PhoneSettings = PhoneSettings()

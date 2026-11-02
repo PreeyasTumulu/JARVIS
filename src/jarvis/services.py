@@ -48,6 +48,7 @@ class Services:
     meaning: MeaningIndex | None = None  # memories and past commands by meaning
     history: HistoryLog | None = None  # set by build_app when not given
     prefs: Preferences | None = None  # small settings Jarvis keeps (set by build_app)
+    quiet_speech: bool = False  # the PC is locked: nothing private is said aloud (ADR-076)
 
     async def aclose(self) -> None:
         await self.mcp.aclose()

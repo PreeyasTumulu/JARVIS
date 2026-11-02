@@ -36,7 +36,7 @@ from jarvis.services import Services
 from jarvis.storage.repositories import HistoryLog
 from jarvis.tools.base import ContextFlags, Sensitivity, ToolContext
 from jarvis.tools.mcp.tools import register_all
-from jarvis.tools.recall import relevant_memories
+from jarvis.tools.recall import FORGET_HISTORY, relevant_memories
 from jarvis.tools.registry import Registry
 from jarvis.voice.phrases import parse_yes
 
@@ -220,6 +220,9 @@ class Agent:
         if status is TurnStatus.OK and self._should_offer(outcomes):
             reply = f"{reply} {BRIEFING_OFFER}"
             self._offer_pending = True
+        forgot = any(o.call.name == FORGET_HISTORY and o.result.ok for o in outcomes)
+        if forgot:
+            del self._messages[:mark]  # what was deleted must not stay in the conversation
         self._trim_history()
 
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -234,7 +237,8 @@ class Agent:
             timings=stage_times,
             model=model,
         )
-        self._record_history(result, text, source)
+        if not forgot:  # "forget what I asked about my doctor" would keep the word "doctor"
+            self._record_history(result, text, source)
         await self._bus.publish(AssistantMessage(turn_id=turn_id, text=reply))
         await self._bus.publish(
             TurnFinished(turn_id=turn_id, status=status, latency_ms=latency_ms, timings=stage_times)

@@ -26,6 +26,11 @@ PAST_REQUEST = re.compile(
     r"|\bi asked (you )?(about|earlier|before)\b"
     r"|\b(earlier|before|previously) i asked\b|\bquestion (i asked|earlier|before)\b"
 )
+# Deleting past requests: only forget_history, or the words above would offer recall instead.
+FORGET_PAST = re.compile(
+    r"\b(forget|delete|clear|erase|wipe|remove)\b.*"
+    r"\b(history|commands?|requests?|what i (asked|said|told)|i asked|i said)\b"
+)
 
 
 @dataclass(frozen=True)
@@ -220,6 +225,9 @@ def select_tools(text: str, registry: Registry, meant: Sequence[str] = ()) -> li
     never as part of "everything", so a big server cannot crowd out the built-in tools.
     `meant` are groups semantic routing found when keywords found none."""
     lowered = text.casefold()
+    if FORGET_PAST.search(lowered):
+        wanted = {"forget_history", *ALWAYS}
+        return [tool for tool in registry if tool.name in wanted]
     if PAST_REQUEST.search(lowered):
         wanted = {"recall", "list_memories", *ALWAYS}
         return [tool for tool in registry if tool.name in wanted]

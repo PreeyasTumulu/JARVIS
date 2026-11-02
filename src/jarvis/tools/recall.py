@@ -11,13 +11,14 @@ The results are private, and untrusted: an old answer may quote a web page or a 
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
 from jarvis.core.meaning import MeaningUnavailable
 from jarvis.core.prompts import related_memories
 from jarvis.services import Services
-from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolError, ToolResult
+from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolError, ToolResult
 from jarvis.tools.registry import tool
 
 log = logging.getLogger(__name__)
@@ -26,6 +27,10 @@ MEMORY_MATCH = 0.51  # measured: unrelated requests scored up to 0.49, real matc
 MEMORY_MARGIN = 0.06
 HISTORY_MATCH = 0.5
 ANSWER_CHARS = 200
+EVER = ("", "ever", "all", "any time", "anytime", "all time")
+EVERYTHING = {"everything", "all", "all of it", "my history", "history", "all my history"}
+FILLER = {"i", "the", "a", "an", "about", "what", "did", "my", "me", "that", "of", "asked", "said"}
+FORGET_HISTORY = "forget_history"  # the agent also clears the conversation after this one
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
@@ -59,7 +64,7 @@ def past_range(when: str, now: datetime) -> tuple[datetime, datetime, str]:
     words = " ".join(when.casefold().split()).removeprefix("on ").removeprefix("last ")
     raw = " ".join(when.casefold().split())
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    if raw in ("", "ever", "all", "any time", "anytime", "all time"):
+    if raw in EVER:
         return datetime.min.replace(tzinfo=now.tzinfo), now, "ever"
     if raw == "today":
         return midnight, now, "today"
@@ -159,3 +164,59 @@ async def recall(ctx: ToolContext, about: str, when: str | None = None) -> ToolR
     if len(found) > 1:
         speech += f" And {len(found) - 1} more like it."
     return ToolResult.success(data={"range": label, "found": found}, speech=speech)
+
+
+@tool(risk=Risk.CONFIRM, sensitivity=Sensitivity.PRIVATE, timeout_s=30)
+async def forget_history(ctx: ToolContext, about: str = "", when: str | None = None) -> ToolResult:
+    """Delete past commands and Jarvis's answers from its history, for "forget what I asked about
+    my doctor", "delete yesterday's commands", or "clear my history". For a fact the user asked
+    you to remember, use forget instead.
+
+    Args:
+        about: Words from the commands to delete, for example "doctor", or "everything".
+        when: today, yesterday, this week, last week, this month, last month, a weekday, a
+            date as YYYY-MM-DD, or leave it out for any time.
+    """
+    match = re.fullmatch(r"id:([\d,]+)", about)
+    history = ctx.services.history
+    if match is None or history is None:
+        raise ToolError("Nothing was confirmed to delete.")
+    ids = [int(i) for i in match.group(1).split(",")]
+    history.forget(ids)
+    noun = "that command" if len(ids) == 1 else f"those {len(ids)} commands"
+    return ToolResult.success(data={"deleted": len(ids)}, speech=f"Okay, I've deleted {noun}.")
+
+
+@forget_history.preparer
+async def _prepare_forget_history(ctx: ToolContext, args: dict[str, Any]) -> Prepared:
+    """Words, not meaning: what gets deleted should be easy to predict, and the question that
+    asks first says how many and shows one."""
+    about = " ".join(str(args.get("about") or "").casefold().split())
+    when = str(args.get("when") or "")
+    if not about and not when.strip():
+        raise ToolError("Ask the user what to delete: which words, or from when.")
+    now = datetime.now().astimezone()
+    start, end, label = past_range(when, now)
+    if label == "ever" and " ".join(when.casefold().split()) not in EVER:
+        raise ToolError(f"I don't understand the time '{when}'. Try yesterday or last week.")
+    history = ctx.services.history
+    rows = history.between(start, end, include_stopped=True) if history else []
+    wanted = set(re.findall(r"\w+", about)) - FILLER
+    if about not in EVERYTHING and about:
+        if not wanted:
+            raise ToolError("Ask the user which words to look for.")
+        rows = [row for row in rows if wanted <= _words_of(row)]
+    if not rows:
+        raise ToolError("I found no past commands like that.")
+    latest = rows[-1]["input_text"]
+    noun = "1 past command" if len(rows) == 1 else f"{len(rows)} past commands"
+    return Prepared(
+        args={"about": "id:" + ",".join(str(row["id"]) for row in rows), "when": None},
+        summary=f'Delete {noun} ({label}), such as "{latest}"',
+        risk=Risk.CONFIRM,
+        reason="deleting them cannot be undone",
+    )
+
+
+def _words_of(row: dict[str, Any]) -> set[str]:
+    return set(re.findall(r"\w+", f"{row['input_text']} {row['response_text'] or ''}".casefold()))

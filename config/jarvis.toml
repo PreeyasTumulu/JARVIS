@@ -197,6 +197,11 @@ poll_s = 2                   # seconds between checks while Jarvis runs
 keep_days = 7                # notification text older than this is deleted
 max_read = 5                 # how many are read out at once
 
+[history]
+# Past commands, Jarvis's answers, and finished reminders older than this are deleted (ADR-075).
+keep_days = 90               # 0 keeps them forever
+audit_keep_days = 365        # the audit log; 0 keeps it forever
+
 [server]
 port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachable from the network)
 open_browser = true          # open the page when `jarvis serve` starts

@@ -44,6 +44,8 @@ ECHO_TAIL_S = 0.4  # ignore the wake word right after Jarvis stops speaking
 MIC_STALL_S = 3.0  # an open microphone that sends nothing this long has died; reopen it
 MIC_RETRY_S = 5.0  # wait between attempts while the microphone cannot be reopened
 LOCK_CHECK_S = 1.0  # how often to ask Windows whether the PC is locked
+LOCKED_NOTICE = "I have something for you. Unlock the PC to hear it."
+MAX_HELD = 10  # things waiting to be said after unlocking; the oldest go first
 PARTIAL_FIRST_S = 0.7  # how much speech to hold before the first live transcript
 PARTIAL_EVERY_S = 0.8  # then at most this often; a slow Whisper (the CPU) spaces itself out
 PARTIAL_BACKOFF = 3.0  # wait this many times what the last live transcript took
@@ -128,6 +130,7 @@ class VoiceSession:
         vad: VoiceActivity | None = None,
         dictation: Dictation | None = None,
         is_locked: Callable[[], bool] | None = None,
+        on_locked: Callable[[bool], None] | None = None,
     ) -> None:
         if (wake is None) != (vad is None):
             raise ValueError("Wake word mode needs both a wake word detector and a VAD")
@@ -146,6 +149,8 @@ class VoiceSession:
         self._is_locked = is_locked
         self._locked = False
         self._lock_check_failed = False
+        self._on_locked = on_locked
+        self._held: list[str] = []  # announcements kept for after unlocking (ADR-076)
         self._idle = asyncio.Event()
         self._idle.set()
         self._capture = Capture.NONE
@@ -184,7 +189,8 @@ class VoiceSession:
         await self._mic_changed(was_off, "microphone off")
 
     async def set_locked(self, locked: bool) -> None:
-        """Close the microphone while the PC is locked, whatever the tray says (ADR-074).
+        """Close the microphone while the PC is locked, whatever the tray says (ADR-074), and
+        say nothing private to whoever is in the room (ADR-076).
 
         A spoken yes approves things and Jarvis does not know whose voice it is, so a question
         still waiting counts as no.
@@ -194,9 +200,15 @@ class VoiceSession:
         was_off = self._mic_off
         self._locked = locked
         log.info("Voice input is %s", "off: the PC is locked" if locked else "back: PC unlocked")
+        if self._on_locked is not None:
+            self._on_locked(locked)
+        if locked:
+            await self._tts.stop()
         if locked and self._pending_answer is not None and not self._pending_answer.done():
             self._pending_answer.set_result("")
         await self._mic_changed(was_off, "PC locked")
+        if not locked and self._held:
+            self._spawn(self._say_held())
 
     @property
     def _mic_off(self) -> bool:
@@ -302,7 +314,19 @@ class VoiceSession:
         """Say something Jarvis brings up on its own (a reminder) without talking over anyone."""
         while self._state not in RESTING:
             await self._idle.wait()
+        if self._locked:
+            self._held = [*self._held, text][-MAX_HELD:]
+            await self._speak(LOCKED_NOTICE)
+            return
         await self._speak(text)
+
+    async def _say_held(self) -> None:
+        """Back from a lock: say what came up meanwhile, unless it was locked again."""
+        while self._held and not self._locked:
+            while self._state not in RESTING:
+                await self._idle.wait()
+            text, *self._held = self._held
+            await self._speak(text)
 
     async def ask_and_listen(self, prompt: str) -> str:
         """Speak a question and return the next thing the user says (used for confirmations).
@@ -600,7 +624,7 @@ class VoiceSession:
         if result.status is not TurnStatus.CANCELLED:
             first_action = result.timings.get("first_tool_ms", result.timings.get("turn_ms", 0))
             self.heard_to_action_ms.append(pre_turn_ms + first_action)
-            if result.text:
+            if result.text and not self._locked:  # the answer is still on the page
                 await self._speak(result.text)
         if self._state in (VoiceState.THINKING, VoiceState.SPEAKING):
             await self._set_state(self._rest_state)

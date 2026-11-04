@@ -905,3 +905,20 @@ Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each wou
 | 13 | Faster and smaller | built (above) |
 | 14 | Memory by meaning | built (above) |
 | 15 | Screen reading | built (above) |
+
+## Next: the November 2026 brief
+
+Planned on 2026-11-05 from your brief, in this order. Research comes before the core rewrite so the design can take what works elsewhere. Each phase is hand tested and logged in [HANDTESTS.md](HANDTESTS.md); anything only you can do goes on one list.
+
+| Phase | Name | What |
+|---|---|---|
+| 22 | Remove the page and overlay | Delete the HTML page, shader, and OpenGL overlay and their dependencies; the server stays as a JSON API; confirmations in the CLI and by voice (ADR-081) |
+| 23 | Research | Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, strong "JARVIS" repos: architecture, plugins, UI, what users like, what is weak; "what we take, what we do better" in RESEARCH.md |
+| 24 | Core on LangGraph and ChromaDB | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
+| 25 | Jarvis as an MCP server | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
+| 26 | Apps, files, and office | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
+| 27 | Music, developer tools, browser | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
+| 28 | Screen understanding and daily news | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
+| 29 | Phone calls | Research cost, Indian numbers, and legal limits first and bring them to you; then calls that open with a disclosure, after a confirm |
+| 30 | UI demos | Five or six standalone concepts in `ui-demos/` with listening, thinking, and speaking states, screenshots in the README |
+| 31 | Open-source readiness | Demo GIF, feature list, quickstart, `.env.example`, a check that no personal paths, servers, or contacts are committed |

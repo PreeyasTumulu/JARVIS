@@ -112,6 +112,14 @@ class ReminderDue:
     text: str  # what Jarvis says
 
 
+@dataclass(frozen=True)
+class Announcement:
+    """Something Jarvis says on its own, outside a command (the end of a focus session)."""
+
+    source: str
+    text: str
+
+
 Event = (
     TurnStarted
     | ModelReplied
@@ -126,6 +134,7 @@ Event = (
     | TranscriptPartial
     | VoiceLevel
     | ReminderDue
+    | Announcement
     | NotificationsArrived
 )
 Handler = Callable[[Event], Awaitable[None] | None]

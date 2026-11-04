@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from jarvis.config import Settings
 from jarvis.core.agent import Agent
 from jarvis.core.channel import UserChannel
-from jarvis.core.events import EventBus
+from jarvis.core.events import Announcement, EventBus
 from jarvis.core.executor import ToolExecutor
 from jarvis.llm.client import LLMClient
 from jarvis.llm.router import Router
@@ -44,14 +44,26 @@ class App:
     async def start_background(self, announce: Callable[[str], Awaitable[None]]) -> None:
         """Work that runs while chat, voice, or the web UI is open (not one-shot `ask`):
         timers and reminders, watching the notification center, and deleting old history."""
+        speaking = asyncio.Lock()
+
+        async def say(text: str) -> None:
+            # One at a time: a focus session's summary and the reminder it held fall due
+            # together, and neither speech engine queues on its own.
+            async with speaking:
+                await announce(text)
+
+        async def say_focus(text: str) -> None:
+            await self.bus.publish(Announcement(source="focus", text=text))
+            await say(text)
+
         self.background.append(
             asyncio.create_task(run_retention(self.db, self.settings.history), name="retention")
         )
-        scheduler = ReminderScheduler(self.services.reminders, self.bus, announce)
+        scheduler = ReminderScheduler(self.services.reminders, self.bus, say)
         self.background.append(asyncio.create_task(scheduler.run(), name="reminders"))
         if self.services.focus is not None:
             self.background.append(
-                asyncio.create_task(self.services.focus.run(announce), name="focus")
+                asyncio.create_task(self.services.focus.run(say_focus), name="focus")
             )
         if self.settings.clipboard.history:
             self.services.clipboard = ClipboardHistory(self.settings.clipboard)

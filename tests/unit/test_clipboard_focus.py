@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from jarvis.config import ClipboardSettings
+from jarvis.core.events import Announcement, ReminderDue
 from jarvis.core.fast_path import fast_call
 from jarvis.core.tool_routing import select_tools
 from jarvis.platform import clipboard as platform_clipboard
@@ -296,6 +297,46 @@ async def test_it_ends_itself_and_says_so(make_app: MakeApp) -> None:
     finally:
         runner.cancel()
         await asyncio.gather(runner, return_exceptions=True)
+
+
+async def test_the_end_is_shown_first_and_spoken_before_the_held_reminder(
+    make_app: MakeApp,
+) -> None:
+    h = make_app()
+    focus, clock = focus_with_clock(h)
+    shown: list[str] = []
+    h.app.bus.subscribe(
+        lambda e: (
+            shown.append(type(e).__name__) if isinstance(e, Announcement | ReminderDue) else None
+        )
+    )
+    speaking = 0
+    overlapped = False
+    said: list[str] = []
+
+    async def announce(text: str) -> None:
+        nonlocal speaking, overlapped
+        speaking += 1
+        overlapped = overlapped or speaking > 1
+        await asyncio.sleep(0.05)  # speech takes time; a second one must wait
+        said.append(text)
+        speaking -= 1
+
+    focus.start(25)
+    h.app.services.reminders.add("reminder", "stretch", clock.now + 60)
+    clock.now += 26 * 60
+    await h.app.start_background(announce)
+    try:
+        await until(lambda: len(said) == 2)
+        assert shown == ["Announcement", "ReminderDue"]
+        assert "focus session is over" in said[0]
+        assert "1 reminder waited" in said[0]
+        assert "stretch" in said[1]
+        assert not overlapped
+    finally:
+        for task in h.app.background:
+            task.cancel()
+        await asyncio.gather(*h.app.background, return_exceptions=True)
 
 
 async def test_a_restart_keeps_the_session_and_its_quiet(make_app: MakeApp) -> None:

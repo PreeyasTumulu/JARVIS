@@ -14,6 +14,7 @@ from rich.panel import Panel
 
 from jarvis.core.channel import ConfirmationRequest
 from jarvis.core.events import (
+    Announcement,
     AssistantMessage,
     Event,
     ModelReplied,
@@ -126,6 +127,8 @@ class ConsoleRenderer:
                 console.print(f"[bold green]jarvis[/bold green] > {escape(text)}")
             case ReminderDue(text=text):
                 console.print(f"\n[bold magenta]reminder[/bold magenta] > {escape(text)}")
+            case Announcement(text=text):
+                console.print(f"\n[bold green]jarvis[/bold green] > {escape(text)}")
             case TurnFinished(status=status, latency_ms=ms, timings=timings) if self._verbose:
                 detail = f" {timings}" if timings else ""
                 console.print(f"  [dim]turn {status} in {ms / 1000:.1f}s{detail}[/dim]")

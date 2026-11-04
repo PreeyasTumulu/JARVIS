@@ -85,7 +85,8 @@ def main() -> int:
         encoding="utf-8",
         errors="replace",
     )
-    assert proc.stdin is not None and proc.stdout is not None
+    assert proc.stdin is not None
+    assert proc.stdout is not None
     threading.Thread(target=_reader, args=(proc.stdout,), daemon=True).start()
     mark = 0
     try:

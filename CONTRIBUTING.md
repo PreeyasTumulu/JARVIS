@@ -25,6 +25,8 @@ uv run python scripts/check_dashes.py
 
 Optional, on a machine with Ollama: `uv run pytest tests/e2e -m llm` (the scripted scenarios against the real model) and `uv run python scripts/benchmark_tools.py` (tool-choice accuracy). Real-browser tests: `uv run pytest -m browser`.
 
+Hand tests (see [docs/HANDTESTS.md](docs/HANDTESTS.md)): `uv run python scripts/drive_chat.py steps.json <scratch folder>` runs a real `jarvis chat` from a list of steps, with its own data folder and a config copy in `<scratch folder>\cfg`, so your own history and contacts are never touched.
+
 ## Rules for changes
 
 - **Every tool** has a typed signature, a docstring the model reads, a risk floor, a sensitivity label (default private), and unit tests with mocks. Add it to `tools/catalog.py`, a routing group in `core/tool_routing.py`, and a scenario in `tests/e2e/scenarios.yaml`.

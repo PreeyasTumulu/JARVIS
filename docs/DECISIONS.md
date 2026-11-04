@@ -481,6 +481,24 @@ Yours, asked 2026-11-01, all as recommended.
 - **Why not Do Not Disturb:** Windows has no supported API to turn it on. The known way writes to an undocumented store and can break with any update, so it is not done (R57). Turn it on yourself from the notification panel if you want other apps quiet too.
 - **Not covered:** Claude Code's notices still speak during a session, because they are usually waiting on you.
 
+### ADR-079: The agent loop moves to LangGraph and memory moves to ChromaDB
+
+- **Decision (2026-11-05, your choice over the recommended "keep the current core"):** the agent loop becomes a LangGraph graph with the same steps ADR-003 already split it into (call model, gate, confirm, execute, respond), and memories and past commands move from SQLite vector rows to a ChromaDB persistent store in the data folder. Supersedes ADR-003. Embeddings still come from nomic-embed-text on Ollama and are handed to ChromaDB, so ChromaDB never downloads its own model and nothing leaves the laptop. SQLite keeps everything that is not a vector (audit, history text, preferences, contacts, reminders).
+- **Why:** both are what people expect to see in an agent project, LangGraph gives checkpointing and a graph that can be drawn, and ChromaDB gives metadata filters and a real index instead of a full scan.
+- **Cost:** a rewrite of tested code, heavier dependencies, and a one-time migration of the existing vectors. The policy gate, confirmation, and privacy guard stay outside the graph's control: they are nodes the graph must pass through, not prompts.
+
+### ADR-080: Screen understanding uses a local vision model
+
+- **Decision (2026-11-05, your choice, recommended):** "what's on my screen" takes a screenshot and sends it to a small vision model on Ollama. The screenshot never leaves the laptop. Windows OCR (Phase 15) stays as the fast path for reading text.
+- **Why:** screen content is private by the project rule, and only a local model keeps that rule.
+- **Cost:** a model download of about 3 GB and a few seconds per answer on a 4 GB GPU; it competes with Hermes for video memory, so one of them is unloaded while the other runs.
+
+### ADR-081: The web page and the overlay are removed; the server stays as an API
+
+- **Decision (2026-11-05, your choice, recommended):** the HTML page, its shader, and the OpenGL wake overlay are deleted, along with the dependencies only they used. The localhost server stays as a small JSON and WebSocket API for the Claude Code bridge and for the UI that will be rebuilt from `ui-demos/`. Confirmations are answered in the CLI and by voice until then. Supersedes ADR-070 to ADR-073.
+- **Why:** the UI will be redesigned from the demos, and the core should not carry a UI it is about to replace.
+- **Cost:** no visual feedback on wake until the new UI exists.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

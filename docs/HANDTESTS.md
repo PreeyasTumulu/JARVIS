@@ -29,4 +29,17 @@ Run on 2026-11-05 with `[clipboard] history = true`.
 | 20.4 (after fix) | same | same | due 2:29, nothing said until 2:30:11; then "Your focus session is over, after 2 minutes. 1 reminder waited." and then "Reminder: stretch." | pass |
 | 20.5 | press Ctrl+V into your own app after 20.3 | pastes "jarvis test alpha" | not run: pasting into one of your apps | needs you |
 
-**Fixed in 20.4:** the end of a focus session was only handed to the speech engine, so a text chat never showed it, and the reminder it had held fell due at the same moment and was spoken over it (neither SAPI nor Piper queues). The summary is now an `Announcement` event the console prints, and Jarvis's own announcements are spoken one at a time, the summary first. Test: `test_the_end_is_shown_first_and_spoken_before_the_held_reminder`.
+**Fixed in 20.4 (Phase 21 branch):** the end of a focus session was only handed to the speech engine, so a text chat never showed it, and the reminder it had held fell due at the same moment and was spoken over it (neither SAPI nor Piper queues). The summary is now an `Announcement` event the console prints, and Jarvis's own announcements are spoken one at a time, the summary first. Test: `test_the_end_is_shown_first_and_spoken_before_the_held_reminder`.
+
+## Phase 21: Speed and coverage
+
+Run on 2026-11-05.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 21.1 | "what's 10 + 10" | "20", no model call | `calculate(expression="10 + 10")`, "20", no model line, 0 ms | pass |
+| 21.2 | "what is 2 to the power of 16" | "65536", no model call | `calculate(expression="2 ** 16")`, "65536", no model line | pass |
+| 21.3 | "what's a 15 percent tip on 840 rupees" | the model uses `calculate` | one model call (3.3 s), `calculate(expression="15/100*840")`, "126" | pass |
+| 21.4 | "what's 5 divided by 0" | a clear refusal, no crash | `calculate` failed with "You can't divide by zero.", said as such | pass |
+| 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
+| 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |

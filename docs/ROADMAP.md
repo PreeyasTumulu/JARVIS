@@ -26,7 +26,8 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 17 | WhatsApp calls | On `main`, not tagged, waiting for your test | v1.7.0 |
 | 18 | New interface and wake overlay | On `main`, not tagged, waiting for your test | v1.8.0 |
 | 19 | Privacy: history expiry, forgetting, quiet when locked | Built on `phase/19-privacy` (from `main`), waiting for your test | v1.9.0 |
-| 20 | Clipboard history and focus sessions | Built on `phase/20-clipboard-focus` (stacked on Phase 19), waiting for your test | v1.10.0 |
+| 20 | Clipboard history and focus sessions | Built on `phase/20-clipboard-focus` (stacked on Phase 19), hand tested, two items need you | v1.10.0 |
+| 21 | Speed and coverage: arithmetic without the model | Built on `phase/21-speed-coverage` (stacked on Phase 20), hand tested | v1.11.0 |
 
 ## How each phase runs
 
@@ -871,6 +872,26 @@ Try it with a light window open, say a command that opens an app (it should rece
 **Not done, needs you:** both tests by hand. Everything here is tested with fakes; the PC was locked during the build, and Windows refuses clipboard access then, so the real clipboard has not been read.
 
 **Exit criteria:** nothing copied reaches the disk, a marked copy is never kept, and a reminder due during a focus session is heard after it.
+
+## Phase 21: Speed and coverage
+
+**Goal:** a plain sum is answered at once, without the model, and the tests cover more of the code.
+
+**Scope**
+
+- `calculate(expression)`: a safe evaluator over the syntax tree (numbers, + - * / % **, sqrt); nothing reaches `eval` (ADR-082).
+- The fast path turns "what's 10 + 10", "15 percent of 240", "2 to the power of 10", "the square root of 144" into a `calculate` call with no model; anything else in the sentence sends it to the model, which also gets `calculate` for wordy math ("a 15 percent tip on 840").
+- A bare JSON tool call from the model runs instead of being read aloud; `claude-hook` no longer loads the agent.
+- Coverage floor in CI raised from 75 to 78 percent (78 measured).
+
+**Measured:** "what's 10 + 10" answers "20" in 0 ms of tool time and no model call; a wordy tip question takes one model call (3.3 s) and gets "126". `jarvis chat` starts and quits in 2.5 s (0.66 s of it importing the CLI); startup is measured again after the LangGraph move (ADR-079) rather than tuned on the loop that is being replaced.
+
+**Test it**
+
+1. "what's 10 + 10": it says "20" and the log line shows no model.
+2. "what's a 15 percent tip on 840 rupees": one model call, `calculate`, "126".
+
+**Exit criteria:** plain sums never wait for the model, and the evaluator refuses anything that is not arithmetic.
 
 ## Beyond 1.0
 

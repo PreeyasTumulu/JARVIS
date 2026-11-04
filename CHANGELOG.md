@@ -7,6 +7,7 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 ## [Unreleased]
 
 ### Added
+- "What's 10 + 10" is answered at once without the model: `calculate`, a safe evaluator for sums, percentages, powers, and square roots (ADR-082).
 - Past commands, answers, and finished reminders are deleted after 90 days and the audit log after 365 (`[history]`); 0 keeps them forever (ADR-075).
 - Focus sessions: reminders wait, timers still ring, and the end says what you missed (ADR-078).
 - Clipboard history, off by default and in memory only: "what did I copy earlier", "the second last thing I copied" (ADR-077).
@@ -17,6 +18,8 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 - The microphone closes while the PC is locked: no wake word, push-to-talk, or dictation until you unlock it, and a question waiting for a spoken answer counts as no (ADR-074).
 
 ### Fixed
+- The end of a focus session was never shown in a text chat, and it was spoken over the reminder it had held. It is now printed, and Jarvis's own announcements are spoken one at a time.
+- A tool call the model wrote as bare JSON was read aloud instead of run.
 - A new confirmation card focused Confirm, so a stray Enter or Space could approve it. It now focuses Cancel.
 - After you said no, Jarvis could say "they said no", as if the other person had refused.
 - A cancelled tool showed "failed" on the page.

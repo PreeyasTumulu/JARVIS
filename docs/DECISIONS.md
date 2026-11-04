@@ -499,6 +499,12 @@ Yours, asked 2026-11-01, all as recommended.
 - **Why:** the UI will be redesigned from the demos, and the core should not carry a UI it is about to replace.
 - **Cost:** no visual feedback on wake until the new UI exists.
 
+### ADR-082: Plain sums skip the model
+
+- **Decision (2026-11-05):** a request that is only arithmetic ("what's 10 + 10", "15 percent of 240", "9 squared") is turned into an expression and answered by `calculate` on the fast path (ADR-056), with no model call. The evaluator walks the syntax tree and allows only numbers, the four operations, powers (exponent up to 1000), modulo, and square roots; results over 1e100 or complex ones are refused. The model gets the same tool for wordy math.
+- **Why:** an 8B model is slow at arithmetic and sometimes wrong; a sum should be instant and exact.
+- **Cost:** spoken math has many phrasings; one the parser does not know still goes to the model, which then calls `calculate`, so it is slower but still right.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

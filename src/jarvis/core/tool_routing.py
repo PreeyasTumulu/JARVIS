@@ -72,6 +72,13 @@ GROUPS: dict[str, Group] = {
             r"url|summari[sz]e|wiki\w*|browser)\b|https?://|\.(com|org|net|io|dev|in)\b"
         ),
     ),
+    "math": Group(
+        ("calculate",),
+        re.compile(
+            r"\b(calculate|compute|plus|minus|times|multiplied|divided|percent|percentage|"
+            r"square root|squared|cubed|sum of|tip on|average of)\b|\d\s*[-+*/x^%]\s*\d"
+        ),
+    ),
     "market": Group(
         ("market_data", "crypto_price", "convert_currency"),
         re.compile(

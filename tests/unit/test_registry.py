@@ -105,7 +105,7 @@ ALL_TOOLS = {
     "reply_email", "calendar_events",
     "remember", "list_memories", "forget", "recall", "briefing", "forget_history",
     "clipboard_history", "clipboard_restore", "clipboard_forget",
-    "focus_start", "focus_end", "focus_status",
+    "focus_start", "focus_end", "focus_status", "calculate",
     "speak", "ask_user",
 }  # fmt: skip
 

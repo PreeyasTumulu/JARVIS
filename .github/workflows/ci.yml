@@ -28,7 +28,7 @@ jobs:
         run: uv run mypy
 
       - name: Tests, the scripted e2e suite, and coverage
-        run: uv run pytest --cov=jarvis --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=75
+        run: uv run pytest --cov=jarvis --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=78
 
       - name: Upload the coverage report
         if: always()

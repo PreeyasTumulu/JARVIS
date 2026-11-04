@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+from jarvis.tools.system.arithmetic import spoken_math
 from jarvis.voice.phrases import normalize, strip_wake_word
 
 _MEDIA_NOUNS = ("", " the music", " music", " the song", " the video", " it", " playback")
@@ -106,4 +107,7 @@ def fast_call(text: str) -> tuple[str, str] | None:
         return "focus_start", "{}"
     if phrase in FOCUS_END:
         return "focus_end", "{}"
+    expression = spoken_math(text)  # the raw text: normalizing would drop + and *
+    if expression is not None:
+        return "calculate", json.dumps({"expression": expression})
     return None

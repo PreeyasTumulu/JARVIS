@@ -21,6 +21,7 @@ from jarvis.tools.messaging.tools import send_whatsapp
 from jarvis.tools.notifications.tools import read_notifications
 from jarvis.tools.recall import forget_history, recall
 from jarvis.tools.registry import Registry
+from jarvis.tools.system.arithmetic import calculate
 from jarvis.tools.system.clipboard import (
     clipboard_forget,
     clipboard_history,
@@ -81,6 +82,7 @@ def build_registry() -> Registry:
             focus_start,
             focus_end,
             focus_status,
+            calculate,
             set_timer,
             set_reminder,
             list_reminders,

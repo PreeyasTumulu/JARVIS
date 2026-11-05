@@ -298,9 +298,7 @@ def test_the_route_needs_the_token_and_refuses_browsers(make_app: MakeApp) -> No
     h = make_app()
     runtime = Runtime(h.app, WebHub())
     runtime.bridge, _ = service(reply_with("one"))
-    server = create_server(
-        runtime, token="page", port=8765, hosts=("testserver",), bridge_token="secret"
-    )
+    server = create_server(runtime, token="api", hosts=("testserver",), bridge_token="secret")
     body = {"kind": "question", "text": "Which framework?", "options": OPTIONS}
     with TestClient(server) as client:
         ok = client.post("/bridge", json=body, headers={"Authorization": "Bearer secret"})

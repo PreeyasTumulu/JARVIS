@@ -1,7 +1,7 @@
 """Start Jarvis at login: a shortcut in your Startup folder (no registry edits, ADR-047).
 
 The shortcut runs uv's windowless launcher, `uvw run --project <repo> ... pythonw -m jarvis serve
---tray --wake --no-browser`, so the environment is synced after a `git pull` and no console
+--tray --wake`, so the environment is synced after a `git pull` and no console
 window opens. Without uvw it falls back to the project's own pythonw.
 """
 
@@ -15,7 +15,7 @@ from jarvis.config import REPO_ROOT
 from jarvis.platform.known_folders import known_folder
 
 SHORTCUT = "Jarvis.lnk"
-SERVE_ARGS = "-m jarvis serve --tray --wake --no-browser"
+SERVE_ARGS = "-m jarvis serve --tray --wake"
 MINIMIZED = 7  # SW_SHOWMINNOACTIVE: nothing pops up at login
 
 

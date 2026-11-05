@@ -60,10 +60,13 @@ def build_parser() -> argparse.ArgumentParser:
         help='teach "hey jarvis" your voice (8 short recordings, about two minutes)',
     )
 
-    serve = sub.add_parser("serve", help="open the web UI (with voice, if installed)")
+    serve = sub.add_parser(
+        "serve", help="run Jarvis in the background: voice, reminders, the bridge, the local API"
+    )
     serve.add_argument("--port", type=int, help="port on 127.0.0.1 (default from config)")
-    serve.add_argument("--no-browser", action="store_true", help="do not open the browser")
-    serve.add_argument("--no-voice", action="store_true", help="web page only, no microphone")
+    # Kept so start-at-login shortcuts made before the page was removed still work (ADR-081).
+    serve.add_argument("--no-browser", action="store_true", help=argparse.SUPPRESS)
+    serve.add_argument("--no-voice", action="store_true", help="no microphone")
     serve.add_argument("--wake", action="store_true", help='also listen for "hey jarvis"')
     serve.add_argument("--model", help="use a different model for this session")
     serve.add_argument("--tray", action="store_true", help="show a tray icon (used at login)")
@@ -137,9 +140,6 @@ def build_parser() -> argparse.ArgumentParser:
     audit = sub.add_parser("audit", help="show recent tool calls from the audit log")
     audit.add_argument("--last", type=int, default=20, help="how many entries (default 20)")
 
-    overlay = sub.add_parser("overlay", help="the fullscreen effect when you say Hey Jarvis")
-    overlay.add_argument("action", choices=["demo"], help="demo: show it once, recording nothing")
-
     sub.add_parser("version", help="print the version")
     return parser
 
@@ -166,10 +166,6 @@ def main(argv: list[str] | None = None) -> int:
         return claude_hook(settings, args.action, console)
     log_file = setup_logging(settings.data_dir, verbose=args.verbose)
 
-    if args.command == "overlay":
-        from jarvis.overlay.demo import run_demo
-
-        return run_demo(settings, console)
     if args.command == "audit":
         return show_audit(settings, args.last, console)
     if args.command == "index":
@@ -197,7 +193,6 @@ def main(argv: list[str] | None = None) -> int:
             settings,
             console,
             port=args.port or settings.server.port,
-            open_browser=settings.server.open_browser and not args.no_browser,
             voice=not args.no_voice,
             wake=args.wake,
             verbose=args.verbose,

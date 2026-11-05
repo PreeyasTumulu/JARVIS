@@ -1,4 +1,4 @@
-"""Words and loudness while you speak: shown on the overlay and the page, never acted on."""
+"""Words and loudness while you speak: sent to local API clients, never acted on."""
 
 from __future__ import annotations
 

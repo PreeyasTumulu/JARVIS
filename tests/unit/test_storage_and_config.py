@@ -72,6 +72,19 @@ def test_unknown_keys_fail_loudly(tmp_path: Path) -> None:
         load_settings(folder, env_file=tmp_path / "none.env")
 
 
+def test_settings_of_the_removed_page_and_overlay_still_load(tmp_path: Path) -> None:
+    old = '[server]\nopen_browser = false\nport = 9000\n[overlay]\nmode = "edge"\n'
+    settings = load_settings(_config_dir(tmp_path, old), env_file=tmp_path / "none.env")
+    assert settings.server.port == 9000  # the rest of the section still counts
+    assert not hasattr(settings, "overlay")
+
+
+def test_a_typo_next_to_a_retired_key_still_fails(tmp_path: Path) -> None:
+    folder = _config_dir(tmp_path, "[server]\nopen_browser = true\nprot = 9000\n")
+    with pytest.raises(ConfigError, match="prot"):
+        load_settings(folder, env_file=tmp_path / "none.env")
+
+
 def test_missing_api_key_is_a_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("JARVIS_TEST_KEY", raising=False)
     provider = ProviderSettings(base_url="https://x", model="m", api_key_env="JARVIS_TEST_KEY")

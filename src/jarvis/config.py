@@ -6,6 +6,7 @@ Tables merge key by key, lists replace. Unknown keys are rejected so typos fail 
 
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from pathlib import Path
@@ -17,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from jarvis.tools.base import Risk, Sensitivity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+log = logging.getLogger(__name__)
 
 
 class ConfigError(Exception):
@@ -204,8 +206,7 @@ class HistorySettings(_Section):
 
 class ServerSettings(_Section):
     port: int = Field(default=8765, ge=1024, le=65535)  # always on 127.0.0.1, never the network
-    open_browser: bool = True
-    speak_replies: bool = False  # also say the answers to commands typed on the page
+    speak_replies: bool = False  # also say the answers to commands sent through the local API
 
 
 class BridgeSettings(_Section):
@@ -277,21 +278,7 @@ class VoiceSettings(_Section):
     max_utterance_s: float = Field(default=12, gt=1)
     no_speech_timeout_s: float = Field(default=5, gt=0.5)
     earcons: bool = True
-    live_transcript: bool = True  # transcribe while you speak, for the overlay and the page
-
-
-class OverlaySettings(_Section):
-    """The fullscreen effect when you say "Hey Jarvis" (ADR-070)."""
-
-    enabled: bool = True
-    # takeover: the whole screen while you speak, then an edge glow once Jarvis gets to work.
-    # edge: only the edge glow and the small panel.
-    mode: Literal["takeover", "edge"] = "takeover"
-    dim: float = Field(default=0.72, ge=0, le=0.9)  # how dark the desktop goes during a takeover
-    # Hidden from screenshots, screen shares, and Jarvis's own screen reading. Turn it on to
-    # record a demo.
-    show_in_captures: bool = False
-    max_visible_s: float = Field(default=240, gt=10)  # hide if Jarvis goes silent for this long
+    live_transcript: bool = True  # transcribe while you speak, sent to local API clients
 
 
 class McpServerSettings(_Section):
@@ -413,7 +400,6 @@ class Settings(_Section):
     calls: CallsSettings = CallsSettings()
     clipboard: ClipboardSettings = ClipboardSettings()
     tts: TTSSettings = TTSSettings()
-    overlay: OverlaySettings = OverlaySettings()
     voice: VoiceSettings = VoiceSettings()
     dictation: DictationSettings = DictationSettings()
     data_dir: Path = Field(default_factory=default_data_dir)
@@ -455,6 +441,27 @@ def _read_toml(path: Path, *, required: bool) -> dict[str, Any]:
         raise ConfigError(f"{path} is not valid TOML: {exc}") from exc
 
 
+# Settings that no longer exist. An old local.toml that still has them loads, with a note in the
+# log, instead of failing validation (every section forbids unknown keys).
+RETIRED: dict[str, tuple[str, ...] | None] = {
+    "overlay": None,  # the whole section: the wake overlay was removed (ADR-081)
+    "server": ("open_browser",),  # the page was removed (ADR-081)
+}
+
+
+def _drop_retired(data: dict[str, Any]) -> None:
+    for section, keys in RETIRED.items():
+        if section not in data:
+            continue
+        if keys is None:
+            del data[section]
+            log.info("Ignoring the retired [%s] section in the config", section)
+            continue
+        for key in keys:
+            if isinstance(data[section], dict) and data[section].pop(key, None) is not None:
+                log.info("Ignoring the retired setting %s.%s in the config", section, key)
+
+
 def load_settings(
     config_dir: Path | None = None,
     *,
@@ -471,6 +478,7 @@ def load_settings(
         data = deep_merge(data, _read_toml(config_dir / "local.toml", required=False))
     if overrides:
         data = deep_merge(data, overrides)
+    _drop_retired(data)
 
     try:
         return Settings.model_validate(data)

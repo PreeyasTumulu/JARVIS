@@ -147,7 +147,11 @@ uv run jarvis chat                              # timers and reminders sound whi
 - Brightness works only for the laptop's own screen. Screenshots go to `Pictures\Screenshots` (`[system] screenshot_folder`).
 - Reminders that came due while Jarvis was closed are announced as missed the next time it starts.
 
-## 5e. Web UI (Phase 5)
+## 5e. Running in the background (`jarvis serve`)
+
+The web page was removed in Phase 22 (ADR-081); a new UI will be built from `ui-demos/`. `jarvis serve` still runs voice, reminders, the Claude Code bridge, and a local API that the new UI will use. Type commands with `jarvis chat`.
+
+The rest of this section describes the old page and is kept for history.
 
 ```powershell
 uv run jarvis serve                 # opens the page; voice and hotkeys run too if installed
@@ -236,13 +240,13 @@ Without keys everything stays on the local model. Anything about your files, mes
 **Tray and login.**
 
 ```powershell
-uv run jarvis serve --tray --wake --no-browser   # try the tray by hand
+uv run jarvis serve --tray --wake   # try the tray by hand
 uv run jarvis startup enable                     # start like that at every login
 uv run jarvis startup                            # is it on?
 uv run jarvis startup disable
 ```
 
-The tray icon is blue when ready, red while listening, amber while thinking, green while speaking, and grey with the microphone off. Click it to open the page; right-click for Microphone, Stop, and Quit. At login Jarvis starts through uv's windowless launcher (`uvw`), so no console window opens; its log is in `%LOCALAPPDATA%\Jarvis\logs`.
+The tray icon is blue when ready, red while listening, amber while thinking, green while speaking, and grey with the microphone off. Right-click it for Microphone, Stop, and Quit. At login Jarvis starts through uv's windowless launcher (`uvw`), so no console window opens; its log is in `%LOCALAPPDATA%\Jarvis\logs`.
 
 ## 5i. Brave, the Claude Code bridge, your phone, and calls (Phase 9)
 
@@ -262,7 +266,7 @@ It prints the microphone level and the wake word score every half second; say "H
 **Claude Code asks you through Jarvis.** While `jarvis serve` runs (it starts at login), Claude Code's multiple-choice questions and permission prompts can be answered by voice or on the Jarvis page, and Jarvis says when Claude is waiting or finished.
 
 ```powershell
-uv run jarvis claude-hook test       # Jarvis asks a test question; answer by voice or on the page
+uv run jarvis claude-hook test       # Jarvis asks a test question; answer by voice
 uv run jarvis claude-hook install    # adds the hooks to ~/.claude/settings.json (a backup is kept)
 uv run jarvis claude-hook status
 uv run jarvis claude-hook uninstall
@@ -451,9 +455,9 @@ Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of
 
 None of this is inside the repository.
 
-## 8a. The wake overlay (Phase 18)
+## 8a. The wake overlay (Phase 18, removed in Phase 22)
 
-Nothing to install beyond `uv sync`: it uses your graphics driver. `uv run jarvis overlay demo` shows it. Settings are under `[overlay]` in `config/jarvis.toml`, and its log is `logs\overlay.log`.
+The overlay was removed with the page (ADR-081). An old `[overlay]` section or `[server] open_browser` in `config/local.toml` is ignored, so you do not have to delete them.
 
 ## 9. Troubleshooting
 

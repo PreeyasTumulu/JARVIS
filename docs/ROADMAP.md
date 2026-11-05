@@ -28,6 +28,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 19 | Privacy: history expiry, forgetting, quiet when locked | Built on `phase/19-privacy` (from `main`), waiting for your test | v1.9.0 |
 | 20 | Clipboard history and focus sessions | Built on `phase/20-clipboard-focus` (stacked on Phase 19), hand tested, two items need you | v1.10.0 |
 | 21 | Speed and coverage: arithmetic without the model | Built on `phase/21-speed-coverage` (stacked on Phase 20), hand tested | v1.11.0 |
+| 22 | Remove the page and overlay | Built on `phase/22-remove-ui` (stacked on Phase 21), hand tested | v1.12.0 |
 
 ## How each phase runs
 
@@ -893,6 +894,25 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** plain sums never wait for the model, and the evaluator refuses anything that is not arithmetic.
 
+## Phase 22: Remove the page and overlay
+
+**Goal:** the core carries no UI it is about to replace; voice and `jarvis chat` work as before, and the server is a local API the next UI can use (ADR-081).
+
+**Scope**
+
+- Deleted: the page (`server/static`), its shader, the OpenGL wake overlay (`jarvis/overlay`), `jarvis overlay demo`, the tray's Open Jarvis item, `[overlay]`, `[server] open_browser`, and the `glfw` and `moderngl` dependencies.
+- The server keeps `GET /health`, `POST /bridge`, and the WebSocket protocol; it refuses any request with an `Origin` header and needs the token from `bridge.json`.
+- Started from a terminal, `jarvis serve` also takes y or n there.
+- Old configs and start-at-login shortcuts keep working.
+- Found while testing and fixed: Jarvis crashed on its first Piper sentence when voice was off (R58).
+
+**Test it**
+
+1. `uv run jarvis chat`, then "what's 10 + 10".
+2. `uv run jarvis serve --no-voice`, then `curl http://127.0.0.1:8765/health`.
+
+**Exit criteria:** nothing of the page or overlay is left in the code, voice and chat behave as before, no website can reach the API, and Jarvis does not crash when it speaks.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -912,7 +932,7 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 
 | Phase | Name | What |
 |---|---|---|
-| 22 | Remove the page and overlay | Delete the HTML page, shader, and OpenGL overlay and their dependencies; the server stays as a JSON API; confirmations in the CLI and by voice (ADR-081) |
+| 22 | Remove the page and overlay (done) | Delete the HTML page, shader, and OpenGL overlay and their dependencies; the server stays as a JSON API; confirmations in the CLI and by voice (ADR-081) |
 | 23 | Research | Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, strong "JARVIS" repos: architecture, plugins, UI, what users like, what is weak; "what we take, what we do better" in RESEARCH.md |
 | 24 | Core on LangGraph and ChromaDB | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
 | 25 | Jarvis as an MCP server | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |

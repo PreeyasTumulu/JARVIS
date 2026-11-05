@@ -14,7 +14,7 @@ This document describes how Jarvis is put together and why. It is the reference 
 
 **Non-goals (for now)**
 
-- Multi-user or remote access. The web UI binds to `127.0.0.1` only.
+- Multi-user or remote access. The local API binds to `127.0.0.1` only.
 - Running as administrator. Jarvis runs as a normal user and cannot drive elevated windows. This is intentional.
 - Vision-first computer use. A vision fallback exists behind a feature flag, but structured automation is the main path.
 - A general-purpose shell tool. Jarvis uses specific adapters (VS Code, Docker, etc.) instead. See ADR-010.
@@ -29,7 +29,7 @@ flowchart LR
     WW --> STT[STT<br/>faster-whisper]
     PTT --> STT
     CLI[Text CLI]
-    WEB[Web UI<br/>FastAPI + WebSocket]
+    WEB[Local API<br/>FastAPI + WebSocket, no page]
     HOOK[Claude Code hooks]
   end
 
@@ -422,9 +422,9 @@ stateDiagram-v2
 
 `jarvis chat` is a rich terminal client on the same session API: it shows tool calls live, prompts y/n for confirmations, and Ctrl+C cancels the current turn (a second Ctrl+C quits).
 
-### 9.2 Web UI
+### 9.2 Local API (the page was removed in Phase 22)
 
-FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) and one WebSocket (`src/jarvis/server/`). `jarvis serve` runs it on the same event loop as the agent, voice, and reminders, so all of them share one conversation (ADR-035, ADR-036).
+There is no page (ADR-081). FastAPI serves `GET /health`, `POST /bridge`, and one WebSocket (`src/jarvis/server/`) for programs on this computer; the UI rebuilt from `ui-demos/` will be one of them. `jarvis serve` runs it on the same event loop as the agent, voice, and reminders, so all of them share one conversation (ADR-035, ADR-036). When `serve` is started from a terminal, confirmations can also be answered there.
 
 | Direction | Message | Purpose |
 |---|---|---|
@@ -441,26 +441,13 @@ FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) an
 | server to client | `audit {rows}`, `error {message}` | Audit view, errors |
 | server to client | `contacts {contacts, note, error, added}` | Contacts tab, after every change (to every tab) |
 
-**Local UI security.** Browsers do not apply CORS to WebSockets, so any website you visit could try to connect to `ws://127.0.0.1`. The server therefore binds to `127.0.0.1` only, checks the `Origin` header, and requires a random token generated at each launch (opened for you in the URL). It also rejects a foreign `Host` header (DNS rebinding) and sends a Content-Security-Policy that forbids other sites from framing the page, so nobody can overlay an invisible Confirm button. Everything the page shows is inserted as text, never as HTML, because replies can contain text from web pages.
+**Local API security.** Browsers do not apply CORS to WebSockets, so any website you visit could try to connect to `ws://127.0.0.1`. The server binds to `127.0.0.1` only, rejects a foreign `Host` header (DNS rebinding), and refuses every HTTP request and WebSocket that carries an `Origin` header. A browser always sends one and a page cannot remove it, so no website can reach the API; local programs do not send one. The WebSocket and the bridge also need the random token `jarvis serve` writes, with the port, to `%LOCALAPPDATA%\Jarvis\bridge.json` at each launch. When the new UI arrives as a page, it will get its own origin check again.
 
-The page (Phase 18, ADR-073) is an icon rail, the reactor with the voice state and your words as you speak, the conversation, and a side panel. `static/reactor.js` draws `static/reactor.glsl` on a fixed canvas that takes no clicks, and without WebGL 2 the page works the same with a plain ring.
-
-### 9.2a The wake overlay (Phase 18)
-
-```mermaid
-flowchart LR
-  BUS[Event bus] --> D[Director<br/>what to show]
-  D --> C[OverlayClient<br/>never blocks]
-  C -- JSON lines on a pipe --> W[python -m jarvis.overlay<br/>GLFW, moderngl]
-  W --> S[Scene: eased values]
-  S --> R[Renderer<br/>reactor.glsl, words as a texture]
-```
-
-The window has WS_EX_LAYERED and WS_EX_TRANSPARENT (clicks go through), WS_EX_NOACTIVATE and SW_SHOWNOACTIVATE (the focus stays put), WS_EX_TOOLWINDOW (not in Alt+Tab or `list_windows`), and WDA_EXCLUDEFROMCAPTURE (not in screenshots). `jarvis overlay demo` shows it once with no microphone or model. See ADR-070, ADR-071, and RISKS.md R53.
+The wake overlay (Phase 18) was removed along with the page.
 
 ### 9.3 Tray (Phase 8)
 
-`jarvis serve --tray` shows a pystray icon (its own thread) whose color and tooltip follow the voice state, with Open Jarvis (the page, with its token), Microphone (on or off), Stop, and Quit. Menu clicks are handed to the asyncio loop. `jarvis startup enable` starts `serve --tray --wake --no-browser` at login through uvw, with no console window (ADR-047).
+`jarvis serve --tray` shows a pystray icon (its own thread) whose color and tooltip follow the voice state, with Microphone (on or off), Stop, and Quit. Menu clicks are handed to the asyncio loop. `jarvis startup enable` starts `serve --tray --wake` at login (an older shortcut's `--no-browser` is still accepted) through uvw, with no console window (ADR-047).
 
 ### 9.4 The Claude Code bridge (Phase 9)
 
@@ -472,7 +459,7 @@ Claude Code runs `jarvis claude-hook` for three hook events (installed with `jar
 | `PermissionRequest` | "Claude in shop wants to run npm test. Allow it?" | `decision.behavior` allow or deny |
 | `Notification` (`idle_prompt`, `agent_completed`, `elicitation_dialog`) | says it | nothing |
 
-The hook posts to `http://127.0.0.1:<port>/bridge` with the bearer token from `%LOCALAPPDATA%\Jarvis\bridge.json`, which `jarvis serve` writes at start and removes at stop; a request with an `Origin` header (any browser) is refused. `BridgeService` (`bridge/service.py`) races its askers, voice and the page, and after `bridge.escalate_after_s` the phone (`bridge/phone.py`: ntfy or Twilio, off by default). An empty answer from one asker keeps the others waiting. Answers are matched by `bridge/answers.py` without any model: numbers ("two", "option two", "the second one"), names (exact, then fuzzy with a margin over the runner-up), "other: ..." for free text; a permission needs a clear yes or no. No decision within `bridge.answer_timeout_s` prints nothing, and Claude Code asks you itself.
+The hook posts to `http://127.0.0.1:<port>/bridge` with the bearer token from `%LOCALAPPDATA%\Jarvis\bridge.json`, which `jarvis serve` writes at start and removes at stop; a request with an `Origin` header (any browser) is refused. `BridgeService` (`bridge/service.py`) races its askers, voice and API clients, and after `bridge.escalate_after_s` the phone (`bridge/phone.py`: ntfy or Twilio, off by default). An empty answer from one asker keeps the others waiting. Answers are matched by `bridge/answers.py` without any model: numbers ("two", "option two", "the second one"), names (exact, then fuzzy with a margin over the runner-up), "other: ..." for free text; a permission needs a clear yes or no. No decision within `bridge.answer_timeout_s` prints nothing, and Claude Code asks you itself.
 
 ## 10. Storage
 
@@ -618,14 +605,11 @@ jarvis/
       dictation.py            dictation: text rules, typing or pasting into the focused app
       models.py, runner.py    model downloads; `jarvis voice` and `jarvis setup-voice`
       tts/                    TTS interface, Piper, SAPI, engine factory
-    overlay/                  the wake effect: director.py (what to show), client.py (the process and pipe),
-                              window.py (the window), scene.py (animation), renderer.py, card.py (words),
-                              demo.py
     storage/                  sqlite connection, migrations, repositories
     bridge/                   the Claude Code bridge: hook.py (the hook, install), service.py (asking),
                               answers.py (matching what you said), phone.py (ntfy, Twilio)
-    server/                   app.py (routes, security), hub.py (tabs, WebChannel), runtime.py
-                              (requests from tabs), serve.py (uvicorn, voice, reminders), static/
+    server/                   app.py (the local API and its checks), hub.py (clients, WebChannel),
+                              runtime.py (requests from clients), serve.py (uvicorn, voice, reminders)
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
                               COM thread, volume, display (brightness, lock, screenshot), clipboard,
                               UI Automation (uia.py), synthetic keys and clicks (sendinput.py),

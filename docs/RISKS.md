@@ -247,7 +247,7 @@ OCR reads what is visible, so a window must be in front (Jarvis brings it forwar
 - The names of the end call button are a best guess until a real call shows them. If "hang up" says there is no call, end it in the app.
 - "Hey Jarvis" keeps listening during a call, so Jarvis can hear the call and be woken by it. Pausing it needs a reliable way to see a call, which needs a real call first. For now, turn the microphone off from the tray during calls.
 
-### R53. The overlay is a window on top of everything
+### R53. The overlay is a window on top of everything (retired: removed in Phase 22)
 
 - Checked live with a test window and only its pixels: transparent, clicks pass through, the focus stays put, hidden from capture, first light 65 ms after the message, gone after hiding. Not checked: a real fullscreen game, a second monitor, a resolution change while it is running, and sleep and resume.
 - It covers the primary monitor only.
@@ -276,6 +276,10 @@ It is off until you turn it on. While on, it skips secret-shaped text and anythi
 ### R57. Focus sessions cannot silence Windows
 
 Windows offers no supported way to turn on Do Not Disturb, so other apps' pop-ups and sounds continue during a focus session. Only Jarvis's own reminders wait. Claude Code's notices still speak. The count of messages comes from the notifications Jarvis reads, so only apps on `notifications.apps`.
+
+### R58. Two copies of the C++ runtime in one process
+
+The winrt packages (notifications, OCR, media) ship their own `msvcp140.dll`. Windows keeps one module per DLL name in a process, so if that copy loads first, onnxruntime (Piper and the wake word) binds to it and the process dies with an access violation. It showed in Phase 22 as `jarvis serve --no-voice` closing on the first spoken answer; voice mode escaped only because the wake word loads onnxruntime before any winrt module. `import jarvis` now loads Windows' own copy from System32 first, and `tests/unit/test_dll_order.py` repeats the crash order in a fresh interpreter. A winrt or onnxruntime update could change this; the test is the check. A PC without the Visual C++ runtime falls back to the bundled copy and can still crash; installing the runtime fixes it.
 
 ### R11. Cancellation
 

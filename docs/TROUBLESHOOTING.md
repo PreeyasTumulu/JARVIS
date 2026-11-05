@@ -26,7 +26,7 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 
 ## Jarvis does not start at login
 
-`uv run jarvis startup` shows the shortcut. If the log shows nothing from the last login, start the shortcut by hand (`Win+R`, `shell:startup`, open `Jarvis.lnk`) and watch the log. A startup that never reaches the page writes every thread's stack to `logs\startup-hang.txt` after five minutes. Another Jarvis on the same port makes the second one exit (`Port 8765 is in use`).
+`uv run jarvis startup` shows the shortcut. If the log shows nothing from the last login, start the shortcut by hand (`Win+R`, `shell:startup`, open `Jarvis.lnk`) and watch the log. A startup that never gets to serving writes every thread's stack to `logs\startup-hang.txt` after five minutes. Another Jarvis on the same port makes the second one exit (`Port 8765 is in use`).
 
 ## The model
 
@@ -128,11 +128,9 @@ Start with the log: `%LOCALAPPDATA%\Jarvis\logs\jarvis.log`. A Jarvis started at
 | "The calendar link answered 404" | The secret address was reset; copy it again from Google Calendar settings. |
 | A new meeting is missing | Google refreshes the iCal feed on its own schedule, sometimes hours later (R44). |
 
-## The wake overlay
+## Jarvis closes by itself when it speaks
 
-- **See it without speaking:** `uv run jarvis overlay demo`.
-- **It does not appear:** look in `%LOCALAPPDATA%\Jarvis\logs\overlay.log`. "A fullscreen game or presentation is running" means it stayed out of the way on purpose. "could not start" means this computer has no OpenGL 3.3 with transparency; voice works without it.
-- **It is in the way:** `[overlay] mode = "edge"` or `enabled = false` in `config/local.toml`, or a lower `dim`.
+Fixed in Phase 22 (R58): the winrt packages ship an old `msvcp140.dll`, and once it was loaded, Piper's onnxruntime crashed the process with an access violation on the first spoken sentence. Jarvis now loads Windows' own copy first. If it comes back after a package update, run `uv run pytest tests/unit/test_dll_order.py` and see R58.
 - **It is missing from a recording:** that is on purpose. Set `show_in_captures = true` to record a demo.
 - **`uv sync` says it cannot remove `jarvis.exe`:** a Jarvis is running. Quit it first.
 - **The rings barely move, or stay at the top:** the level curve was tuned on synthetic speech (RISKS.md R54). Tell me what you see.

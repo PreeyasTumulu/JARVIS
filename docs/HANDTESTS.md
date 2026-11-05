@@ -43,3 +43,24 @@ Run on 2026-11-05.
 | 21.4 | "what's 5 divided by 0" | a clear refusal, no crash | `calculate` failed with "You can't divide by zero.", said as such | pass |
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
+
+## Phase 22: Remove the page and overlay
+
+Run on 2026-11-05 with `jarvis serve --no-voice --port 8799` on scratch data, driven by a small client.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 22.1 | read `bridge.json` | the port and a token | port 8799, a 32-character token | pass |
+| 22.2 | `GET /health` | 200 with name and version only | `{"name": "jarvis", "version": "1.11.0"}` | pass |
+| 22.3 | `GET /`, `/static/app.js`, `/docs` | 404: there is no page | 404, 404, 404 | pass |
+| 22.4 | `GET /health` with `Origin: https://evil.example` | 403 | 403 | pass |
+| 22.5 | `GET /health` with `Host: evil.example` | 400 | 400 | pass |
+| 22.6 | WebSocket with no token, a wrong token, and the right token from a web page | all refused | all three refused at the handshake | pass |
+| 22.7 | WebSocket with the token, then "what's 10 + 10" | hello, the events, "20" | `hello`; turn_started, tool_call_started, tool_call_finished, assistant_message, turn_finished; "20" (the first run added the morning briefing offer, which is right for the first command after 6 AM) | pass |
+| 22.8 | `serve` after 22.7, with `speak_replies = true` | still running, the answer spoken | first run: **the process died** (exit 139, access violation) while loading Piper for the spoken answer | **fail** |
+| 22.8 (after fix) | same | same | still answering `/health` 20 seconds later; the answer was spoken | pass |
+| 22.9 | `jarvis serve --no-browser` (an old login shortcut) | starts | starts and prints the new banner | pass |
+| 22.10 | `jarvis serve --help` | no browser flag, no overlay command | `--port`, `--no-voice`, `--wake`, `--model`, `--tray` only | pass |
+| 22.11 | `jarvis chat` confirmations | y or n in the terminal | covered by 19.2, unchanged code | pass |
+
+**Fixed in 22.8:** the winrt packages ship an old `msvcp140.dll`; loaded first, it made onnxruntime crash the process the first time Piper spoke. Not caused by this phase: voice mode never hit it only because the wake word loads onnxruntime first. `import jarvis` now loads Windows' own copy before anything else (R58), and `tests/unit/test_dll_order.py` fails without the fix.

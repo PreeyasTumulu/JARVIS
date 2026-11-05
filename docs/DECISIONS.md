@@ -498,6 +498,7 @@ Yours, asked 2026-11-01, all as recommended.
 - **Decision (2026-11-05, your choice, recommended):** the HTML page, its shader, and the OpenGL wake overlay are deleted, along with the dependencies only they used. The localhost server stays as a small JSON and WebSocket API for the Claude Code bridge and for the UI that will be rebuilt from `ui-demos/`. Confirmations are answered in the CLI and by voice until then. Supersedes ADR-070 to ADR-073.
 - **Why:** the UI will be redesigned from the demos, and the core should not carry a UI it is about to replace.
 - **Cost:** no visual feedback on wake until the new UI exists.
+- **Done in Phase 22:** with no page, the API refuses any request with an `Origin` header (every browser sends one), and the WebSocket token is published with the port in `bridge.json` for local clients. `glfw` and `moderngl` are gone. An old `[overlay]` section or `[server] open_browser` is ignored with a log line instead of failing the config. `--no-browser` stays as a hidden no-op so start-at-login shortcuts made before keep working.
 
 ### ADR-082: Plain sums skip the model
 

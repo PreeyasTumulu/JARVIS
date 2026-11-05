@@ -9,7 +9,7 @@ Jarvis can operate your computer, so its safety model is part of the product. It
 - After private and outside content are both in a conversation, any tool that sends data to an address the model picks asks first.
 - Private content (messages, notifications, files, clipboard, screen text, contacts, memory) never reaches a cloud model; the router raises before sending it.
 - Values shaped like secrets are hidden before the model or the audit log sees them.
-- The web UI listens on 127.0.0.1 only, checks the Host and Origin headers, needs a per-launch token, and cannot be framed. The Claude Code bridge needs a bearer token from your data folder and refuses any request from a browser.
+- The local API listens on 127.0.0.1 only, checks the Host header, refuses every request that carries an Origin header (so no website can reach it), and needs a per-launch token kept in your data folder. The Claude Code bridge needs a bearer token from your data folder and refuses any request from a browser.
 - Every tool call, including refused ones, is in the local audit log.
 
 ## Reporting a vulnerability

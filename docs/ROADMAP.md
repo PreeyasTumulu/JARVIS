@@ -29,6 +29,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 20 | Clipboard history and focus sessions | Built on `phase/20-clipboard-focus` (stacked on Phase 19), hand tested, two items need you | v1.10.0 |
 | 21 | Speed and coverage: arithmetic without the model | Built on `phase/21-speed-coverage` (stacked on Phase 20), hand tested | v1.11.0 |
 | 22 | Remove the page and overlay | Built on `phase/22-remove-ui` (stacked on Phase 21), hand tested | v1.12.0 |
+| 23 | Research: other assistants | On `phase/23-research` (stacked on Phase 22), docs only | v1.12.0 |
 
 ## How each phase runs
 
@@ -913,6 +914,14 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** nothing of the page or overlay is left in the code, voice and chat behave as before, no website can reach the API, and Jarvis does not crash when it speaks.
 
+## Phase 23: Research
+
+**Goal:** before the core is rebuilt, know how the strongest open-source assistants solve routing, tools, safety, memory, latency, and UI states, and what Jarvis should take or do differently.
+
+**Done:** [RESEARCH.md](RESEARCH.md) section 6 (a table per project, what we take with the phase it lands in, where Jarvis does better, licences) and the full report with about 120 sources in [research/open-source-assistants-2026.md](research/open-source-assistants-2026.md). Four claims the next phase builds on were checked by hand against their primary source. Findings that changed the plan: Phase 24 gains a tiered router pipeline, a `handled_by` field, a guard node, named graph states, tool interruption options, streaming TTS, and a per-stage latency breakdown; R59 records the small-model tool-call risk; Piper's GPL licence is confirmed in the installed package, which keeps ADR-006 (optional, never bundled) binding on the Phase 31 installer.
+
+**Exit criteria:** every project in the brief is covered with sources, and each "take" item names the phase that builds it.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -933,8 +942,8 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 | Phase | Name | What |
 |---|---|---|
 | 22 | Remove the page and overlay (done) | Delete the HTML page, shader, and OpenGL overlay and their dependencies; the server stays as a JSON API; confirmations in the CLI and by voice (ADR-081) |
-| 23 | Research | Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, strong "JARVIS" repos: architecture, plugins, UI, what users like, what is weak; "what we take, what we do better" in RESEARCH.md |
-| 24 | Core on LangGraph and ChromaDB | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
+| 23 | Research (done) | Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, strong "JARVIS" repos: architecture, plugins, UI, what users like, what is weak; "what we take, what we do better" in RESEARCH.md |
+| 24 | Core on LangGraph and ChromaDB | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; from Phase 23: a tiered router pipeline with `handled_by` on every turn, a guard node (schema check, one repair, no duplicate calls, a step cap), named graph states mapped to UI states, tool options `cancel_on_interruption` and `timeout_secs`, sentence-streamed Piper, a per-stage latency breakdown, a test that every tool entry point meets the gate; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
 | 25 | Jarvis as an MCP server | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
 | 26 | Apps, files, and office | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
 | 27 | Music, developer tools, browser | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |

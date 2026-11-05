@@ -6,6 +6,9 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 
 ## [Unreleased]
 
+### Documentation
+- Research on Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, and the strongest JARVIS-style repos, with what Jarvis takes and where it does better (RESEARCH.md section 6). Piper's GPL licence confirmed, so the installer must keep it optional (ADR-006).
+
 ### Removed
 - The web page, its shader, and the wake overlay, with `jarvis overlay`, the tray's Open Jarvis item, `[overlay]`, `[server] open_browser`, `glfw`, and `moderngl` (ADR-081). A new UI will be built from `ui-demos/`. Old configs and login shortcuts still work.
 

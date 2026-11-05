@@ -117,7 +117,7 @@ What is not covered: an injected instruction can still trigger `safe` actions th
 
 ### R8. Audio
 
-- No acoustic echo cancellation is planned, so Jarvis's own voice can trigger the wake word. Wake word detection pauses while it speaks. Barge-in uses the push-to-talk hotkey.
+- No acoustic echo cancellation is planned, so Jarvis's own voice can trigger the wake word. Wake word detection pauses while it speaks. Barge-in uses the push-to-talk hotkey. Phase 23 found that neither Pipecat nor LiveKit documents echo cancellation for laptop speakers either, so voice barge-in stays an open problem across the field, not only here.
 - Whisper `small.en` handles Indian English well in general, but names of people and Indian companies may be misheard. Contact and ticker aliases help, and a multilingual model is a config option.
 - Phase 2 was verified with synthesized speech (Windows SAPI voice) through the real models, not with a person talking into the laptop's microphone. Real-room accuracy, wake word false triggers, and the 0.8 s end-of-speech pause need your testing and probably some tuning (`wake_threshold`, `vad_threshold`, `end_silence_ms`).
 - On this laptop the Windows default input is AudioRelay's virtual microphone, which is silent unless the phone app streams to it, and the ASUS noise-cancelling input was also silent during setup. `config/local.toml` points Jarvis at the Realtek array. Jarvis checks the level at startup and warns about a silent device.
@@ -280,6 +280,10 @@ Windows offers no supported way to turn on Do Not Disturb, so other apps' pop-up
 ### R58. Two copies of the C++ runtime in one process
 
 The winrt packages (notifications, OCR, media) ship their own `msvcp140.dll`. Windows keeps one module per DLL name in a process, so if that copy loads first, onnxruntime (Piper and the wake word) binds to it and the process dies with an access violation. It showed in Phase 22 as `jarvis serve --no-voice` closing on the first spoken answer; voice mode escaped only because the wake word loads onnxruntime before any winrt module. `import jarvis` now loads Windows' own copy from System32 first, and `tests/unit/test_dll_order.py` repeats the crash order in a fresh interpreter. A winrt or onnxruntime update could change this; the test is the check. A PC without the Visual C++ runtime falls back to the bundled copy and can still crash; installing the runtime fixes it.
+
+### R59. Small models and tool calls
+
+Hermes 3 8B sits below every size the field recommends for tool calling: Open WebUI's docs say models under about 30B often produce malformed tool-call JSON, and Home Assistant users report small local models switching the wrong device (research/open-source-assistants-2026.md). Jarvis narrows the tools per turn and answers obvious commands without a model, and Phase 24 adds a guard node that checks arguments, tries one repair, and counts failures per tool, so the cost becomes a measured number instead of a guess.
 
 ### R11. Cancellation
 

@@ -345,6 +345,10 @@ An alert by ntfy goes through ntfy.sh (or your own server) over the internet, an
 
 The demos are simulations: their timings and levels are scripted, so a real turn may feel different, for example a longer think on a cold model. Browsers treat microphone access on pages opened from disk differently: Edge and Chrome ask, and others may refuse. Serving the folder with `python -m http.server` on 127.0.0.1 gives a page the browser trusts. The real UI cannot connect to `jarvis serve` from a browser page until the local API gets a safe way to accept one (ADR-081 refuses every Origin today). The blurs and the 240-star canvas cost some GPU while a page is open. Each page stops moving when Windows has animations turned off.
 
+### R75. The chat window in your browser
+
+The window is your own Brave (or Edge) profile in app mode, so that profile's extensions run there too. An extension allowed on all sites can read the page, its token, and your conversation. A program running as you can fetch the page and read the token, as it can read bridge.json; the token opens only the chat socket, which can type commands but cannot skip a confirmation. An open window reconnects every 2 s while Jarvis is down, with the token kept across restarts. If `ui_token` is deleted, reload the window. The mic button is push-to-talk on Jarvis's own microphone, not the browser's, so the browser never asks for the microphone; with `jarvis serve --no-voice` it is greyed out.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

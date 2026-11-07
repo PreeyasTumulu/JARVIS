@@ -7,6 +7,7 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 ## [Unreleased]
 
 ### Added
+- The chat window is live: `jarvis serve` serves it, and `jarvis ui`, the tray's "Open Jarvis", or saying "open Jarvis" opens it in Brave's app mode. It shows typed and spoken turns, confirmations, questions, Stop, push-to-talk, and the last 20 turns. Only that page may use the socket (ADR-103).
 - Open-source readiness: a demo GIF from the chat interface at the top of the README, a quickstart that starts with the offline demo pages, and a CI check that the repository holds no personal data (`scripts/check_personal.py`, ADR-102).
 
 ### Changed

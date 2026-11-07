@@ -152,7 +152,7 @@ uv run jarvis chat                              # timers and reminders sound whi
 
 ## 5e. Running in the background (`jarvis serve`)
 
-The web page was removed in Phase 22 (ADR-081); a new UI will be built from `ui-demos/`. `jarvis serve` still runs voice, reminders, the Claude Code bridge, and a local API that the new UI will use. Type commands with `jarvis chat`.
+`jarvis serve` runs voice, reminders, the Claude Code bridge, the local API, and the chat window (Phase 32, ADR-103). Open the window with `uv run jarvis ui`, "Open Jarvis" in the tray (or a double click on the icon), or by saying "open Jarvis". It opens in your default browser's app mode, which is Brave here. The old page was removed in Phase 22. Type commands with `jarvis chat`.
 
 The rest of this section describes the old page and is kept for history.
 

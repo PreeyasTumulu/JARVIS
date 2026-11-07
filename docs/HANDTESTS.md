@@ -44,6 +44,24 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 32: The chat window, live
+
+Run on 2026-11-07 with a real `jarvis serve --no-voice` on a scratch data folder and config, in the browser pane.
+
+| # | Check | Expected | Actual | Result |
+|---|---|---|---|---|
+| 32.1 | open `http://localhost:8799/` | the page connects | "Connected to Jarvis on this computer", mic greyed out (voice off) | pass |
+| 32.2 | type "what is 15 times 12" | the answer | "180" | pass |
+| 32.3 | type "open paint", answer No | a card from the gate, nothing opens | "Open Paint? (Paint is not in the app allowlist)", then "You said no." and "Okay, I won't." | pass |
+| 32.4 | reload | the turns come back | all four messages back | pass |
+| 32.5 | "what is the capital of France" (Hermes) | the states in order, a reply | thinking, tool, thinking, speaking, idle in 13 s; "The capital of France is Paris." | pass |
+| 32.6 | a long request, then Stop | stopped once, back to idle | "Stopped." twice and then the error state | **fail**, fixed: once, then idle |
+| 32.7 | stop serve, start it again | the window says it is down, then the same token works | the down note shown; the page token matched the saved one after the restart | pass |
+| 32.8 | `/` with `Sec-Fetch-Site: cross-site`; a foreign Host | refused | 403; 400 | pass |
+| 32.9 | the window command | Brave in app mode | `brave.exe --app=http://127.0.0.1:8765/ --window-size=480,800` (not launched) | pass |
+
+**Needs your hands:** `uv run jarvis serve --tray`, then `jarvis ui` for the real window, the mic button with voice on, and "open Jarvis" by voice.
+
 ## Phase 31: Open-source readiness
 
 Run on 2026-11-07.

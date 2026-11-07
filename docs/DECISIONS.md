@@ -657,6 +657,23 @@ Yours, asked 2026-11-01, all as recommended.
 - **Why:** the repo is about to be shared, and live tests on a real laptop print real details. A check in CI catches the next one before it is pushed. Merging and tagging are yours, because hands-on items are still open.
 - **Cost:** the check only knows patterns. A name, a device or a town can still slip through, so CONTRIBUTING.md asks for made-up values. The GIF shows the demo page, not a real Jarvis turn.
 
+### ADR-103: The chat window, served by jarvis serve and shown as a Brave app
+
+- **Decision (2026-11-07, as recommended):** the chat interface from ADR-101 becomes the real interface.
+  - **Serving:** `jarvis serve` serves it at `http://127.0.0.1:<port>/`. The page is `src/jarvis/server/ui/chat.html`, the same file as `ui-demos/chat.html`, copied by `scripts/build_ui_demos.py` and checked by a test. With the meta tag the server adds, the page goes live; opened from disk, it is still the demo.
+  - **The window:** your default browser in app mode (`--app=`). That is Brave here, with Edge or Chrome as the fallback: its own window, no tabs or address bar, and no new software.
+  - **Opening it:** only when you ask: `jarvis ui`, "Open Jarvis" in the tray (also a double click on the icon), or saying "open Jarvis", which is an exact phrase for the new `open_chat` tool.
+  - **The glow:** stays inside the window.
+  - **History:** the last 20 turns appear when the window opens. New chat clears the view, not the history.
+  - **What it does:** typed commands, the mic button as push-to-talk on Jarvis's own microphone, Stop, and confirmation cards answered with Yes and No. Questions come as cards with their options, or are answered by typing. Your spoken words appear as they are heard, replies appear word by word, and reminders and announcements show too. The state shown comes from both the voice and the agent events, the most pressing first: a waiting yes, listening, speaking, a tool, thinking, then an error.
+- **Security** (this changes one rule of ADR-081):
+  - **The one browser allowed:** the WebSocket now accepts a browser, but only with an Origin of exactly this page (`http://127.0.0.1:<port>` or `http://localhost:<port>`) plus the UI token.
+  - **The UI token** is a separate one, kept in the data folder so an open window survives a restart. It never opens `/bridge`, `/mcp/`, or the programs' socket, and the programs' token is never accepted from a browser.
+  - **The page itself:** it refuses framing (`frame-ancestors 'none'`, `X-Frame-Options: DENY`) and any request marked cross-site or same-site. A per-request nonce lets only its own two scripts run under a strict Content-Security-Policy, which allows only this computer's socket.
+  - **What stays:** the Host check and the refusal of every other HTTP request that carries an Origin.
+- **Why:** you approved the look, and asked for it to work for real. Serving the page from Jarvis itself keeps one origin that websites cannot read, frame, or imitate.
+- **Cost:** any program running as you can read the page and its token, as it can already read bridge.json. Browser extensions in your Brave profile run in the app window too (R75).
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

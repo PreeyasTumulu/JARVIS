@@ -29,9 +29,9 @@ Each `phase/<n>-<name>` branch starts from the one before it, so the last one co
 
 Older versions (0.4.0 to 1.7.0) stay as entries in the changelog; tagging them afterwards is optional, on the last commit of each phase branch.
 
-## The next release: v1.21.0 (prepared 2026-11-07)
+## The next release: v1.22.0 (prepared 2026-11-07)
 
-`phase/31-open-source` holds Phases 19 to 31 (stacked on `main`, which has 0 to 18). CI is green on it. Before merging, do the hands-on items you want covered. These are every item still open, in one list:
+`phase/32-chat-ui` holds Phases 19 to 32 (stacked on `main`, which has 0 to 18). CI is green on it. Before merging, do the hands-on items you want covered. These are every item still open, in one list:
 
 | Phase | Item |
 |---|---|
@@ -44,6 +44,7 @@ Older versions (0.4.0 to 1.7.0) stay as entries in the changelog; tagging them a
 | 28 | "What's on my screen" on your real screen, by voice |
 | 29 | Pair the phone in KDE Connect, then "find my phone", "send the clipboard to my phone", and a phone reminder; optionally an ntfy topic |
 | 30 | `ui-demos`: "Use my microphone" with your own microphone; `/review-animations` on `chat.html` if you want that report |
+| 32 | `jarvis serve --tray`, then `jarvis ui`: the real window, the mic button with voice on, and "open Jarvis" by voice |
 
 Then:
 
@@ -52,15 +53,15 @@ uv run pytest
 uv run python scripts/check_personal.py
 git checkout main
 git pull
-git merge --no-ff phase/31-open-source -m "Merge phases 19 to 31"
+git merge --no-ff phase/32-chat-ui -m "Merge phases 19 to 32"
 git push
 ```
 
-Move the `[Unreleased]` section of CHANGELOG.md under `## [1.21.0] - <date>` and add its compare link, commit, and then:
+Move the `[Unreleased]` section of CHANGELOG.md under `## [1.22.0] - <date>` and add its compare link, commit, and then:
 
 ```powershell
-git tag -a v1.21.0 -m "Jarvis 1.21.0"
-git push origin v1.21.0
+git tag -a v1.22.0 -m "Jarvis 1.22.0"
+git push origin v1.22.0
 ```
 
 Create the GitHub release from the tag, with that CHANGELOG section as the notes and `docs/demo.gif` at the top.

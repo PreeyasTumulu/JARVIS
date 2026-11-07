@@ -11,7 +11,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 31 (v1.21.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22; the new chat interface is designed in `ui-demos/` (the GIF above) and not wired to Jarvis yet, so for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 32 (v1.22.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The chat window in the GIF above is the real interface: `jarvis ui` opens it, and it shows your typed and spoken turns live. `jarvis chat` still works in a terminal. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -99,6 +99,7 @@ git clone https://github.com/PreeyasTumulu/JARVIS.git
 cd JARVIS
 powershell -ExecutionPolicy Bypass -File .\install.ps1     # checks, installs, downloads; -DryRun to only look
 uv run jarvis serve --wake
+uv run jarvis ui                 # the chat window
 ```
 
 The installer asks before installing uv or Ollama with winget, uses the GPU for speech recognition when it finds an NVIDIA card, and never overwrites your `config/local.toml` or `.env`. The manual steps are in [SETUP.md](docs/SETUP.md).
@@ -114,7 +115,7 @@ Copy `.env.example` to `.env` only for the services you want (all optional: a fr
 | Cloud (optional, public questions only) | Groq gpt-oss-120b, then OpenRouter's free Nemotron, both free tiers |
 | Voice | openWakeWord ("hey jarvis"), Silero VAD, faster-whisper on the GPU, Piper or Windows SAPI |
 | Automation | Windows UI Automation (comtypes), SendInput, Playwright driving your default browser (Brave, Chrome, or Edge) |
-| Interface | a rich CLI, a pystray tray icon, a local FastAPI and WebSocket API; the chat interface designed as standalone pages in `ui-demos/` |
+| Interface | the chat window (served by Jarvis, shown in Brave's app mode), a rich CLI, a pystray tray icon, and a local FastAPI and WebSocket API |
 | Storage | SQLite (local audit log, history, contacts, memories) |
 
 ## Quality

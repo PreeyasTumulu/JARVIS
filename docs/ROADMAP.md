@@ -38,6 +38,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 29 | Your phone, for free | Built on `phase/29-phone-bridge` (stacked on Phase 28), hand tested on this laptop; pairing the phone needs you | v1.18.0 |
 | 30 | UI demos, then the chosen chat | Built on `phase/30-ui-demos` (stacked on Phase 29), checked in the browser; the real microphone needs you | v1.20.0 |
 | 31 | Open-source readiness | Built on `phase/31-open-source` (stacked on Phase 30); the release is prepared for you to merge and tag | v1.21.0 |
+| 32 | The chat window, live | Built on `phase/32-chat-ui` (stacked on Phase 31), hand tested with a real serve on scratch data; voice in the window needs you | v1.22.0 |
 
 ## How each phase runs
 
@@ -1113,6 +1114,38 @@ It was checked in all seven states, light and dark, at 1000 by 680 and 390 by 84
 **Measured (2026-11-07):** the first scan found 5 hits in the tracked files after the clean-up of the phone model and address (3 in the check's own patterns, an SSH test target, a made-up number), and all were resolved. The GIF has 172 frames at 648 by 403, 1.4 MB.
 
 **Exit criteria:** `check_personal.py` passes in CI, the README shows the demo, and nothing is merged or tagged without you.
+
+## Phase 32: The chat window, live
+
+**Goal:** the approved chat interface works with the real Jarvis (ADR-103).
+
+**Scope**
+
+- `GET /` serves `server/ui/chat.html` (kept identical to `ui-demos/chat.html`) with the UI token and a per-request script nonce. The WebSocket accepts that page's exact Origin with the UI token, and nothing else from a browser.
+- The page's live mode, from the existing events:
+  - typed commands, Stop, and push-to-talk;
+  - confirmation and question cards;
+  - live transcripts and replies word by word;
+  - reminders;
+  - history on open;
+  - a reconnecting status line.
+- `jarvis ui`, "Open Jarvis" in the tray, and the `open_chat` tool with exact phrases ("open Jarvis", "show the chat").
+
+**Test it**
+
+1. `uv run jarvis serve --tray`, then `uv run jarvis ui`.
+2. Type "what is 15 times 12", then "open paint" and answer No, then something long and press Stop.
+3. With voice on, press the mic button, speak, and press it again.
+
+**Measured (2026-11-07):** on a scratch data folder with voice off:
+- **A sum:** answered "180".
+- **"open paint":** the real gate's card, "Open Paint? (Paint is not in the app allowlist)". No settled it to "You said no." and "Okay, I won't.", and nothing opened.
+- **A model turn:** went thinking, tool, thinking, speaking, then "The capital of France is Paris." in about 13 s.
+- **Stop:** cancelled the turn. The first try printed "Stopped." twice and then showed the error state; both were fixed.
+- **A reload and a restart:** the reload brought the history back, and the token survived the restart.
+- **Refusals:** a cross-site fetch got 403, and a foreign Host got 400.
+
+**Exit criteria:** no website can open the socket or read the page, and everything the terminal can do with a turn, the window can too.
 
 ## Beyond 1.0
 

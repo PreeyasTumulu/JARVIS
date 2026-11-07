@@ -376,6 +376,7 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
 | `call_contact(contact)` | 9, 17 | confirm (floor); calls a saved contact by the WhatsApp app, or Phone Link if set | private |
 | `hang_up()` | 17 | safe; presses WhatsApp's end call button | private |
+| `open_chat()` | 32 | safe; opens the chat window when `jarvis serve` runs | public |
 | `ring_phone()` | 29 | safe; your own phone by KDE Connect, an urgent ntfy push when it is away | public |
 | `notify_phone(message, title?)` | 29 | safe, egress; the way is pinned when prepared; confirm when the push would go over the internet with private data in the conversation | public |
 | `send_to_phone(item?, text?)` | 29 | confirm (floor); a file through the file guard, a link, the clipboard, a screenshot, or text, over the Wi-Fi only | private |
@@ -518,9 +519,9 @@ stateDiagram-v2
 
 `jarvis chat` is a rich terminal client on the same session API: it shows tool calls live, prompts y/n for confirmations, and Ctrl+C cancels the current turn (a second Ctrl+C quits).
 
-### 9.2 Local API (the page was removed in Phase 22)
+### 9.2 Local API and the chat window
 
-There is no page (ADR-081). FastAPI serves `GET /health`, `POST /bridge`, and one WebSocket (`src/jarvis/server/`) for programs on this computer; the UI rebuilt from `ui-demos/` will be one of them. `jarvis serve` runs it on the same event loop as the agent, voice, and reminders, so all of them share one conversation (ADR-035, ADR-036). When `serve` is started from a terminal, confirmations can also be answered there.
+FastAPI serves `GET /health`, `POST /bridge`, one WebSocket (`src/jarvis/server/`) for programs on this computer, and since Phase 32 `GET /`, the chat window (ADR-103, `server/ui.py`): the page from `ui-demos/chat.html`, shown by `jarvis ui`, the tray, or "open Jarvis" in Brave's app mode. The WebSocket accepts that page and no other browser. `jarvis serve` runs it on the same event loop as the agent, voice, and reminders, so all of them share one conversation (ADR-035, ADR-036). When `serve` is started from a terminal, confirmations can also be answered there.
 
 | Direction | Message | Purpose |
 |---|---|---|
@@ -746,7 +747,8 @@ jarvis/
                               answers.py (matching what you said), phone.py (ntfy, Twilio)
     server/                   app.py (the local API and its checks), hub.py (clients, WebChannel),
                               runtime.py (requests from clients), serve.py (uvicorn, voice, reminders),
-                              mcp_server.py (/mcp/: what is offered, calls), mcp_stdio.py (jarvis mcp serve)
+                              mcp_server.py (/mcp/: what is offered, calls), mcp_stdio.py (jarvis mcp serve),
+                              ui.py and ui/chat.html (the chat window, its token and policy, ADR-103)
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
                               COM thread, volume, display (brightness, lock, screenshot), clipboard,
                               UI Automation (uia.py), synthetic keys and clicks (sendinput.py),

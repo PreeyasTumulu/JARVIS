@@ -44,6 +44,26 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 24: Core on LangGraph and ChromaDB
+
+Run on 2026-11-07 with `jarvis chat` through `scripts/drive_chat.py` on a scratch data folder and config, the real local model (jarvis-hermes3) and Groq.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 24.1 | start `jarvis chat` | the prompt at once, warm-up in the background | prompt shown; log "Warmed up in 2986 ms" a second later | pass |
+| 24.2 | "open calculator" on a fresh data folder | the template stage gives up (index not built), the model opens it | "Router stage template took longer than 150 ms; skipped", then `open_app(Calculator)` by the model, `handled_by = agent` | pass |
+| 24.3 | the router stages once the index exists ("open calculator", "open notepad", "volume 30", "mute", "open my report") | template matches for apps, volume, mute; none for a file | template `open_app` / `set_volume` in 0 to 3 ms; "open my report": no match. "open youtube" matched an installed YouTube app | pass |
+| 24.4 | "what's 12 times 7" | "84", no model | "84" in 18 ms, `handled_by = arithmetic`, audit row `arithmetic` | pass |
+| 24.5 | "remember that my manager is Ravi", then "who is my boss" | saved as a `user` memory, then found by meaning | `remember(about="user")`; "Your boss is Ravi." (no shared word, so through the vectors) | pass |
+| 24.6 | data folder after 24.5 | a `chroma` folder, no network | `ld\Jarvis\chroma` created; ChromaDB tests fail any outside connection | pass |
+| 24.7 | "compare the pros and cons of rust and go for a web backend" | the cloud answers, `handled_by = cloud` | gpt-oss-120b in 1.0 s, `handled_by = cloud` | pass |
+| 24.8 | "explain in detail how public key cryptography works" | local: "key" and "crypto" touch local tool groups | answered locally in 32.6 s (unchanged rule from Phase 13, not this phase) | pass |
+| 24.9 | `LLMClient.stream` on the real model: a question, then "please open Notepad for me" | text streams; the call arrives structured with nothing spoken | 49 text chunks, first after 1.4 s (warm); the call: 0 chunks spoken, `open_app {"name":"Notepad"}` | pass |
+| 24.10 | Piper `speak_stream` with a silent player, three questions | first audio before the whole reply | 2.8 s vs 3.7 s, 3.6 s vs 5.0 s; a one-sentence reply: no gain | pass, smaller gain than hoped |
+| 24.11 | stage times in history | `route_ms`, `llm_ms`, `first_tool_ms`, `tool_ms`, `turn_ms` | all present on every row | pass |
+
+**Needs your hands:** a real voice turn with streaming on (24.10 was measured without playing sound), and "stop" while a streamed reply is playing.
+
 ## Phase 22: Remove the page and overlay
 
 Run on 2026-11-05 with `jarvis serve --no-voice --port 8799` on scratch data, driven by a small client.

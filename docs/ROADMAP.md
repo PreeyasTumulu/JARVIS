@@ -30,6 +30,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 21 | Speed and coverage: arithmetic without the model | Built on `phase/21-speed-coverage` (stacked on Phase 20), hand tested | v1.11.0 |
 | 22 | Remove the page and overlay | Built on `phase/22-remove-ui` (stacked on Phase 21), hand tested | v1.12.0 |
 | 23 | Research: other assistants | On `phase/23-research` (stacked on Phase 22), docs only | v1.12.0 |
+| 24 | Core on LangGraph and ChromaDB | Built on `phase/24-core` (stacked on Phase 23), hand tested on scratch data | v1.13.0 |
 
 ## How each phase runs
 
@@ -922,6 +923,34 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** every project in the brief is covered with sources, and each "take" item names the phase that builds it.
 
+## Phase 24: Core on LangGraph and ChromaDB
+
+**Goal:** the agent loop is a graph whose policy gate no path can skip, obvious commands never wait for a model, and voice replies start speaking before the model has finished (ADR-079, ADR-083, ADR-084).
+
+**Scope**
+
+- The turn is a LangGraph graph: route, think, guard, gate, await_confirmation, execute, respond (ARCHITECTURE.md 4.1, drawn from the code and checked by a test). Every node publishes `AgentStateChanged` with a named state.
+- A router pipeline before the model (`[router] pipeline`, `stage_timeout_ms`): exact phrases, sums, and one-slot templates ("open {app}" for apps in the index, "volume {n}", mute). `handled_by` on every turn in history and the audit log.
+- A guard before the gate: one repair of a near-miss name or broken JSON, no repeated call in a turn, `max_tool_calls_per_turn`.
+- Clearances: a tool runs only with a one-time clearance from the gate for exactly its arguments. Source scans keep every entry point behind the gate.
+- `cancel_on_interruption` per tool: a send that already started finishes and is audited when it ends.
+- ChromaDB for memories and past commands, copied once from SQLite, with SQLite as the fallback. Memory kinds `user` and `context` with their own budgets; vectors written after the turn.
+- Streamed replies: the local model streams, text that could be a tool call is held back, and Piper speaks sentence by sentence (SAPI too). `[tts] stream`. `first_token_ms` and `first_audio_ms` join the stage times.
+- `jarvis/adapters`: the web API client moved there and gained keys from .env, one retry after a timeout or a 502, 503, or 504, and logs without query strings.
+- LangGraph and ChromaDB import in a warm-up thread when `chat` or `serve` starts. LangSmith tracing is forced off (R60).
+
+**Test it**
+
+1. `uv run jarvis chat`, then "open notepad": "Opening Notepad." with no model line (the second time on a fresh data folder, R61).
+2. "what's 12 times 7": "84", no model.
+3. "remember that my manager is Ravi", then "who is my boss": "Ravi".
+4. `uv run jarvis voice`, push to talk, "why do cats purr": speech starts before the reply is finished.
+5. `uv run pytest tests/unit/test_gate_coverage.py`.
+
+**Measured (2026-11-07):** imports: LangGraph 2.7 s, ChromaDB 1.0 s, both off the startup path (warm-up thread, 3.0 s in the background on a cold start). Router stages: 0 to 3 ms once the app index is built. Streaming, warm model: first text after 0.9 to 1.4 s against 5.7 to 7.1 s for whole replies; first audio with real Piper (silent player) 2.8 s and 3.6 s against 3.7 s and 5.0 s for the whole reply plus the first sentence, and no gain for a reply of one long sentence. Tool choice: [benchmarks/phase24.md](benchmarks/phase24.md).
+
+**Exit criteria:** every tool entry point meets the gate (checked by tests), every turn says who handled it, and a streamed voice reply is never spoken twice or over a confirmation.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -943,7 +972,7 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 |---|---|---|
 | 22 | Remove the page and overlay (done) | Delete the HTML page, shader, and OpenGL overlay and their dependencies; the server stays as a JSON API; confirmations in the CLI and by voice (ADR-081) |
 | 23 | Research (done) | Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, strong "JARVIS" repos: architecture, plugins, UI, what users like, what is weak; "what we take, what we do better" in RESEARCH.md |
-| 24 | Core on LangGraph and ChromaDB | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; from Phase 23: a tiered router pipeline with `handled_by` on every turn, a guard node (schema check, one repair, no duplicate calls, a step cap), named graph states mapped to UI states, tool options `cancel_on_interruption` and `timeout_secs`, sentence-streamed Piper, a per-stage latency breakdown, a test that every tool entry point meets the gate; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
+| 24 | Core on LangGraph and ChromaDB (done) | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; from Phase 23: a tiered router pipeline with `handled_by` on every turn, a guard node (schema check, one repair, no duplicate calls, a step cap), named graph states mapped to UI states, tool options `cancel_on_interruption` and `timeout_secs`, sentence-streamed Piper, a per-stage latency breakdown, a test that every tool entry point meets the gate; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
 | 25 | Jarvis as an MCP server | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
 | 26 | Apps, files, and office | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
 | 27 | Music, developer tools, browser | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |

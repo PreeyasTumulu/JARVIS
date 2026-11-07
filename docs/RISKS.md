@@ -285,6 +285,18 @@ The winrt packages (notifications, OCR, media) ship their own `msvcp140.dll`. Wi
 
 Hermes 3 8B sits below every size the field recommends for tool calling: Open WebUI's docs say models under about 30B often produce malformed tool-call JSON, and Home Assistant users report small local models switching the wrong device (research/open-source-assistants-2026.md). Jarvis narrows the tools per turn and answers obvious commands without a model, and Phase 24 adds a guard node that checks arguments, tries one repair, and counts failures per tool, so the cost becomes a measured number instead of a guess.
 
+### R60. Tracing that would send a turn to the cloud
+
+LangGraph sends traces to LangSmith's cloud service when `LANGSMITH_TRACING` (or the older `LANGCHAIN_TRACING_V2`) is set, and a trace holds the whole turn: what you said, tool results, private data. A developer machine often has those set for other projects. `core/graph.py` sets all four variables to `false` in Jarvis's own process before LangGraph is imported, whatever the environment or .env says. A future LangGraph that reads a new variable name would bypass this; check the names on every LangGraph upgrade.
+
+### R61. Startup and the first request
+
+LangGraph takes about 2.5 s to import on this laptop and ChromaDB about 1 s. Both are imported lazily and warmed up in a background thread by `jarvis chat` and `jarvis serve`, so the prompt and the server are ready at once. A command in the first few seconds waits for the warm-up to finish (a lock stops a second build). `jarvis ask` (one command and exit) pays the import every time.
+
+### R62. Streamed replies and tool calls
+
+A streamed reply is spoken before the model has finished, so text the model writes before deciding to call a tool can be heard ("Let me check that."). Text that could be a call (`{`, `<`, a code fence) is held back, and the stream closes when a call arrives, but a model that writes an ordinary sentence and then a call will have said that sentence. Ollama must stream tool calls for its OpenAI endpoint (it does since 0.8); an older Ollama answers without them and the reply is treated as text. `[tts] stream = false` turns streaming off.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

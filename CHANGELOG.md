@@ -6,7 +6,20 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 
 ## [Unreleased]
 
+### Changed
+- The agent loop is a LangGraph graph (route, think, guard, gate, await_confirmation, execute, respond) whose policy gate no path can skip; a tool runs only with a one-time clearance from the gate for exactly its arguments (ADR-083).
+- Memories and past commands are found by meaning in ChromaDB, copied once from SQLite, with SQLite as the fallback; vectors are written after the answer (ADR-084).
+- "open notepad", "volume 30", and "mute" are answered without the model when the app is in the index (`[router] pipeline`). Every turn records who handled it (`handled_by`).
+- The same tool call twice in one turn runs once, and a turn whose calls stay invalid stops with status `limit`.
+- The web API client moved to `jarvis/adapters` and tries once more after a timeout or a 502, 503, or 504.
+
+### Added
+- Voice replies start speaking at the first sentence while the model is still writing (`[tts] stream`); `first_audio_ms` in each command's timings.
+- Memories about you and about the current work, with their own room in the prompt (`[memory] user_chars`, `context_chars`).
+- LangGraph and ChromaDB load in the background when `chat` or `serve` starts.
+
 ### Documentation
+- ARCHITECTURE.md section 4 rewritten around the graph, with a diagram generated from the code (`scripts/architecture_graph.py`).
 - Research on Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, and the strongest JARVIS-style repos, with what Jarvis takes and where it does better (RESEARCH.md section 6). Piper's GPL licence confirmed, so the installer must keep it optional (ADR-006).
 
 ### Removed

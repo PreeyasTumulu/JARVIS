@@ -486,6 +486,7 @@ Yours, asked 2026-11-01, all as recommended.
 - **Decision (2026-11-05, your choice over the recommended "keep the current core"):** the agent loop becomes a LangGraph graph with the same steps ADR-003 already split it into (call model, gate, confirm, execute, respond), and memories and past commands move from SQLite vector rows to a ChromaDB persistent store in the data folder. Supersedes ADR-003. Embeddings still come from nomic-embed-text on Ollama and are handed to ChromaDB, so ChromaDB never downloads its own model and nothing leaves the laptop. SQLite keeps everything that is not a vector (audit, history text, preferences, contacts, reminders).
 - **Why:** both are what people expect to see in an agent project, LangGraph gives checkpointing and a graph that can be drawn, and ChromaDB gives metadata filters and a real index instead of a full scan.
 - **Cost:** a rewrite of tested code, heavier dependencies, and a one-time migration of the existing vectors. The policy gate, confirmation, and privacy guard stay outside the graph's control: they are nodes the graph must pass through, not prompts.
+- **Done (Phase 24):** see ADR-083 and ADR-084.
 
 ### ADR-080: Screen understanding uses a local vision model
 
@@ -505,6 +506,18 @@ Yours, asked 2026-11-01, all as recommended.
 - **Decision (2026-11-05):** a request that is only arithmetic ("what's 10 + 10", "15 percent of 240", "9 squared") is turned into an expression and answered by `calculate` on the fast path (ADR-056), with no model call. The evaluator walks the syntax tree and allows only numbers, the four operations, powers (exponent up to 1000), modulo, and square roots; results over 1e100 or complex ones are refused. The model gets the same tool for wordy math.
 - **Why:** an 8B model is slow at arithmetic and sometimes wrong; a sum should be instant and exact.
 - **Cost:** spoken math has many phrasings; one the parser does not know still goes to the model, which then calls `calculate`, so it is slower but still right.
+
+### ADR-083: The graph, the router pipeline, the guard, and clearances
+
+- **Decision (2026-11-05, all as recommended):** the turn is a LangGraph graph of seven nodes (route, think, guard, gate, await_confirmation, execute, respond; ARCHITECTURE.md 4.1). Confirmation is a node that waits on the channel, not LangGraph's `interrupt()`, because a voice answer arrives on the same event loop within seconds and nothing has to survive a restart. The checkpointer is in memory, one thread per turn, deleted when the turn ends. Before the model, a router pipeline (`exact_phrase`, `arithmetic`, `template`, then `agent`; `[router] pipeline`) may propose a call, and every turn records the stage or model that handled it as `handled_by`. A guard repairs one near-miss call, never runs the same call twice in a turn, and caps calls per turn. A tool runs only with a one-time clearance the policy gate issues for exactly the approved arguments, and source scans in the tests keep every entry point behind the gate. No second model routes requests: the stages are code. Replies are spoken sentence by sentence while the local model writes them; if it speaks and then calls a tool, the stream closes at the call so nothing talks over a confirmation. LangSmith tracing is switched off inside the process. Secrets stay in .env.
+- **Why:** the research (RESEARCH.md 6.2) showed every mature assistant answers obvious commands without a model and names its states; the graph makes the gate a node with no edge around it instead of a convention; clearances make skipping the gate fail loudly even from new code; streaming took Home Assistant's first audio from 5.31 s to 0.56 s.
+- **Cost:** LangGraph adds about 2.5 s to import (warmed up in a thread at start), and a template match answers in the tool's own words, which are plainer than the model's. A turn that speaks and then calls a tool speaks its final answer only when the turn ends.
+
+### ADR-084: Vectors in ChromaDB, two kinds of memory, written after the turn
+
+- **Decision (2026-11-05, all as recommended):** vectors live in a ChromaDB persistent store in the data folder, one collection per kind (`memory`, `history`) and embedding model, telemetry off, with Jarvis handing it the nomic-embed-text vectors (no embedding function of its own). On first open the SQLite `embeddings` rows are copied in once; the table stays one release as the fallback, used when ChromaDB cannot open. Memories have a kind: `user` (facts about you) and `context` (the current work), each with its own character budget in the prompt (`[memory] user_chars`, `context_chars`). Vectors are written after the answer is out (`recall.after_turn`), never on the reply path.
+- **Why:** ChromaDB gives an index and metadata filters instead of a full scan; the copy keeps every existing memory; writing after the turn keeps embedding time out of the reply.
+- **Cost:** about 1 s more at start (warmed up in a thread) and a dependency of its own. A memory saved in one turn is found by meaning from the next turn on, not within the same turn.
 
 ## Open decisions
 

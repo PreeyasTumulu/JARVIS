@@ -69,11 +69,13 @@ async def find_file(
 
 @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PRIVATE, timeout_s=20)
 async def open_file(ctx: ToolContext, path: str) -> ToolResult:
-    """Open a file or folder at a full path with its default app (like double-clicking it).
-    Get the path from find_file or get_selected_file first.
+    """Open a file or folder with its default app (like double-clicking it), for "open my
+    resume" or "open the march invoice". Give the name as the user said it, or a full path;
+    no find_file call is needed first.
 
     Args:
-        path: The full path, from find_file or get_selected_file.
+        path: The file's name as the user said it ("my resume", "march invoice pdf"), or a
+            full path from find_file or get_selected_file.
     """
     await asyncio.to_thread(os.startfile, path)  # type: ignore[attr-defined,unused-ignore]
     return ToolResult.success(data={"opened": path}, speech=f"Opening {Path(path).name}.")

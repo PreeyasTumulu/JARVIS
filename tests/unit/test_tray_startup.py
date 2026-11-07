@@ -47,7 +47,6 @@ async def test_tray_actions_reach_the_event_loop(desktop: FakeDesktop) -> None:
 
     tray = Tray(
         loop=loop,
-        url=lambda: "http://127.0.0.1:8765/?token=t",
         stop=stop,
         quit=lambda: calls.append("quit"),
         set_muted=set_muted,
@@ -55,10 +54,10 @@ async def test_tray_actions_reach_the_event_loop(desktop: FakeDesktop) -> None:
     tray._icon = FakeIcon()
     tray.on_event(VoiceStateChanged(state="listening"))
     assert tray._icon.title == f"Jarvis: {LABELS['listening']}"
-    for action in (tray._on_open, tray._on_mic, tray._on_stop, tray._on_quit):
+    for action in (tray._on_mic, tray._on_stop, tray._on_quit):
         await asyncio.to_thread(action)  # pystray calls these from its own thread
     await asyncio.sleep(0.05)
-    assert desktop.urls == ["http://127.0.0.1:8765/?token=t"]
+    assert desktop.urls == []  # there is no page to open (ADR-081)
     assert calls == [("muted", True), "stop", "quit"]
     tray.show("muted")
     await asyncio.to_thread(tray._on_mic)
@@ -67,7 +66,7 @@ async def test_tray_actions_reach_the_event_loop(desktop: FakeDesktop) -> None:
 
 
 def test_without_voice_the_tray_has_no_mic(desktop: FakeDesktop) -> None:
-    tray = Tray(loop=asyncio.new_event_loop(), url=lambda: None, stop=None, quit=lambda: None)  # type: ignore[arg-type]
+    tray = Tray(loop=asyncio.new_event_loop(), stop=None, quit=lambda: None)  # type: ignore[arg-type]
     assert tray.state == "off"
 
 
@@ -77,7 +76,7 @@ def test_the_launcher_uses_uvw_when_it_is_there(monkeypatch: pytest.MonkeyPatch)
     assert launch.target == r"C:\uv\uvw.exe"
     assert launch.arguments == (
         r'run --project "C:\Jarvis" --extra voice --extra piper pythonw '
-        "-m jarvis serve --tray --wake --no-browser"
+        "-m jarvis serve --tray --wake"
     )
     monkeypatch.setattr("shutil.which", lambda name: None)
     fallback = startup.launcher(Path(r"C:\Jarvis"))
@@ -113,7 +112,7 @@ async def test_voice_that_starts_late_gets_the_mic_item(desktop: FakeDesktop) ->
     async def set_muted(muted: bool) -> None:
         calls.append(muted)
 
-    tray = Tray(loop=asyncio.get_running_loop(), url=lambda: None, stop=None, quit=lambda: None)  # type: ignore[arg-type]
+    tray = Tray(loop=asyncio.get_running_loop(), stop=None, quit=lambda: None)  # type: ignore[arg-type]
     tray.show("voice_retry")
     assert "retrying" in tray._title()
     tray.attach_voice(set_muted)

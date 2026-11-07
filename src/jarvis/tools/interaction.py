@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolResult
+from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolError, ToolResult
 from jarvis.tools.registry import tool
 
 
@@ -15,6 +15,8 @@ async def speak(ctx: ToolContext, text: str) -> ToolResult:
     Args:
         text: The exact words to say.
     """
+    if ctx.services.quiet_speech:
+        raise ToolError("The PC is locked, so I did not say that aloud.")
     await ctx.services.tts.speak(text)
     return ToolResult.success(data={"spoken": text})
 

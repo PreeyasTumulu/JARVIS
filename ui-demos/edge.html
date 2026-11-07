@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis edge glow</title>
+<style>
+  /* Edge glow: Jarvis never covers your work. The edge of the screen lights up instead,
+     and one small caption sits above the taskbar. */
+  @property --angle { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+  :root {
+    --glow-a: transparent;
+    --glow-b: transparent;
+    --thick: 0px;
+    --angle: 0deg;
+    --glass: rgba(246, 248, 252, 0.86);
+    --ink: #1B2333;
+    --muted: #59627A;
+    --dock-bg: #F1F3F8;
+    --dock-fg: #2B3448;
+    --dock-line: #C9CFDC;
+    --dock-accent: #2B5FD9;
+    --dock-on-accent: #FFFFFF;
+    --dock-radius: 6px;
+  }
+  body[data-state="idle"] { --glow-a: #9DB4E0; --glow-b: #9DB4E0; }
+  body[data-state="listening"] { --glow-a: #3E8BFF; --glow-b: #7FE0FF; }
+  body[data-state="thinking"] { --glow-a: #7B61FF; --glow-b: #3E8BFF; }
+  body[data-state="speaking"] { --glow-a: #FFD27A; --glow-b: #FFF4D6; }
+  body[data-state="confirm"] { --glow-a: #FF9F1C; --glow-b: #FFC35C; }
+  body[data-state="tool"] { --glow-a: #19B394; --glow-b: #8FF0D6; }
+  body[data-state="error"] { --glow-a: #E5343D; --glow-b: #FF7A6E; }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column; color: var(--ink);
+    font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    background: #2F4A73;
+  }
+  .desktop {
+    position: relative; flex: 1; min-height: 360px; overflow: hidden;
+    background:
+      radial-gradient(ellipse 70% 60% at 70% 30%, #E9C9B8 0%, transparent 60%),
+      radial-gradient(ellipse 80% 70% at 20% 80%, #6E8FC4 0%, transparent 65%),
+      linear-gradient(160deg, #3D5C8E 0%, #8FA9CF 55%, #D7DFEA 100%);
+  }
+  .window {
+    position: absolute; left: 50%; top: 9%; width: min(560px, 82%); transform: translateX(-50%);
+    background: #FBFBFD; border-radius: 8px; box-shadow: 0 18px 50px rgba(20, 30, 60, 0.28);
+    overflow: hidden;
+  }
+  .window header { display: flex; justify-content: space-between; padding: 8px 12px; font-size: 12px; color: var(--muted); background: #EEF1F6; }
+  .window pre { margin: 0; padding: 14px 16px 24px; font: 14px/1.55 Consolas, "Cascadia Mono", monospace; color: #2A3142; white-space: pre-wrap; }
+  .taskbar {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 44px; display: flex; gap: 10px;
+    align-items: center; justify-content: center; background: rgba(238, 242, 248, 0.82);
+    backdrop-filter: blur(18px);
+  }
+  .taskbar span { width: 22px; height: 22px; border-radius: 5px; background: #9AA8C2; opacity: 0.8; }
+  .taskbar span:nth-child(2) { background: #3E8BFF; }
+  .taskbar span:nth-child(4) { background: #25D366; }
+
+  /* The glow: a ring around the screen, drawn by a turning conic gradient. */
+  .edge {
+    position: absolute; inset: 0; pointer-events: none; padding: var(--thick);
+    background: conic-gradient(from var(--angle), var(--glow-a), var(--glow-b), var(--glow-a), var(--glow-b), var(--glow-a));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    filter: blur(14px) saturate(1.2);
+  }
+  /* A second, wider and fainter layer, so it reads as light rather than a frame. */
+  .edge.halo { padding: calc(var(--thick) * 2.6); filter: blur(34px); opacity: 0.55; }
+  .edge.sharp { filter: none; opacity: 0.9; }
+
+  .caption {
+    position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%);
+    width: max-content; max-width: min(92%, 640px); padding: 10px 18px; border-radius: 12px;
+    background: var(--glass); backdrop-filter: blur(16px); box-shadow: 0 6px 24px rgba(20, 30, 60, 0.18);
+    text-align: center;
+  }
+  .state { margin: 0; font-size: 12px; color: var(--muted); }
+  .heard, .say, .ask { margin: 2px 0 0; font-size: 17px; line-height: 1.35; }
+  .heard { font-style: italic; }
+  .tool { margin: 2px 0 0; font: 12px Consolas, monospace; color: var(--muted); }
+  .confirm { display: none; }
+  .confirm .buttons { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+  .confirm button {
+    font: inherit; font-size: 14px; padding: 6px 20px; border-radius: 6px; cursor: pointer;
+    border: 1px solid #C9CFDC; background: #FFFFFF; color: var(--ink);
+  }
+  .confirm button[data-kit-answer="yes"] { background: #2B5FD9; border-color: #2B5FD9; color: #FFFFFF; }
+  .confirm button:focus-visible { outline: 2px solid #2B5FD9; outline-offset: 2px; }
+  body[data-state="confirm"] .confirm { display: block; }
+  body[data-state="confirm"] .say { display: none; }
+  body:not([data-state="listening"]):not([data-state="thinking"]) .heard { display: none; }
+  body[data-state="listening"] .say, body[data-state="thinking"] .say { display: none; }
+  body[data-state="idle"] .caption { opacity: 0.75; }
+</style>
+</head>
+<body data-state="idle">
+<main class="desktop">
+  <div class="window" aria-hidden="true">
+    <header><span>shopping.txt - Notepad</span><span>-  &#9633;  &#215;</span></header>
+    <pre>Saturday
+- rice 5 kg
+- curd
+- coriander, green chillies
+- 12 MG Road, flat 4B (for the delivery)</pre>
+  </div>
+  <div class="taskbar" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+  <div class="edge halo" aria-hidden="true"></div>
+  <div class="edge" id="edge" aria-hidden="true"></div>
+  <section class="caption" aria-live="polite">
+    <p class="state" data-kit="label">Idle</p>
+    <p class="heard" data-kit="heard"></p>
+    <p class="say" data-kit="say"></p>
+    <div class="confirm">
+      <p class="ask" data-kit="ask"></p>
+      <div class="buttons">
+        <button type="button" data-kit-answer="yes">Yes</button>
+        <button type="button" data-kit-answer="no">No</button>
+      </div>
+    </div>
+    <p class="tool" data-kit="tool"></p>
+  </section>
+</main>
+<nav id="dock"></nav>
+<script>
+// kit:begin
+// The demo kit: the seven states, a scripted run, the controls, and the microphone level.
+// Every demo page carries a copy between its kit markers; edit this file, then run
+// `uv run python scripts/build_ui_demos.py` (a test checks the copies match).
+//
+// A page reads Kit.scene in Kit.onFrame(fn) and styles itself from body[data-state].
+// Elements marked data-kit="heard" | "say" | "ask" | "tool" | "label" get their text here,
+// and buttons marked data-kit-answer="yes" | "no" answer the confirmation.
+// Nothing here makes a network request. The microphone is opened only after its button is
+// pressed, and its sound never leaves the page: only a loudness number is read.
+const Kit = (() => {
+  const STATES = ["idle", "listening", "thinking", "speaking", "confirm", "tool", "error"];
+  const NAMES = {
+    idle: "Idle",
+    listening: "Listening",
+    thinking: "Thinking",
+    speaking: "Speaking",
+    confirm: "Waiting for your yes",
+    tool: "Running a tool",
+    error: "Error",
+  };
+  // What each state shows when picked by hand, and in screenshots.
+  const EXAMPLE = {
+    idle: { say: "Say “Hey Jarvis”" },
+    listening: { heard: "send the clipboard to my phone" },
+    thinking: { heard: "send the clipboard to my phone" },
+    confirm: { ask: "Send what you copied to your phone?" },
+    tool: { tool: "send_to_phone", say: "Sending to your phone" },
+    speaking: { say: "Sent what you copied to your phone." },
+    error: { say: "Your phone isn’t paired yet. Open KDE Connect on the PC and press Pair." },
+  };
+  const SCRIPT = [
+    { state: "idle", ms: 1800, ...EXAMPLE.idle },
+    { state: "listening", ms: 2800, heard: "send the clipboard to my phone" },
+    { state: "thinking", ms: 1300, heard: "send the clipboard to my phone" },
+    { state: "confirm", ms: 2600, ...EXAMPLE.confirm, auto: "yes" },
+    { state: "idle", ms: 1600, ...EXAMPLE.idle },
+    { state: "listening", ms: 1700, heard: "find my phone" },
+    { state: "tool", ms: 1200, tool: "ring_phone", say: "Looking for your phone" },
+    { state: "error", ms: 3400, ...EXAMPLE.error },
+  ];
+  const AFTER_YES = [
+    { state: "tool", ms: 1400, ...EXAMPLE.tool },
+    { state: "speaking", ms: 2800, ...EXAMPLE.speaking },
+  ];
+  const AFTER_NO = [{ state: "speaking", ms: 1600, say: "Okay, I won’t." }];
+
+  const params = new URLSearchParams(location.search);
+  const still = params.has("still"); // a frozen frame, for screenshots
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const scene = {
+    state: "idle", heard: "", heardShown: "", say: "", ask: "", tool: "",
+    t: 0, since: 0, level: 0, mic: false, calm, still,
+    seq: 0, // counts every state change, so a page can tell a new step from the same one
+    picked: false, // this state was chosen by hand (a button, a key, ?state=), not by a run
+  };
+  const frames = [];
+  let queue = [];
+  let stepEnds = 0;
+  let looping = !still && !params.has("state");
+  let step = null;
+  let analyser = null;
+  let samples = null;
+  let fedLevel = 0; // a level from outside the page (the real Jarvis's microphone)
+  let fedAt = -1;
+
+  function show(entry, now) {
+    step = entry;
+    scene.state = entry.state;
+    scene.heard = entry.heard || "";
+    scene.say = entry.say || "";
+    scene.ask = entry.ask || "";
+    scene.tool = entry.tool || "";
+    scene.since = now;
+    scene.seq += 1;
+    scene.picked = Boolean(entry.picked);
+    stepEnds = entry.ms ? now + entry.ms / 1000 : Infinity;
+    document.body.dataset.state = entry.state;
+    for (const el of document.querySelectorAll("[data-kit]")) {
+      const key = el.dataset.kit;
+      if (key === "label") el.textContent = NAMES[entry.state];
+      else if (key !== "heard") el.textContent = scene[key] || "";
+    }
+    for (const button of document.querySelectorAll("[data-kit-state]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.kitState === entry.state));
+    }
+  }
+
+  function run(steps, now) {
+    queue = steps.slice();
+    show(queue.shift(), now);
+  }
+
+  function next(now) {
+    if (step && step.auto) return answer(step.auto === "yes");
+    if (queue.length) return show(queue.shift(), now);
+    if (looping) return run(SCRIPT, now);
+    stepEnds = Infinity;
+  }
+
+  function answer(yes) {
+    if (scene.state !== "confirm") return;
+    const now = performance.now() / 1000;
+    queue = (yes ? AFTER_YES : AFTER_NO).slice();
+    if (looping) queue.push(...SCRIPT);
+    show(queue.shift(), now);
+  }
+
+  function pick(state) {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state, ...EXAMPLE[state], picked: true }, performance.now() / 1000);
+  }
+
+  // A page's own turn, such as a typed message: these steps once, then rest.
+  function play(steps) {
+    looping = false;
+    updatePlay();
+    run(steps, performance.now() / 1000);
+  }
+
+  // Live pages: a state from a real event, held until the next one, and Jarvis's own mic level.
+  function set(state, fields = {}) {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state, ...fields }, performance.now() / 1000);
+  }
+
+  function feedLevel(value) {
+    fedLevel = Math.max(0, Math.min(1, Number(value) || 0));
+    fedAt = performance.now();
+  }
+
+  function stop() {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state: "idle", ...EXAMPLE.idle }, performance.now() / 1000);
+  }
+
+  function noise(t) {
+    return (Math.sin(t * 7.3) + Math.sin(t * 13.1 + 1.7) * 0.6 + Math.sin(t * 29.9 + 0.4) * 0.3) / 1.9;
+  }
+
+  function syntheticLevel(t, inState) {
+    switch (scene.state) {
+      case "listening": return Math.min(1, 0.3 + 0.45 * Math.abs(noise(t * 1.4)));
+      case "speaking": {
+        const syllable = Math.abs(Math.sin(t * 9.5)) * (0.55 + 0.45 * Math.abs(Math.sin(t * 2.1)));
+        return inState < 0.15 ? syllable * inState / 0.15 : syllable;
+      }
+      case "thinking": return 0.12 + 0.05 * Math.sin(t * 3);
+      case "tool": return 0.2;
+      default: return 0;
+    }
+  }
+
+  function micLevel() {
+    analyser.getFloatTimeDomainData(samples);
+    let sum = 0;
+    for (const v of samples) sum += v * v;
+    return Math.min(1, Math.sqrt(sum / samples.length) * 6);
+  }
+
+  function tick(ms) {
+    const now = ms / 1000;
+    if (!still && now >= stepEnds) next(now);
+    const t = still ? 2.2 : now;
+    const inState = still ? 1.4 : now - scene.since;
+    scene.t = t;
+    const fed = scene.state === "listening" && ms - fedAt < 400;
+    const target = fed ? fedLevel
+      : scene.mic && scene.state === "listening" ? micLevel() : syntheticLevel(t, inState);
+    scene.level = still ? target : scene.level + (target - scene.level) * 0.25;
+    // The words appear as they are heard.
+    const share = scene.state === "listening" && !still ? Math.min(1, inState / 1.8) : 1;
+    scene.heardShown = scene.heard.slice(0, Math.ceil(scene.heard.length * share));
+    for (const el of document.querySelectorAll('[data-kit="heard"]')) {
+      if (el.textContent !== scene.heardShown) el.textContent = scene.heardShown;
+    }
+    for (const fn of frames) fn(scene);
+    requestAnimationFrame(tick); // a frozen frame keeps drawing the same picture, so resizes redraw
+  }
+
+  async function toggleMic(button, status) {
+    if (scene.mic) {
+      scene.mic = false;
+      analyser.context.close();
+      analyser = null;
+      button.textContent = "Use my microphone";
+      status.textContent = "";
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const context = new AudioContext();
+      analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      samples = new Float32Array(analyser.fftSize);
+      context.createMediaStreamSource(stream).connect(analyser);
+      scene.mic = true;
+      button.textContent = "Stop using the microphone";
+      status.textContent = "Listening follows your voice. Nothing is recorded or sent.";
+      pick("listening");
+    } catch (error) {
+      status.textContent = "The microphone was not allowed. Allow it in the address bar and try again.";
+    }
+  }
+
+  let playButton = null;
+  function updatePlay() {
+    if (playButton) playButton.textContent = looping ? "Pause the demo" : "Play the demo";
+  }
+
+  function dock() {
+    const nav = document.querySelector("#dock");
+    if (!nav) return;
+    nav.setAttribute("aria-label", "Demo controls");
+    const states = document.createElement("div");
+    states.className = "kit-states";
+    states.setAttribute("role", "group");
+    states.setAttribute("aria-label", "Show a state");
+    STATES.forEach((state, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.kitState = state;
+      button.textContent = NAMES[state];
+      button.title = `${NAMES[state]} (key ${index + 1})`;
+      button.addEventListener("click", () => pick(state));
+      states.append(button);
+    });
+    const actions = document.createElement("div");
+    actions.className = "kit-actions";
+    playButton = document.createElement("button");
+    playButton.type = "button";
+    playButton.addEventListener("click", () => {
+      looping = !looping;
+      updatePlay();
+      if (looping) run(SCRIPT, performance.now() / 1000);
+    });
+    const mic = document.createElement("button");
+    mic.type = "button";
+    mic.textContent = "Use my microphone";
+    const status = document.createElement("p");
+    status.className = "kit-status";
+    status.setAttribute("role", "status");
+    mic.addEventListener("click", () => toggleMic(mic, status));
+    actions.append(playButton, mic);
+    nav.append(states, actions, status);
+    updatePlay();
+  }
+
+  const css = `
+  #dock { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: 8px 16px; padding: 10px 16px; color: var(--dock-fg); background: var(--dock-bg);
+    font: 13px/1.3 var(--dock-font, inherit); }
+  #dock button { font: inherit; color: inherit; background: transparent; cursor: pointer;
+    border: 1px solid var(--dock-line); border-radius: var(--dock-radius, 999px); padding: 5px 11px; }
+  #dock button:hover { border-color: var(--dock-fg); }
+  #dock button[aria-pressed="true"] { background: var(--dock-accent); color: var(--dock-on-accent);
+    border-color: var(--dock-accent); }
+  #dock button:focus-visible, [data-kit-answer]:focus-visible { outline: 2px solid var(--dock-accent);
+    outline-offset: 2px; }
+  .kit-states, .kit-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .kit-status { margin: 0; width: 100%; text-align: center; min-height: 1.3em; opacity: .8; }
+  body.kit-still #dock { display: none; }`;
+
+  function start() {
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.append(style);
+    if (still) document.body.classList.add("kit-still");
+    dock();
+    for (const button of document.querySelectorAll("[data-kit-answer]")) {
+      button.addEventListener("click", () => answer(button.dataset.kitAnswer === "yes"));
+    }
+    addEventListener("keydown", (event) => {
+      if (document.body.dataset.kitKeys === "off") return; // a live page: keys are for real use
+      if (event.target.closest && event.target.closest("input, textarea")) return;
+      const index = Number(event.key) - 1;
+      if (index >= 0 && index < STATES.length) pick(STATES[index]);
+      else if (event.key === " " && event.target === document.body) {
+        event.preventDefault();
+        playButton.click();
+      }
+    });
+    const first = params.get("state");
+    const now = performance.now() / 1000;
+    // <body data-kit-autoplay="off">: the page waits for you; "Play the demo" still runs it.
+    if (document.body.dataset.kitAutoplay === "off") looping = false;
+    updatePlay();
+    if (STATES.includes(first)) show({ state: first, ...EXAMPLE[first], picked: true }, now);
+    else if (looping) run(SCRIPT, now);
+    else show({ state: "idle", ...EXAMPLE.idle }, now);
+    requestAnimationFrame(tick);
+  }
+
+  if (document.readyState === "loading") addEventListener("DOMContentLoaded", start);
+  else start();
+  return {
+    STATES, NAMES, EXAMPLE, scene, onFrame: (fn) => frames.push(fn),
+    pick, answer, play, stop, set, feedLevel,
+  };
+})();
+// kit:end
+</script>
+<script>
+  const edge = document.querySelector("#edge");
+  const desktop = document.querySelector(".desktop");
+  let angle = 0;
+  let thick = 0;
+  let last = 0;
+  Kit.onFrame((s) => {
+    const dt = s.still ? 0 : Math.min(0.05, s.t - last);
+    last = s.t;
+    const turns = { idle: 0, listening: 20, thinking: 220, speaking: 40, confirm: 0, tool: 90, error: 0 };
+    angle = (angle + (s.calm ? 0 : turns[s.state]) * dt) % 360;
+    const inState = s.t - s.since;
+    const flash = s.state === "error" && !s.still ? Math.max(0, 1 - inState * 2) * 18 : 0;
+    const want = {
+      idle: 2,
+      listening: 6 + s.level * 22,
+      thinking: 9,
+      speaking: 5 + s.level * 16,
+      confirm: 14 + (s.calm ? 0 : Math.sin(s.t * 2.6) * 3),
+      tool: 7,
+      error: 8 + flash,
+    }[s.state];
+    thick = s.still ? want : thick + (want - thick) * 0.2;
+    // Set on the desktop, so the glow and its halo follow together.
+    desktop.style.setProperty("--thick", `${thick.toFixed(1)}px`);
+    desktop.style.setProperty("--angle", `${(s.still ? 30 : angle).toFixed(1)}deg`);
+    edge.classList.toggle("sharp", s.state === "idle");
+  });
+</script>
+</body>
+</html>

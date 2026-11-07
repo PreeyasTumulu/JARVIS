@@ -9,8 +9,13 @@ twilio: a real call. A Twilio Studio flow (docs/twilio-ask-flow.json) says the q
 collects a keypad digit or a spoken answer; Jarvis reads the result from the flow's execution,
 so no public web address is needed. Calls cost money; the keys live in .env.
 
-Either way the question text leaves this computer (to ntfy or Twilio), which is why it is off
-by default. Nothing here sees Jarvis's own private data: only what Claude Code asked.
+kdeconnect (the default, ADR-098): a notification on your phone over your own Wi-Fi saying
+what Claude asks, so you come back to the PC to answer; nothing leaves your network. When
+`[phone] ntfy_topic` is set, the ntfy push with answer buttons follows, which also reaches the
+phone away from home.
+
+With ntfy or Twilio the question text leaves this computer, which is why those are off by
+default. Nothing here sees Jarvis's own private data: only what Claude Code asked.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ from typing import Any
 
 import httpx
 
+from jarvis.adapters.phone import Phone, PhoneError
 from jarvis.bridge.answers import NUMBERS
 from jarvis.bridge.service import Asker, BridgeRequest, page_question, spoken_question
 from jarvis.config import Settings
@@ -36,10 +42,21 @@ NTFY_BUTTONS = 3
 CALL_WAIT_S = 120.0
 
 
-def phone_asker(settings: Settings, http: httpx.AsyncClient | None = None) -> Asker | None:
+def phone_asker(
+    settings: Settings, http: httpx.AsyncClient | None = None, device: Phone | None = None
+) -> Asker | None:
     """The configured way to ask your phone, or None when it is off or not set up."""
     method = settings.bridge.phone
     phone = settings.phone
+    if method == "kdeconnect":
+        then = None
+        if phone.ntfy_topic:
+            then = NtfyAsker(
+                phone.ntfy_server, phone.ntfy_topic, os.environ.get("NTFY_TOKEN"), http
+            )
+        if device is None:  # the running Jarvis passes its own; without one, ntfy alone
+            return then
+        return PhoneAlertAsker(device, then)
     if method == "ntfy":
         if not phone.ntfy_topic:
             log.warning("bridge.phone is ntfy but phone.ntfy_topic is empty; phone is off")
@@ -52,6 +69,26 @@ def phone_asker(settings: Settings, http: httpx.AsyncClient | None = None) -> As
             return None
         return TwilioAsker(sid, token, phone.twilio_flow_sid, phone.twilio_from, phone.number, http)
     return None
+
+
+class PhoneAlertAsker:
+    """Tell the phone over KDE Connect that Claude is waiting, then ask by ntfy if set up."""
+
+    def __init__(self, phone: Phone, then: Asker | None) -> None:
+        self._phone = phone
+        self._then = then
+
+    async def __call__(self, request: BridgeRequest) -> str | None:
+        question, _ = page_question(request)
+        device = await self._phone.device()
+        if device is not None:
+            try:
+                await self._phone.ping(device, f"{question} Answer at the PC.")
+            except PhoneError as exc:
+                log.info("The phone alert for Claude failed: %s", exc)
+        if self._then is not None:
+            return await self._then(request)
+        return None  # no answer from here: the PC keeps waiting until the timeout
 
 
 class NtfyAsker:

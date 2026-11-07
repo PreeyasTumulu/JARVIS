@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+from jarvis.tools.system.arithmetic import spoken_math
 from jarvis.voice.phrases import normalize, strip_wake_word
 
 _MEDIA_NOUNS = ("", " the music", " music", " the song", " the video", " it", " playback")
@@ -66,6 +67,41 @@ HANG_UP = {
     "cut the call",
     "disconnect the call",
 }
+OPEN_CHAT = {
+    "open jarvis",
+    "show jarvis",
+    "open the chat",
+    "open the chat window",
+    "open jarvis chat",
+    "show the chat",
+    "open your window",
+}
+RING_PHONE = {
+    "ring my phone",
+    "find my phone",
+    "where is my phone",
+    "where's my phone",
+    "i can't find my phone",
+    "i cant find my phone",
+}
+FOCUS_START = {
+    "start a focus session",
+    "start focus session",
+    "start my focus session",
+    "start focus mode",
+    "focus mode on",
+}
+FOCUS_END = {
+    "end focus session",
+    "end the focus session",
+    "end my focus session",
+    "stop focus session",
+    "stop the focus session",
+    "stop my focus session",
+    "end focus mode",
+    "stop focus mode",
+    "focus mode off",
+}
 
 
 def _phrase(text: str) -> str:
@@ -74,7 +110,22 @@ def _phrase(text: str) -> str:
 
 
 def fast_call(text: str) -> tuple[str, str] | None:
+    """An exact short command or a plain sum (the router's first two stages together)."""
+    found = exact_call(text)
+    if found is not None:
+        return found
+    expression = spoken_math(text)  # the raw text: normalizing would drop + and *
+    if expression is not None:
+        return "calculate", json.dumps({"expression": expression})
+    return None
+
+
+def exact_call(text: str) -> tuple[str, str] | None:
     """The tool name and JSON arguments for an exact short command, or None."""
+    # Checked before the trailing "jarvis" is dropped, since there it is the object.
+    whole = normalize(strip_wake_word(text)).removeprefix("please ").removesuffix(" please")
+    if whole.removesuffix(" now") in OPEN_CHAT:
+        return "open_chat", "{}"
     phrase = _phrase(text)
     if phrase in MEDIA:
         return "media_control", json.dumps({"action": MEDIA[phrase]})
@@ -84,4 +135,10 @@ def fast_call(text: str) -> tuple[str, str] | None:
         return "briefing", "{}"
     if phrase in HANG_UP:
         return "hang_up", "{}"
+    if phrase in RING_PHONE:
+        return "ring_phone", "{}"
+    if phrase in FOCUS_START:
+        return "focus_start", "{}"
+    if phrase in FOCUS_END:
+        return "focus_end", "{}"
     return None

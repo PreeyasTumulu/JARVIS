@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "1.8.0"
+version = "1.22.0"
 description = "Local-first voice-controlled desktop assistant for Windows 11"
 readme = "README.md"
 license = "MIT"
@@ -40,8 +40,9 @@ dependencies = [
     "winrt-windows-graphics-imaging>=3.2.1",
     "winrt-windows-storage-streams>=3.2.1",
     "winrt-windows-globalization>=3.2.1",
-    "glfw>=2.8",
-    "moderngl>=5.12",
+    "langgraph>=1.2",
+    "chromadb>=1.5",
+    "openpyxl>=3.1",
 ]
 
 [project.scripts]
@@ -106,7 +107,7 @@ packages = ["jarvis"]
 [[tool.mypy.overrides]]
 module = [
     "ddgs", "ddgs.*", "faster_whisper", "openwakeword.*", "sounddevice", "piper", "piper.*",
-    "yfinance", "yfinance.*", "pycaw", "pycaw.*", "comtypes", "comtypes.*", "pystray",
+    "yfinance", "yfinance.*", "pycaw", "pycaw.*", "comtypes", "comtypes.*", "openpyxl", "openpyxl.*", "win32com", "win32com.*", "pywintypes", "pythoncom", "win32gui", "pystray",
     "pystray.*", "recurring_ical_events", "nvidia",
 ]
 ignore_missing_imports = true

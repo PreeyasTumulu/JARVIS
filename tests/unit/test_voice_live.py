@@ -1,4 +1,4 @@
-"""Words and loudness while you speak: shown on the overlay and the page, never acted on."""
+"""Words and loudness while you speak: sent to local API clients, never acted on."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def recorded(bus: Any) -> list[Event]:
 async def test_partials_are_published_and_only_the_final_text_runs(make_app: MakeApp) -> None:
     h = make_app([reply("Done.")])
     events = recorded(h.app.bus)
-    session, mic, _, tts = make_session(h, GrowingSTT("open", "notepad", "now"))
+    session, mic, _, tts = make_session(h, GrowingSTT("what", "time", "is it"))
 
     await push_to_talk(session, mic, frames=4)
     await until(lambda: tts.spoken == ["Done."])
@@ -87,7 +87,7 @@ async def test_the_setting_turns_live_transcripts_off(make_app: MakeApp) -> None
     h = make_app([reply("Done.")])
     h.app.settings.voice.live_transcript = False
     events = recorded(h.app.bus)
-    stt = FakeSTT("open notepad")
+    stt = FakeSTT("what time is it")
     session, mic, _, tts = make_session(h, stt)
 
     await push_to_talk(session, mic, frames=6)
@@ -110,7 +110,7 @@ async def test_a_partial_from_an_old_recording_is_dropped(make_app: MakeApp) -> 
 async def test_loudness_is_published_while_recording_and_not_at_rest(make_app: MakeApp) -> None:
     h = make_app([reply("Done.")])
     events = recorded(h.app.bus)
-    session, mic, _, tts = make_session(h, GrowingSTT("open", "notepad"))
+    session, mic, _, tts = make_session(h, GrowingSTT("what", "time is it"))
 
     await push_to_talk(session, mic, frames=3)
     await until(lambda: tts.spoken == ["Done."])

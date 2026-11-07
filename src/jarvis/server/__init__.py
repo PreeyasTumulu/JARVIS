@@ -1,1 +1,1 @@
-"""The local web UI: FastAPI, one WebSocket, and a static page (Phase 5)."""
+"""The local API: FastAPI on 127.0.0.1, JSON and one WebSocket, no page (ADR-081)."""

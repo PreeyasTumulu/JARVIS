@@ -37,6 +37,9 @@ uv sync --extra voice --extra piper
 
 ## 3. Local model (Phase 1)
 
+Llama 3.2 3B is a faster option (about three times, ADR-086): `ollama create jarvis-llama3.2 -f config/ollama/llama3.2-3b.Modelfile`, then `model = "jarvis-llama3.2"` under `[llm.providers.local]` in `config/local.toml`. It answers sooner and makes more odd replies.
+
+
 ```powershell
 ollama pull hermes3:8b
 ollama pull hermes3:3b
@@ -147,7 +150,11 @@ uv run jarvis chat                              # timers and reminders sound whi
 - Brightness works only for the laptop's own screen. Screenshots go to `Pictures\Screenshots` (`[system] screenshot_folder`).
 - Reminders that came due while Jarvis was closed are announced as missed the next time it starts.
 
-## 5e. Web UI (Phase 5)
+## 5e. Running in the background (`jarvis serve`)
+
+`jarvis serve` runs voice, reminders, the Claude Code bridge, the local API, and the chat window (Phase 32, ADR-103). Open the window with `uv run jarvis ui`, "Open Jarvis" in the tray (or a double click on the icon), or by saying "open Jarvis". It opens in your default browser's app mode, which is Brave here. The old page was removed in Phase 22. Type commands with `jarvis chat`.
+
+The rest of this section describes the old page and is kept for history.
 
 ```powershell
 uv run jarvis serve                 # opens the page; voice and hotkeys run too if installed
@@ -236,13 +243,13 @@ Without keys everything stays on the local model. Anything about your files, mes
 **Tray and login.**
 
 ```powershell
-uv run jarvis serve --tray --wake --no-browser   # try the tray by hand
+uv run jarvis serve --tray --wake   # try the tray by hand
 uv run jarvis startup enable                     # start like that at every login
 uv run jarvis startup                            # is it on?
 uv run jarvis startup disable
 ```
 
-The tray icon is blue when ready, red while listening, amber while thinking, green while speaking, and grey with the microphone off. Click it to open the page; right-click for Microphone, Stop, and Quit. At login Jarvis starts through uv's windowless launcher (`uvw`), so no console window opens; its log is in `%LOCALAPPDATA%\Jarvis\logs`.
+The tray icon is blue when ready, red while listening, amber while thinking, green while speaking, and grey with the microphone off. Right-click it for Microphone, Stop, and Quit. At login Jarvis starts through uv's windowless launcher (`uvw`), so no console window opens; its log is in `%LOCALAPPDATA%\Jarvis\logs`.
 
 ## 5i. Brave, the Claude Code bridge, your phone, and calls (Phase 9)
 
@@ -262,7 +269,7 @@ It prints the microphone level and the wake word score every half second; say "H
 **Claude Code asks you through Jarvis.** While `jarvis serve` runs (it starts at login), Claude Code's multiple-choice questions and permission prompts can be answered by voice or on the Jarvis page, and Jarvis says when Claude is waiting or finished.
 
 ```powershell
-uv run jarvis claude-hook test       # Jarvis asks a test question; answer by voice or on the page
+uv run jarvis claude-hook test       # Jarvis asks a test question; answer by voice
 uv run jarvis claude-hook install    # adds the hooks to ~/.claude/settings.json (a backup is kept)
 uv run jarvis claude-hook status
 uv run jarvis claude-hook uninstall
@@ -383,6 +390,24 @@ tools = ["HassTurnOn", "HassTurnOff", "GetLiveContext"]
 
 `uv run jarvis mcp tools home` lists everything it offers, with which ones are read-only. Add `trusted = true` only for a server you trust to label its tools honestly, and `[mcp.servers.home.params]` to show the model fewer parameters.
 
+## 5l-2. Jarvis's tools in Claude Code and other MCP clients (Phase 25)
+
+Jarvis can offer some of its own tools to an MCP client. Keep `jarvis serve` running (or start at login on), then add it to the client.
+
+Claude Code:
+
+```powershell
+claude mcp add jarvis -- uv run --directory C:\path\to\JARVIS jarvis mcp serve
+```
+
+Claude Desktop, in `claude_desktop_config.json`:
+
+```json
+{"mcpServers": {"jarvis": {"command": "uv", "args": ["run", "--directory", "C:\\path\\to\\JARVIS", "jarvis", "mcp", "serve"]}}}
+```
+
+What is offered is `[mcp_server] tools` in `config/local.toml` (default: weather, calculate, convert_currency, market_data, crypto_price, web_search). Only public tools can be offered: messages, files, mail, notifications, memory, and the screen never are, because these clients send results to a cloud model. A call that needs a yes is asked on Jarvis's voice and terminal ("Claude Code wants to: Open Paint"). Restart the client after changing the list. Its log is `logs\mcp-serve.log` in the data folder; every call is in `uv run jarvis audit`.
+
 ## 5m. Faster speech recognition (Phase 13)
 
 Whisper runs about ten times faster on the GPU. It needs NVIDIA's CUDA libraries as pip packages (about 1 GB, nothing system-wide):
@@ -415,6 +440,34 @@ Then: "good morning" or "brief me" (weather, today's calendar and reminders, unr
 ## 5o. Screen reading (Phase 15)
 
 Nothing to set up: Windows OCR and its English language data come with Windows (check with `uv run python -c "from winrt.windows.media.ocr import OcrEngine; print([l.language_tag for l in OcrEngine.available_recognizer_languages])"`). Then: "what does this game window say" (read with OCR when the app shows no text to Windows), "click Save draft in ..." (asks first when it can only be found by reading the screen), "what's on my screen". Turn the fallbacks off with `[ui] ocr_fallback = false`.
+
+## 5p. Notes, spreadsheets, Calculator, and apps later (Phase 26)
+
+- **Notes** go to `Documents\Jarvis Notes`, one Markdown file per day. Change it with `[notes] folder = "D:/Notes"` in `config/local.toml`.
+- **Spreadsheets:** "add groceries and 450 to my budget sheet" finds the `.xlsx`, `.xlsm`, or `.csv` in your allowed folders and asks first. If the workbook is open in Excel the row goes into it, unsaved (save it to keep it; Ctrl+Z cannot undo it); otherwise the file is written and a copy of the old one is kept in the data folder's `backups\sheets`.
+- **Calculator:** "show 18 percent of 2400 in the calculator" types the sum into Windows Calculator and reads its answer.
+- **Apps later:** "close Spotify in 20 minutes" or "open VS Code at 9". Keep Jarvis running; "what's scheduled" and "cancel the spotify one" work like reminders. `[apps] open_wait_s` sets how long opening waits for a window.
+
+## 5q. Spotify, Docker, SSH, and git (Phase 27)
+
+- **Spotify:** create a free app at developer.spotify.com/dashboard (any name; redirect URI `http://127.0.0.1:8888/callback`, unused), then put its client ID and secret in `.env` as `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`. "Play lofi beats on spotify" then finds and starts it in the Spotify app. `[spotify] market` is the country to search (default IN).
+- **Docker projects:** `[docker.projects.shop]` with `path = "C:/Projects/shop"` (the folder with the compose file) lets "start the shop project" run `docker compose up -d` and wait until it is ready. "Run redis on port 6379" runs an image. Both ask first.
+- **SSH:** `[ssh.profiles.pi]` with `host`, `user`, `port`, and `key` (for example `"~/.ssh/id_ed25519"`). "Connect to my pi" opens Windows Terminal with the session; you type in it.
+- **Git:** `[git.repos]` with `jarvis = "C:/Projects/JARVIS"`. "What changed in jarvis", "commit it", "push it": the commit and the push each ask first. `[git] remote` is the remote to push to (default origin).
+
+## 5r. The screen and the daily news (Phase 28)
+
+- **"What's on my screen"** uses `gemma3:4b` on Ollama (`ollama pull gemma3:4b`, about 3.3 GB) with Windows OCR. Nothing leaves the laptop. `[vision] model` picks another vision model; `[vision] enabled = false` turns it off. "Read my screen" still reads the text word for word with OCR alone.
+- **"What's new in AI"** reads the feeds in `[news] feeds` and saves the digest with links in `Documents\Jarvis News`. It is written by Groq when `GROQ_API_KEY` is set (the news is public) and by the local model otherwise. Add or remove feeds in `config/local.toml`; the morning briefing says how many stories there are (`[briefing] parts` includes `news`).
+
+## 5s. Your phone (Phase 29)
+
+Free, no account needed (ADR-098):
+
+1. **KDE Connect** is already on this laptop (Microsoft Store: "KDE Connect"). Install KDE Connect on the phone (Play Store or F-Droid), keep both on the same Wi-Fi, then on the PC open KDE Connect, choose the phone, press **Pair**, and accept on the phone. Allow its notification permission, and in Android's battery settings let it run unrestricted.
+2. Check it: `kdeconnect-cli --list-devices` should say `paired and reachable`. Then "find my phone" rings it, "send the clipboard to my phone" asks and sends, and "remind me on my phone at 7 to call the bank" rings it at 7.
+3. **Away from home (optional):** install the ntfy app, subscribe to a long random topic, and set it in `config/local.toml` as `[phone] ntfy_topic = "..."`. Alerts and Claude Code's questions (with answer buttons) then reach the phone anywhere. In ntfy's topic settings, "Keep alerting for highest priority" makes urgent pushes ring until you look.
+4. With several phones paired, set `[phone] device = "Pixel 8"` (the name KDE Connect shows). `[bridge] phone = ""` turns the phone off for Claude Code's questions.
 
 ## 6. Windows settings
 
@@ -451,9 +504,9 @@ Voice models (Whisper, wake word, TTS voices) download on first use, or ahead of
 
 None of this is inside the repository.
 
-## 8a. The wake overlay (Phase 18)
+## 8a. The wake overlay (Phase 18, removed in Phase 22)
 
-Nothing to install beyond `uv sync`: it uses your graphics driver. `uv run jarvis overlay demo` shows it. Settings are under `[overlay]` in `config/jarvis.toml`, and its log is `logs\overlay.log`.
+The overlay was removed with the page (ADR-081). An old `[overlay]` section or `[server] open_browser` in `config/local.toml` is ignored, so you do not have to delete them.
 
 ## 9. Troubleshooting
 

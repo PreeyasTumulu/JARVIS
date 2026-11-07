@@ -92,18 +92,24 @@ def test_parse_docstring_without_args() -> None:
 
 
 ALL_TOOLS = {
-    "open_app", "focus_app", "close_app", "find_file", "open_file", "read_file",
+    "open_app", "focus_app", "close_app", "schedule_app", "take_note", "read_notes",
+    "open_notes", "add_sheet_row", "calculator_show", "find_file", "open_file", "read_file",
     "get_selected_file", "vscode_open", "docker_list", "docker_logs", "docker_start",
-    "docker_stop", "web_search", "search_site", "open_url", "fetch_page", "market_data",
+    "docker_stop", "docker_up", "git_changes", "git_commit", "git_push", "ssh_connect",
+    "play_spotify", "look_at_screen", "ai_news", "web_search", "search_site", "open_url",
+    "fetch_page", "market_data",
     "crypto_price",
     "convert_currency", "weather", "set_volume", "set_brightness", "lock_screen", "screenshot",
     "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
     "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "read_screen",
     "browser_open",
     "browser_read", "browser_click", "browser_type", "send_whatsapp", "call_contact",
-    "hang_up", "media_control", "now_playing", "read_notifications", "read_mail", "read_email",
+    "hang_up", "ring_phone", "notify_phone", "send_to_phone", "open_chat",
+    "media_control", "now_playing", "read_notifications", "read_mail", "read_email",
     "reply_email", "calendar_events",
-    "remember", "list_memories", "forget", "recall", "briefing",
+    "remember", "list_memories", "forget", "recall", "briefing", "forget_history",
+    "clipboard_history", "clipboard_restore", "clipboard_forget",
+    "focus_start", "focus_end", "focus_status", "calculate",
     "speak", "ask_user",
 }  # fmt: skip
 
@@ -133,6 +139,10 @@ def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
         "web_search",
         "open_url",
         "search_site",
+        "play_spotify",  # the song request goes to Spotify
+        "git_push",  # commits go to the remote
+        "ai_news",  # it fetches the news feeds
+        "notify_phone",  # by ntfy over the internet when the phone is away (ADR-098)
     }
     read = registry.get("read_window_text")
     assert read is not None
@@ -149,6 +159,11 @@ def test_the_word_null_for_an_optional_argument_means_none() -> None:
     args = type_text.validate({"app": "notepad", "text": "hi", "field": "null"})
     assert args["field"] is None
     assert type_text.validate({"app": "notepad", "text": "None", "field": "x"})["text"] == "None"
+    # Hermes in the Phase 29 live test: "remind me on my phone in 30 minutes to stretch".
+    reminder = registry.get("set_reminder")
+    assert reminder is not None
+    raw = {"at": {"null": True}, "in_minutes": 30, "message": "stretch", "on_phone": True}
+    assert reminder.validate(raw)["at"] is None
 
 
 def test_arguments_wrapped_in_the_call_are_unwrapped() -> None:

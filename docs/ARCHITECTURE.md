@@ -10,11 +10,11 @@ This document describes how Jarvis is put together and why. It is the reference 
 - Local by default. The planner is Nous Hermes 3 (8B, quantized) on Ollama, called through an OpenAI-compatible client.
 - Typed, auditable tools. Each tool is a Python function with a generated JSON schema, a risk level, and a sensitivity label.
 - Safety enforced in code. Risk levels, allowlists, confirmation, cancellation, and the privacy router work even if the model misbehaves.
-- Models are swappable by config only, and the agent loop can move to LangGraph later without rewriting tools.
+- Models are swappable by config only. The agent loop is a LangGraph graph whose policy gate is a node no path can skip (section 4).
 
 **Non-goals (for now)**
 
-- Multi-user or remote access. The web UI binds to `127.0.0.1` only.
+- Multi-user or remote access. The local API binds to `127.0.0.1` only.
 - Running as administrator. Jarvis runs as a normal user and cannot drive elevated windows. This is intentional.
 - Vision-first computer use. A vision fallback exists behind a feature flag, but structured automation is the main path.
 - A general-purpose shell tool. Jarvis uses specific adapters (VS Code, Docker, etc.) instead. See ADR-010.
@@ -29,14 +29,15 @@ flowchart LR
     WW --> STT[STT<br/>faster-whisper]
     PTT --> STT
     CLI[Text CLI]
-    WEB[Web UI<br/>FastAPI + WebSocket]
+    WEB[Local API<br/>FastAPI + WebSocket, no page]
     HOOK[Claude Code hooks]
   end
 
   STT --> SES[Session]
   CLI --> SES
   WEB --> SES
-  SES --> AG[Agent core<br/>tool-calling loop]
+  SES --> RP[Router pipeline<br/>exact phrase, sum, template]
+  RP --> AG[Agent graph<br/>LangGraph: route, think, guard,<br/>gate, confirm, execute]
   AG <--> RT[Model router]
   RT --> LOC[Ollama<br/>Hermes 3 8B]
   RT -. public context only .-> CLD[Free cloud model<br/>Groq, OpenRouter]
@@ -49,11 +50,13 @@ flowchart LR
   REG --> TM[Messaging]
   REG --> TN[Notifications]
   REG --> TS[System]
+  TA & TF & TW & TD & TM & TN & TS --> ADP[Adapters<br/>Windows, web APIs, browser, MCP]
   AG --> BUS[Event bus]
   BUS --> WEB
   BUS --> CLI
   BUS --> TTS[TTS<br/>Piper / SAPI]
   BUS --> DB[(SQLite<br/>audit, history,<br/>prefs, contacts)]
+  AG <--> VEC[(ChromaDB<br/>memories and past<br/>commands by meaning)]
   HOOK --> BR[Bridge<br/>no model in the loop]
   BR --> WEB
   BR --> TTS
@@ -64,14 +67,16 @@ flowchart LR
 |---|---|---|
 | Inputs | Turn speech or text into a `UserInput` for a session | sounddevice, openWakeWord, faster-whisper |
 | Session | Holds conversation state for one user, shared by every input channel | stdlib asyncio |
-| Agent core | Plan with the LLM, call tools, loop until done or limits hit | openai (AsyncOpenAI), pydantic |
+| Router pipeline | Handle exact phrases, sums, and one-slot commands without a model | rapidfuzz |
+| Agent graph | Plan with the LLM, guard and gate each call, run tools, until done or limits hit | LangGraph, openai (AsyncOpenAI), pydantic |
 | Model router | Pick local or cloud model per turn, enforce the privacy guard | openai, httpx |
 | Policy gate | Decide safe / confirm / blocked for each call, run confirmations | pydantic |
 | Tool registry | Register typed tools, generate JSON schemas, execute with timeouts | pydantic, stdlib inspect |
 | Tools | Do the actual work on Windows and the web | UI Automation (comtypes), SendInput, Playwright (your default browser: Brave, Chrome, or Edge), httpx, pywinrt |
 | Bridge | Claude Code's questions and permissions, asked by voice, page, or phone | FastAPI route, httpx |
 | Event bus | Fan out typed events to UI, CLI, TTS, and the audit log | stdlib asyncio |
-| Storage | Preferences, contacts, history, audit log, caches | sqlite3 (WAL mode) |
+| Adapters | Every outside call: Windows APIs, web APIs (keys, retries, rate limits), browser, MCP | httpx, comtypes, Playwright |
+| Storage | Preferences, contacts, history, audit log, caches; vectors in ChromaDB | sqlite3, chromadb |
 
 ## 3. Lifecycle of one command
 
@@ -89,14 +94,17 @@ sequenceDiagram
 
     U->>I: "Message Mom that I'll be late"
     I->>A: UserInput(text, source=voice)
+    A->>A: route: no router stage matches, so the model plans
     A->>M: messages + tool schemas
     M-->>A: tool_call send_whatsapp(contact="Mom", message="I'll be late")
     A->>T: prepare(args) resolves "Mom" to one contact, no side effects
+    A->>A: guard: a valid call, not a repeat
     A->>P: evaluate(prepared call)
     P-->>I: ConfirmationRequest "Send 'I'll be late' to Amma (+91 98xxx)? Yes or no."
     U->>I: "Yes"
     I->>P: approve(request_id)
-    P->>T: execute(prepared call)
+    P-->>A: one-time clearance for exactly these arguments
+    A->>T: execute(prepared call, clearance)
     T-->>A: ToolResult(ok, speech="Sent to Amma.")
     A->>L: tool, args, decision=confirmed, via=voice, result
     A->>M: tool result
@@ -108,72 +116,156 @@ If "Mom" matched two contacts, `prepare` would return a clarification request an
 
 ## 4. Agent core
 
-### 4.1 State
+The agent loop is a LangGraph graph (`core/graph.py`, ADR-079, ADR-083). LangGraph was chosen over keeping the hand-written loop for named states, a checkpoint of where a stopped turn was, and a diagram that is generated from the code instead of drawn by hand. Tools, the policy gate, the executor, and the model router did not change shape; they became nodes.
 
-`AgentState` is a typed, serializable model (pydantic) so the loop can later become a LangGraph `StateGraph` without changes to tools:
+### 4.1 The graph
 
-- `messages`: the conversation in OpenAI chat format
-- `turn_id`, `session_id`, `source` (voice / cli / ui)
-- `sensitivity`: the highest sensitivity of anything in the context (see 5.4)
-- `iterations` and the turn deadline
-- `pending_confirmation`: the request currently waiting for you, if any
+This diagram is printed by `AgentGraph.mermaid()`, and a test (`tests/unit/test_architecture_doc.py`) fails if it no longer matches the code. Solid lines are fixed edges; dotted lines are the choices a node makes.
 
-Implementation note (Phase 1): the state lives on the `Agent` object (`src/jarvis/core/agent.py`) and each turn returns a `TurnResult`. It becomes an explicit graph state object if the loop moves to LangGraph.
+<!-- graph:begin -->
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	route(route)
+	think(think)
+	guard(guard)
+	gate(gate)
+	await_confirmation(await_confirmation)
+	execute(execute)
+	respond(respond)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> route;
+	await_confirmation -.-> execute;
+	await_confirmation -.-> gate;
+	await_confirmation -.-> respond;
+	await_confirmation -.-> think;
+	execute -.-> gate;
+	execute -.-> respond;
+	execute -.-> think;
+	gate -.-> await_confirmation;
+	gate -.-> execute;
+	gate -.-> respond;
+	gate -.-> think;
+	guard -.-> gate;
+	guard -.-> respond;
+	guard -.-> think;
+	route -.-> guard;
+	route -.-> think;
+	think -.-> guard;
+	think -.-> respond;
+	respond --> __end__;
+	gate -.-> gate;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+<!-- graph:end -->
 
-### 4.2 Loop
+| Node | What it does | Voice state it maps to |
+|---|---|---|
+| `route` | Runs the router pipeline (4.3). A match becomes a proposed tool call; no match goes to `think` | thinking |
+| `think` | The model (local, or a cloud model for heavy public questions, 7.2) answers or proposes tool calls | thinking |
+| `guard` | Repairs a near miss once, drops repeats, caps the calls in a turn (4.4) | thinking |
+| `gate` | The policy gate rates one call: safe, confirm, or blocked (6.1) | thinking |
+| `await_confirmation` | Asks you and waits for yes, no, or the time limit | awaiting_confirmation |
+| `execute` | Runs the tool with the gate's one-time clearance (4.5) | running_tool |
+| `respond` | The answer for this turn | responding |
 
-```python
-async def run_turn(state: AgentState) -> AgentState:
-    for _ in range(cfg.agent.max_iterations):
-        reply = await router.complete(state)                 # picks model, enforces privacy guard
-        if not reply.tool_calls:
-            return state.finish(reply.text)
-        for call in reply.tool_calls:
-            prepared = await registry.prepare(call, state)   # validate args, resolve, no side effects
-            decision = await policy.evaluate(prepared, state)
-            if decision.needs_confirmation:
-                decision = await confirmations.request(prepared, state)
-            result = await registry.execute(prepared, decision, state)  # timeout, cancel, audit
-            state = state.with_tool_result(call, result)      # wrapped as data, sensitivity raised
-    return state.finish(limit_reached_message(state))
+Every node entered publishes `AgentStateChanged(node, state)`, the state names LiveKit Agents uses, so a client can show what Jarvis is doing without knowing the graph.
+
+**State.** LangGraph checkpoints `TurnState`, which holds plain values only: `handled_by`, `step`, the queue of call ids waiting for the gate, the call at the gate, the gate's verdict, and the reply. Live objects (the tool context, the guard, the speech stream, the outcomes) travel in `TurnRuntime`, LangGraph's runtime context, and are never checkpointed. The checkpointer is in memory with one thread per turn, deleted when the turn ends, so nothing private outlives the turn in it (ADR-083).
+
+**No way around the gate.** `execute` is reachable only from `gate` and `await_confirmation`, and `await_confirmation` only from `gate`. A test reads the compiled graph's edges to keep it so (`tests/unit/test_gate_coverage.py`).
+
+### 4.2 Lifecycle in the graph
+
+```text
+route ─┬─ a stage matched ──────────────┐
+       └─ no match ─> think ─┬─ answer ─┼──────────────────────────────> respond
+                             └─ calls ──┴─> guard ─> gate ─┬─ safe ─────> execute ─┐
+                                                           ├─ confirm ─> await_confirmation ─> execute or refused
+                                                           └─ blocked, invalid ─> back to think with the error
+execute ─┬─ more calls queued ─> gate
+         ├─ a router stage started the turn ─> respond (the tool's own words are the answer)
+         └─ otherwise ─> think (the model sees the result)
 ```
 
-Before the loop, `core/fast_path.py` checks for an exact short command ("pause the music", "next song", "what's playing"). A match runs its one tool call through the same executor (policy gate, confirmation, audit, events) with no model, and the result's spoken summary is the reply; the call and result enter the history as if the model had made them (Phase 10, ADR-056).
+### 4.3 Router pipeline
 
-### 4.3 Limits
+Taken from OpenVoiceOS's intent pipeline and Home Assistant's "prefer handling commands locally" (RESEARCH.md 6.2). `[router] pipeline` lists stages in order; each gets `stage_timeout_ms` (default 150) and answers "this tool call" or "not mine". The first match wins.
+
+| Stage | Handles | Example |
+|---|---|---|
+| `exact_phrase` | whole short commands, and "yes" to the briefing offer | "pause the music", "hang up" |
+| `arithmetic` | a request that is only a sum (ADR-082) | "what is 18 percent of 2400" |
+| `template` | one slot filled from this laptop: an app that is in the app index, a volume level, mute, a note | "open notepad", "volume 30", "note that the plumber comes on Tuesday" |
+| `agent` | everything else: the model | "message Mom that I'll be late" |
+
+A match is only a proposed call. It enters the graph at `guard` and passes the policy gate like any call the model makes, so a stage can never run a tool by itself. Every turn records which stage handled it as `handled_by` (`exact_phrase`, `arithmetic`, `template`, `agent`, or `cloud`) in `command_history` and in the audit log. "open my report" falls through to the model, because only exact app index names and aliases match the template ("open youtube" opens the YouTube app only if one is installed). On a fresh data folder the first Start menu scan takes longer than the stage limit, so that one request goes to the model while the index builds.
+
+### 4.4 Guard
+
+`core/guard.py` screens proposed calls before the gate, without a model:
+
+- **Repair once:** an unknown tool name close to an offered one (rapidfuzz WRatio 88 or more) is corrected ("open_ap" to "open_app"), and arguments a small model meant as JSON (fenced, single-quoted, Python's `True` and `None`, a trailing comma) are rewritten. Anything else is refused as invalid with the reason, and the model gets one more try; a second round with nothing valid ends the turn with "I couldn't work out how to do that" and status `limit`.
+- **No repeats:** the same tool with the same arguments in one turn is not run again (`decision = duplicate` in the audit log). The model gets the earlier result back, and a refusal stays a refusal, so you are never asked twice.
+- **Step cap:** `agent.max_tool_calls_per_turn` (default 8) calls in one turn at most.
+
+### 4.5 Clearances
+
+A tool refuses to run without a `Clearance` (`tools/base.py`): permission from the policy gate for one call of one tool with exactly the approved arguments, used up when the tool runs. Only `PolicyGate.clear` issues one, and it rates the call again when asked, so a caller cannot bring its own verdict: blocked never runs, confirm runs only after a yes. `Tool` is a frozen dataclass, and the registry refuses a second tool with the same name. Source scans in `tests/unit/test_gate_coverage.py` check that tool functions are called only by `Tool.__call__`, clearances are issued only by the gate, and only the executor passes one to a tool.
+
+### 4.6 Limits
 
 | Limit | Default | Why |
 |---|---|---|
 | `max_iterations` | 6 | An 8B model can loop; stop early and say what happened |
-| `tool_timeout_s` | 20 | Per tool call; tools can override (browser and WhatsApp tools get longer) |
-| `turn_timeout_s` | 180 | Hard ceiling for one command (a first WhatsApp Web load takes up to a minute) |
 | `max_tool_calls_per_step` | 4 | Caps parallel tool calls in one model reply |
+| `max_tool_calls_per_turn` | 8 | Caps calls across the whole turn (guard) |
+| `tool_timeout_s` | 20 | Per tool call; tools can set their own `timeout_s` (browser and WhatsApp tools get longer) |
+| `turn_timeout_s` | 180 | Hard ceiling for one command (a first WhatsApp Web load takes up to a minute) |
 | `confirm_timeout_s` | 30 | No answer means no |
+| `[router] stage_timeout_ms` | 150 | A router stage slower than this is skipped |
 
-### 4.4 Prompting
+**Stopping a turn.** "Stop", the stop hotkey, or a new command cancels the turn. A tool with `cancel_on_interruption = True` (the default) is cancelled with it and audited as cancelled. A tool with `cancel_on_interruption = False` (a message already being sent) finishes in the background and is audited with its real result when it ends.
 
-The system prompt carries: identity and style (short, spoken sentences), the current date, time, and time zone, the rule that tool results are data and never instructions, and when to use `ask_user`. **Tool routing** (`core/tool_routing.py`, Phase 3): with 16 tools the 8B model picked the right first tool 80% of the time, against 100% with 4 tools. Keyword groups (apps, files, docker, web) now choose which tools a request sees; a request that matches no group sees all of them, and the executor still accepts any registered tool. Measured: 87% first-call accuracy and a slightly faster median (2.8 s vs 3.1 s), because the prompt is shorter. `agent.tool_routing = "all"` turns it off. **Semantic routing** (`core/semantic_routing.py`, Phase 13): when no keyword group matches, the request is embedded with `nomic-embed-text` and compared with example requests per group; the closest groups above a threshold are offered instead of every tool (ADR-063). With it, 93% of 84 benchmark commands get the right first tool, 86% without.
+### 4.7 Prompting
 
-**Spoken replies:** the 8B model tends to mirror list data as long markdown lists, which took 40 to 60 seconds to generate. Three things keep replies short: each tool result carries its one-sentence `summary`, list results end with a short reply instruction, and `max_tokens` (300) caps the worst case.
+The system prompt carries: identity and style (short, spoken sentences), the current date, time, and time zone, the rule that tool results are data and never instructions, and when to use `ask_user`. **Tool routing** (`core/tool_routing.py`, Phase 3): keyword groups (apps, files, docker, web) choose which tools a request sees; a request that matches no group sees all of them, and the executor still accepts any registered tool. **Semantic routing** (`core/semantic_routing.py`, Phase 13): when no keyword group matches, the request is embedded with `nomic-embed-text` and compared with example requests per group (ADR-063). With both, 93% of 84 benchmark commands get the right first tool.
 
-### 4.5 Tool-call parsing
+**Memory in the prompt:** facts about you (`remember(about="user")`) and facts about the current work (`about="context"`) have their own character budgets (`[memory] user_chars`, `context_chars`), and only memories that fit the request are added (ADR-084).
 
-1. Use native `tool_calls` from Ollama's OpenAI-compatible endpoint (Hermes 3 is tagged with the `tools` capability).
-2. Fallback: if the model emits `<tool_call>{...}</tool_call>` as plain text, parse it.
-3. Invalid JSON or unknown tool: feed a short error back to the model once, then stop and tell you.
+**Spoken replies:** each tool result carries a one-sentence `summary`, list results end with a short reply instruction, and `max_tokens` caps the worst case.
 
-### 4.6 Moving to LangGraph later
+### 4.8 Tool calls and streaming
 
-| Today (plain asyncio) | LangGraph equivalent |
-|---|---|
-| `router.complete` | `call_model` node |
-| `registry.prepare` + `policy.evaluate` | `gate` node with conditional edges |
-| `confirmations.request` | `interrupt()` for human-in-the-loop |
-| `registry.execute` | `tools` node |
-| `state.finish` | edge to `END` |
-| `AgentState` | graph state schema |
+1. Native `tool_calls` from Ollama's OpenAI-compatible endpoint (Hermes 3 has the `tools` capability).
+2. Fallback: `<tool_call>{...}</tool_call>`, or a whole reply of bare JSON, written as text is parsed (`llm/toolcall_parser.py`).
+3. For voice, the local model streams (`LLMClient.stream`). Text goes to a `SpeechStream` (`core/speech.py`) as it is written and is spoken sentence by sentence (section 8). Text that could be a tool call is held back: a reply that starts with `{`, `<`, or a code fence, and everything from a `<` on, waits until the reply is complete, and is spoken then only if it was not a call. If the model says something and then calls a tool, the stream closes at the call, so nothing talks over a confirmation question; the final answer is then spoken whole after the turn.
 
-Tools, the policy gate, and the router stay the same. Only the loop function is replaced.
+### 4.9 Latency breakdown
+
+Every turn stores its stage times in `command_history.timings_json`:
+
+| Key | From | To |
+|---|---|---|
+| `audio_ms`, `stt_ms`, `pre_turn_ms` | (voice) speech | the turn starting |
+| `route_ms` | turn start | the router pipeline's answer |
+| `llm_ms` | | time inside model calls, summed |
+| `first_token_ms` | turn start | the first streamed reply text |
+| `first_tool_ms` | turn start | the first tool starting |
+| `tool_ms` | | time inside tools, summed |
+| `turn_ms` | turn start | the reply |
+| `first_audio_ms` | (voice) end of your speech | the first sound of the answer |
+
+### 4.10 Startup
+
+LangGraph takes about 2.5 s to import on this laptop and ChromaDB about 1 s. Both are imported lazily, and `jarvis chat` and `jarvis serve` warm them up in a background thread at start (`Agent.warm_up_in_background`), so the prompt and the server are ready at once and the first request usually finds the graph built. A lock makes a first request that arrives during the warm-up wait for the same build instead of starting a second one.
 
 ## 5. Tool system
 
@@ -274,6 +366,8 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `media_control(action)` | 10 | safe; play, pause, toggle, next, previous on the current Windows media session, the media keys otherwise | public |
 | `now_playing()` | 10 | safe; the title, artist, and app of the current media session | private |
 | `clipboard_read()` / `clipboard_write(text)` | 4 | safe | private, untrusted / public |
+| `clipboard_history(count?)`, `clipboard_restore(position?)`, `clipboard_forget()` | 20 | safe; off until `[clipboard] history = true`; in memory only | private, untrusted / private / public |
+| `focus_start(minutes?, label?)`, `focus_end()`, `focus_status()` | 20 | safe; holds Jarvis's reminders, not Windows' notifications | private |
 | `set_timer`, `set_reminder`, `list_reminders`, `cancel_reminder(which)` | 4 | safe; cancelling more than one confirms | private |
 | `type_text(app, text, field?)`, `click(app, target)`, `press_keys(app, keys)` | 6 | confirm, or safe inside trusted apps except destructive targets and closing keys; always confirm in messaging apps and terminals; blocked in Registry Editor, consoles, sign-in prompts, password managers, and password fields | public |
 | `read_screen()` | 15 | safe; every screen read with Windows OCR | private, untrusted |
@@ -282,6 +376,10 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
 | `call_contact(contact)` | 9, 17 | confirm (floor); calls a saved contact by the WhatsApp app, or Phone Link if set | private |
 | `hang_up()` | 17 | safe; presses WhatsApp's end call button | private |
+| `open_chat()` | 32 | safe; opens the chat window when `jarvis serve` runs | public |
+| `ring_phone()` | 29 | safe; your own phone by KDE Connect, an urgent ntfy push when it is away | public |
+| `notify_phone(message, title?)` | 29 | safe, egress; the way is pinned when prepared; confirm when the push would go over the internet with private data in the conversation | public |
+| `send_to_phone(item?, text?)` | 29 | confirm (floor); a file through the file guard, a link, the clipboard, a screenshot, or text, over the Wi-Fi only | private |
 | `read_notifications(person?)` | 7 | safe; only apps on `notifications.apps` | private, untrusted |
 | `read_mail(sender?, unread_only?)`, `read_email(message)` | 11 | safe; the folder is opened read-only and nothing is marked read | private, untrusted |
 | `reply_email(message, text, reply_all?)` | 11 | confirm (floor); only to the people on that email, addresses read out | private |
@@ -290,6 +388,7 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `recall(about, when?)` | 14 | safe; past commands by meaning in a time range | private, untrusted |
 | `briefing()` | 14 | safe; weather, today's calendar and reminders, unread email and message counts | private, untrusted |
 | `remember(fact)`, `list_memories()`, `forget(what)` | 8 | safe; remembering after outside content asks; forgetting always asks | private |
+| `forget_history(about?, when?)` | 19 | confirm (floor); deletes commands, answers, vectors, and those turns' audit rows | private |
 
 ## 6. Safety model
 
@@ -405,13 +504,14 @@ stateDiagram-v2
 - **Wake word (opt-in, `--wake`):** openWakeWord "hey jarvis" with the ONNX backend (TFLite is not supported on Windows). The microphone stays open in this mode.
 - **Endpointing:** Silero VAD probabilities per frame feed `Endpointer` (`voice/endpoint.py`), which ends the recording after 0.8 s of silence, after 12 s, or if nothing was said within 5 s.
 - **STT:** faster-whisper `small.en`, on the GPU (`int8_float16`, about 135 ms a command) when the `gpu` extra is installed and on the CPU (`int8`, 8 threads, about 1.4 s) otherwise, falling back to the CPU if CUDA fails (ADR-062); with a short vocabulary hint (app names). Silent or tiny clips are skipped, and Whisper's typical silence hallucinations ("Thank you.") are dropped.
-- **TTS:** Piper (optional extra, GPL-3.0) speaks sentence by sentence, synthesizing the next sentence while the current one plays; stop cuts it within about 50 ms. Windows SAPI is the fallback. Kokoro arrives with packaging in Phase 8.
+- **TTS:** Piper (optional extra, GPL-3.0) speaks sentence by sentence, synthesizing the next sentence while the current one plays; stop cuts it within about 50 ms. Windows SAPI is the fallback.
+- **Streamed replies (Phase 24):** with `[tts] stream = true` (the default) each voice turn gets a `SpeechStream`. The local model's reply is spoken sentence by sentence while it is still being written (`PiperTTS.speak_stream`; SAPI speaks each sentence as it arrives), so the first sound comes after the first sentence, not the whole reply. A reply already spoken this way is not spoken again; a fast path answer, a cloud answer, or a turn that went on to call a tool after speaking is spoken whole when the turn ends (4.8).
 - **Deterministic phrases** (`voice/phrases.py`): "stop" style commands and yes/no answers never go through the model.
 - **Confirmations by voice:** `VoiceChannel` speaks "Should I open Paint? Say yes or no." and waits for the next utterance. In voice mode the agent's channel is `FirstAnswerChannel(voice, keyboard)`, so typing y or n also works (ADR-022).
 - **Self-trigger:** without echo cancellation, speaker output can trigger the wake word. Wake word detection is paused while Jarvis speaks and for 0.4 s after. Barge-in uses the push-to-talk hotkey.
 - **Staying up (Phase 9):** voice that cannot start (no microphone yet at login, no network) is logged and retried by `jarvis serve` (10 s, 20 s, 40 s, 60 s, then every two minutes) with a fresh PortAudio device list; a crashed voice loop starts again; an open microphone that sends nothing for 3 s is reopened (sleep and resume, device changes); Whisper loads its downloaded copy without the network. `jarvis voice --wake-test` shows the level and the wake word score live (RISKS.md R33, R34).
 - **Live transcript (Phase 18):** while recording, Whisper also runs on what has been heard so far and `TranscriptPartial` shows it; `VoiceLevel` carries the loudness, never the audio. Only the final transcript is acted on (ADR-072).
-- **Timings:** every voice command stores `audio_ms`, `stt_ms`, `pre_turn_ms`, `llm_ms`, `first_tool_ms`, and `turn_ms` in `command_history.timings_json`; the session prints the median "end of speech to first action" when it exits.
+- **Timings:** every voice command stores the stage times in 4.9, including `first_audio_ms` (end of your speech to the first sound of the answer), in `command_history.timings_json`; the session prints the median "end of speech to first action" when it exits.
 
 ## 9. Interfaces
 
@@ -419,9 +519,9 @@ stateDiagram-v2
 
 `jarvis chat` is a rich terminal client on the same session API: it shows tool calls live, prompts y/n for confirmations, and Ctrl+C cancels the current turn (a second Ctrl+C quits).
 
-### 9.2 Web UI
+### 9.2 Local API and the chat window
 
-FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) and one WebSocket (`src/jarvis/server/`). `jarvis serve` runs it on the same event loop as the agent, voice, and reminders, so all of them share one conversation (ADR-035, ADR-036).
+FastAPI serves `GET /health`, `POST /bridge`, one WebSocket (`src/jarvis/server/`) for programs on this computer, and since Phase 32 `GET /`, the chat window (ADR-103, `server/ui.py`): the page from `ui-demos/chat.html`, shown by `jarvis ui`, the tray, or "open Jarvis" in Brave's app mode. The WebSocket accepts that page and no other browser. `jarvis serve` runs it on the same event loop as the agent, voice, and reminders, so all of them share one conversation (ADR-035, ADR-036). When `serve` is started from a terminal, confirmations can also be answered there.
 
 | Direction | Message | Purpose |
 |---|---|---|
@@ -438,26 +538,13 @@ FastAPI serves a static page (plain HTML, CSS, and JavaScript, no build step) an
 | server to client | `audit {rows}`, `error {message}` | Audit view, errors |
 | server to client | `contacts {contacts, note, error, added}` | Contacts tab, after every change (to every tab) |
 
-**Local UI security.** Browsers do not apply CORS to WebSockets, so any website you visit could try to connect to `ws://127.0.0.1`. The server therefore binds to `127.0.0.1` only, checks the `Origin` header, and requires a random token generated at each launch (opened for you in the URL). It also rejects a foreign `Host` header (DNS rebinding) and sends a Content-Security-Policy that forbids other sites from framing the page, so nobody can overlay an invisible Confirm button. Everything the page shows is inserted as text, never as HTML, because replies can contain text from web pages.
+**Local API security.** Browsers do not apply CORS to WebSockets, so any website you visit could try to connect to `ws://127.0.0.1`. The server binds to `127.0.0.1` only, rejects a foreign `Host` header (DNS rebinding), and refuses every HTTP request and WebSocket that carries an `Origin` header. A browser always sends one and a page cannot remove it, so no website can reach the API; local programs do not send one. The WebSocket and the bridge also need the random token `jarvis serve` writes, with the port, to `%LOCALAPPDATA%\Jarvis\bridge.json` at each launch. When the new UI arrives as a page, it will get its own origin check again.
 
-The page (Phase 18, ADR-073) is an icon rail, the reactor with the voice state and your words as you speak, the conversation, and a side panel. `static/reactor.js` draws `static/reactor.glsl` on a fixed canvas that takes no clicks, and without WebGL 2 the page works the same with a plain ring.
-
-### 9.2a The wake overlay (Phase 18)
-
-```mermaid
-flowchart LR
-  BUS[Event bus] --> D[Director<br/>what to show]
-  D --> C[OverlayClient<br/>never blocks]
-  C -- JSON lines on a pipe --> W[python -m jarvis.overlay<br/>GLFW, moderngl]
-  W --> S[Scene: eased values]
-  S --> R[Renderer<br/>reactor.glsl, words as a texture]
-```
-
-The window has WS_EX_LAYERED and WS_EX_TRANSPARENT (clicks go through), WS_EX_NOACTIVATE and SW_SHOWNOACTIVATE (the focus stays put), WS_EX_TOOLWINDOW (not in Alt+Tab or `list_windows`), and WDA_EXCLUDEFROMCAPTURE (not in screenshots). `jarvis overlay demo` shows it once with no microphone or model. See ADR-070, ADR-071, and RISKS.md R53.
+The wake overlay (Phase 18) was removed along with the page.
 
 ### 9.3 Tray (Phase 8)
 
-`jarvis serve --tray` shows a pystray icon (its own thread) whose color and tooltip follow the voice state, with Open Jarvis (the page, with its token), Microphone (on or off), Stop, and Quit. Menu clicks are handed to the asyncio loop. `jarvis startup enable` starts `serve --tray --wake --no-browser` at login through uvw, with no console window (ADR-047).
+`jarvis serve --tray` shows a pystray icon (its own thread) whose color and tooltip follow the voice state, with Microphone (on or off), Stop, and Quit. Menu clicks are handed to the asyncio loop. `jarvis startup enable` starts `serve --tray --wake` at login (an older shortcut's `--no-browser` is still accepted) through uvw, with no console window (ADR-047).
 
 ### 9.4 The Claude Code bridge (Phase 9)
 
@@ -469,7 +556,31 @@ Claude Code runs `jarvis claude-hook` for three hook events (installed with `jar
 | `PermissionRequest` | "Claude in shop wants to run npm test. Allow it?" | `decision.behavior` allow or deny |
 | `Notification` (`idle_prompt`, `agent_completed`, `elicitation_dialog`) | says it | nothing |
 
-The hook posts to `http://127.0.0.1:<port>/bridge` with the bearer token from `%LOCALAPPDATA%\Jarvis\bridge.json`, which `jarvis serve` writes at start and removes at stop; a request with an `Origin` header (any browser) is refused. `BridgeService` (`bridge/service.py`) races its askers, voice and the page, and after `bridge.escalate_after_s` the phone (`bridge/phone.py`: ntfy or Twilio, off by default). An empty answer from one asker keeps the others waiting. Answers are matched by `bridge/answers.py` without any model: numbers ("two", "option two", "the second one"), names (exact, then fuzzy with a margin over the runner-up), "other: ..." for free text; a permission needs a clear yes or no. No decision within `bridge.answer_timeout_s` prints nothing, and Claude Code asks you itself.
+The hook posts to `http://127.0.0.1:<port>/bridge` with the bearer token from `%LOCALAPPDATA%\Jarvis\bridge.json`, which `jarvis serve` writes at start and removes at stop; a request with an `Origin` header (any browser) is refused. `BridgeService` (`bridge/service.py`) races its askers, voice and API clients, and after `bridge.escalate_after_s` the phone (`bridge/phone.py`: ntfy or Twilio, off by default). An empty answer from one asker keeps the others waiting. Answers are matched by `bridge/answers.py` without any model: numbers ("two", "option two", "the second one"), names (exact, then fuzzy with a margin over the runner-up), "other: ..." for free text; a permission needs a clear yes or no. No decision within `bridge.answer_timeout_s` prints nothing, and Claude Code asks you itself.
+
+### 9.5 Jarvis as an MCP server (Phase 25)
+
+```mermaid
+sequenceDiagram
+    participant C as MCP client (Claude Code)
+    participant S as jarvis mcp serve (stdio)
+    participant J as jarvis serve /mcp/
+    participant A as Agent.run_call
+    participant Y as You (voice, terminal)
+
+    C->>S: tools/list
+    S-->>C: the offered tools (public and listed only)
+    C->>S: tools/call open_app {"name": "paint"}
+    S->>J: the same call, with the token from bridge.json
+    J->>A: check, policy gate, clearance, audit (handled_by mcp:Claude Code)
+    A->>Y: "Claude Code wants to: Open Paint. Yes or no?"
+    Y-->>A: no
+    A-->>J: denied
+    J-->>S: "The user said no in Jarvis, so it was not done."
+    S-->>C: the result, is_error = true
+```
+
+`server/mcp_server.py` decides what is offered and runs calls; `server/mcp_stdio.py` is the command clients start. Only public tools listed in `[mcp_server] tools` are offered (ADR-085): an MCP client usually sends results to a cloud model. Calls run one at a time with voice and chat turns, and never enter the conversation. `/mcp/` sits behind the same checks as the rest of the local API (127.0.0.1, Host header, no Origin, the token).
 
 ## 10. Storage
 
@@ -480,16 +591,20 @@ SQLite at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with `PRAGMA use
 | `preferences` | key, JSON value, updated_at |
 | `contacts` | name (unique, compared case-insensitively), phone (E.164), notes, created_at |
 | `contact_aliases` | alias to contact (many to many, so "Ravi" can name two people on purpose) |
-| `command_history` | input text, source, final reply, status, model, latency |
+| `command_history` | input text, source, final reply, status, model, latency, stage times, `handled_by` |
 | `audit_log` | see 6.5 |
 | `api_cache` | cache key, JSON value, fetched_at, expires_at (quotes, rates, weather, places, symbols) |
 | `app_index` | display name, normalized name, kind (shortcut or packaged app), launch target or AppID, executable name |
 | `file_index` | path, name, normalized name, folder flag, size, modified time (only used when Everything is not installed) |
 | `index_meta` | when each index was last built and how many items it has |
 | `notifications` | Windows id, app id, app name, title, body, created_at, seen_at, read_at (allowed apps only; deleted after `keep_days`) |
-| `reminders` | kind (timer or reminder), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at |
-| `memories` | text, created_at (facts you asked Jarvis to remember) |
+| `reminders` | kind (timer, reminder, or app: a scheduled open or close), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at, action_json (the tool, its arguments, and the yes it was given, ADR-087) |
+| `memories` | text, kind (`user` or `context`), created_at (facts you asked Jarvis to remember) |
 | `cloud_usage` | day, provider, requests, prompt and completion tokens (free-tier daily caps) |
+
+**Vectors (ADR-084).** Memories and past commands are found by meaning with `nomic-embed-text` vectors in ChromaDB (`%LOCALAPPDATA%\Jarvis\chroma`, telemetry off, no embedding function of its own: Jarvis hands it the vectors), one collection per kind and embedding model. On first open the old SQLite `embeddings` rows are copied in once; if ChromaDB cannot open, the SQLite vectors are used instead. That table stays for one release as the fallback. Vectors are written after a turn's answer is out (`recall.after_turn`), never on the reply path.
+
+Commands, their vectors, and finished reminders are deleted after `history.keep_days`, the audit log after `history.audit_keep_days` (`storage/retention.py`, ADR-075). `secure_delete` overwrites deleted text.
 
 Everything that is personal (database, logs, the two browser profiles `browser-profile` and `whatsapp-profile`, downloaded voice models) lives under `%LOCALAPPDATA%\Jarvis\`, outside the repo, so it can never be committed by accident.
 
@@ -566,7 +681,8 @@ jarvis/
     local.example.toml        template for your gitignored local.toml
     ollama/*.Modelfile        local model aliases with num_ctx (8B and 3B)
   docs/                       this documentation, plus benchmarks/
-  scripts/                    benchmark_tools.py, check_dashes.py
+  scripts/                    benchmark_tools.py, check_dashes.py, build_ui_demos.py, capture_ui_demos.py
+  ui-demos/                   six standalone UI concepts with one shared kit (_kit.js) and screenshots (ADR-100)
   src/jarvis/
     __main__.py               python -m jarvis
     cli.py                    jarvis chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,
@@ -576,9 +692,13 @@ jarvis/
     tray.py                   the tray icon (pystray) and its menu
     services.py               shared helpers tools use (TTS, app index, search backend)
     config.py
-    core/                     agent loop, executor (gate + confirm + audit), tool routing, fast path,
-                              meaning.py (embeddings in SQLite), semantic routing, events,
-                              channel, prompts
+    adapters/                 the outside world: http.py (ApiClient: keys, retries, rate limits, breakers,
+                              cache, redacted logs), phone.py (KDE Connect and ntfy, ADR-098); the package
+                              docstring maps the other adapters
+    core/                     agent.py (turns), graph.py (the LangGraph graph), pipeline.py (router stages),
+                              guard.py, executor (gate + confirm + audit), speech.py (sentence stream),
+                              meaning.py (vectors in ChromaDB or SQLite), tool and semantic routing,
+                              fast path phrases, events, channel, prompts
     llm/                      OpenAI-compatible client, tool-call text parser, router and privacy guard
     tools/
       registry.py             @tool decorator, schema generation
@@ -586,15 +706,24 @@ jarvis/
       catalog.py              the list of tools exposed to the model
       interaction.py          speak, ask_user
       memory.py               remember, list_memories, forget
+      notes.py                take_note, read_notes, open_notes (a Markdown file per day, ADR-088)
+      vision.py               look_at_screen (gemma3 with the OCR text, then Hermes reloaded, ADR-096)
+      phone.py                ring_phone, notify_phone, send_to_phone (your own phone, ADR-098)
+      news.py                 ai_news (feeds, a cloud model writes it, saved with links, ADR-097)
+      media/                  spotify.py (play_spotify: search API, desktop app, ADR-091)
+      dev/                    git.py (git_changes, git_commit, git_push, ADR-094), ssh.py (ssh_connect, ADR-093)
+      office/                 sheets.py (add_sheet_row: Excel, openpyxl, CSV, ADR-089),
+                              calculator.py (calculator_show, ADR-090)
       secrets.py              hides secret-looking values in text tools read
-      apps/                   app index (SQLite), open/focus/close, window matching, vscode, docker
+      apps/                   app index (SQLite), open/focus/close/schedule, window matching, vscode, docker,
+                              docker_up.py (compose or image, then readiness, ADR-092)
       ui/                     type_text, click, press_keys, read_window_text; key parsing; risk rules
       files/                  guard (allowlist, secrets), index and search (Everything or SQLite),
                               readers (text, PDF, docx), "this file" from Explorer or VS Code
       web/                    search, open_url, fetch_page, search_site (sites.py)
       browser/                Jarvis's browser (Playwright, two profiles), page snapshot script,
                               browser_open, browser_read, browser_click, browser_type
-      data/                   http (cache, token buckets, breakers), market chain, weather, currency,
+      data/                   market chain, weather, currency,
                               crypto, spoken number formatting
       messaging/              contact book and vCard import, send_whatsapp, call_contact, WhatsApp Web and desktop,
                               WhatsApp Web selectors
@@ -613,14 +742,13 @@ jarvis/
       dictation.py            dictation: text rules, typing or pasting into the focused app
       models.py, runner.py    model downloads; `jarvis voice` and `jarvis setup-voice`
       tts/                    TTS interface, Piper, SAPI, engine factory
-    overlay/                  the wake effect: director.py (what to show), client.py (the process and pipe),
-                              window.py (the window), scene.py (animation), renderer.py, card.py (words),
-                              demo.py
     storage/                  sqlite connection, migrations, repositories
     bridge/                   the Claude Code bridge: hook.py (the hook, install), service.py (asking),
                               answers.py (matching what you said), phone.py (ntfy, Twilio)
-    server/                   app.py (routes, security), hub.py (tabs, WebChannel), runtime.py
-                              (requests from tabs), serve.py (uvicorn, voice, reminders), static/
+    server/                   app.py (the local API and its checks), hub.py (clients, WebChannel),
+                              runtime.py (requests from clients), serve.py (uvicorn, voice, reminders),
+                              mcp_server.py (/mcp/: what is offered, calls), mcp_stdio.py (jarvis mcp serve),
+                              ui.py and ui/chat.html (the chat window, its token and policy, ADR-103)
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
                               COM thread, volume, display (brightness, lock, screenshot), clipboard,
                               UI Automation (uia.py), synthetic keys and clicks (sendinput.py),
@@ -636,7 +764,8 @@ jarvis/
 
 - stdlib `logging` with a rotating file in `%LOCALAPPDATA%\Jarvis\logs` and a rich console handler.
 - The audit log is the source of truth for what Jarvis did. `jarvis audit --last 20` prints it.
-- Each turn records latency per stage (STT, LLM, tools, TTS) in `command_history` so slow spots are measurable.
+- Each turn records latency per stage (4.9) and the router stage or model that handled it in `command_history`, so slow spots are measurable.
+- LangSmith tracing is forced off in Jarvis's own process whatever the environment says, because a trace would send a turn's private data to a cloud service (RISKS.md R60).
 
 ## 15. Testing approach
 

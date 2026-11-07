@@ -1,0 +1,7 @@
+# Jarvis alias for Llama 3.2 3B with a context window large enough for tool schemas.
+# It fits fully on a 4 GB GPU. Create it with:
+#   ollama pull llama3.2:3b
+#   ollama create jarvis-llama3.2 -f config/ollama/llama3.2-3b.Modelfile
+FROM llama3.2:3b
+PARAMETER num_ctx 8192
+PARAMETER temperature 0.2

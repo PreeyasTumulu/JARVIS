@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from jarvis.config import SafetySettings
-from jarvis.tools.base import ContextFlags, Prepared, Risk
+from jarvis.tools.base import Clearance, ContextFlags, Prepared, Risk, issue_clearance
 from jarvis.tools.registry import Tool
 
 EXFILTRATION_REASON = (
@@ -51,6 +51,20 @@ class PolicyGate:
         if override.rank > built_in.rank:
             return PolicyDecision(risk, f"{tool.name} is set to '{override}' in config")
         return PolicyDecision(risk, reason)
+
+    def clear(
+        self, tool: Tool, prepared: Prepared, flags: ContextFlags | None, *, confirmed: bool
+    ) -> Clearance:
+        """The one way to get permission to run a tool. The gate decides again here, so a
+        caller cannot bring its own verdict: blocked never runs, confirm runs only after a yes.
+        """
+        verdict = self.evaluate(tool, prepared, flags)
+        if verdict.risk is Risk.BLOCKED:
+            raise PermissionError(f"{tool.name} is blocked: {verdict.reason or 'not allowed'}")
+        if verdict.risk is Risk.CONFIRM and not confirmed:
+            raise PermissionError(f"{tool.name} needs a confirmation first")
+        decision = "confirmed" if verdict.risk is Risk.CONFIRM else "auto"
+        return issue_clearance(tool.name, prepared.args, verdict.risk, decision)
 
 
 def app_risk(app_name: str, safety: SafetySettings) -> tuple[Risk, str | None]:

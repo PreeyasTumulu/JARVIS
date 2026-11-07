@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- jarvis:live -->
+<title>Jarvis chat</title>
+<style>
+  /* Chat: the orb and the edge glow brought together around a conversation.
+     The orb waits large in the middle, then glides up into the header once you talk;
+     the window's edge carries the same colour as the orb, so the state reads from anywhere. */
+  :root {
+    color-scheme: light;
+    --bg: #E9ECF5;
+    --surface: #F5F6FB;
+    --bubble: #DCE1F0;
+    --ink: #262B42;
+    --muted: #666C8C;
+    --line: #CDD3E4;
+    --a: #B9C2E6;
+    --b: #DDE2F5;
+    --glow: 0;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-move: cubic-bezier(0.77, 0, 0.175, 1);
+    --dock-bg: transparent;
+    --dock-fg: #5A6080;
+    --dock-line: #CDD3E4;
+    --dock-accent: #262B42;
+    --dock-on-accent: #E9ECF5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #141726; --surface: #1C2033; --bubble: #272C46; --ink: #E7E9F3; --muted: #9AA1C0;
+      --line: #2E3452; --a: #5C6593; --b: #8E97C6;
+      --dock-fg: #9AA1C0; --dock-line: #2E3452; --dock-accent: #E7E9F3; --dock-on-accent: #141726;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141726; --surface: #1C2033; --bubble: #272C46; --ink: #E7E9F3; --muted: #9AA1C0;
+    --line: #2E3452; --a: #5C6593; --b: #8E97C6;
+    --dock-fg: #9AA1C0; --dock-line: #2E3452; --dock-accent: #E7E9F3; --dock-on-accent: #141726;
+  }
+  /* The state colours are the orb demo's, the same in light and dark. */
+  body[data-state="listening"] { --a: #4F7DF5; --b: #9CD3FF; }
+  body[data-state="thinking"] { --a: #8B6CF6; --b: #F0A3E6; }
+  body[data-state="speaking"] { --a: #FF7E95; --b: #FFC98F; }
+  body[data-state="confirm"] { --a: #E9A23B; --b: #FFE3A3; }
+  body[data-state="tool"] { --a: #2FB79B; --b: #A6EBD8; }
+  body[data-state="error"] { --a: #D9363E; --b: #FF9A8A; }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    transition: background-color 300ms ease;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* The edge glow, from the edge demo: a turning ring of the state's two colours. */
+  @property --angle { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+  .edge {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5; padding: var(--thick, 0px);
+    background: conic-gradient(from var(--angle), var(--a), var(--b), var(--a), var(--b), var(--a));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    filter: blur(8px) saturate(1.15); opacity: calc(var(--glow) * 0.9);
+    transition: opacity 400ms ease;
+  }
+  /* A soft bloom inside the ring: an inset shadow has no hard inner edge. */
+  .bloom {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: calc(var(--glow) * 0.55);
+    box-shadow: inset 0 0 calc(var(--thick, 0px) * 5) calc(var(--thick, 0px) * 0.6) var(--a);
+    transition: opacity 400ms ease;
+  }
+
+  header {
+    position: relative; z-index: 2; display: flex; align-items: center; gap: 12px;
+    height: 64px; padding: 0 clamp(16px, 4vw, 32px); flex: none;
+  }
+  .head-slot { width: 44px; height: 44px; flex: none; }
+  .who { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+  .who strong { font: 600 16px/1.2 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+  .who span { font-size: 13px; color: var(--muted); transition: color 300ms ease; }
+  body:not([data-state="idle"]) .who span { color: var(--a); }
+  .tools { margin-left: auto; display: flex; gap: 6px; }
+  .icon-button {
+    width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%;
+    border: 1px solid transparent; background: transparent; cursor: pointer;
+    transition: transform 160ms var(--ease-out), background-color 160ms ease;
+  }
+  .icon-button:active { transform: scale(0.95); }
+  @media (hover: hover) and (pointer: fine) { .icon-button:hover { background: var(--surface); } }
+  .icon-button:focus-visible, .composer button:focus-visible, .card button:focus-visible {
+    outline: 2px solid var(--a); outline-offset: 2px;
+  }
+  .icon-button svg { width: 18px; height: 18px; }
+  #theme .sun, :root[data-theme="dark"] #theme .moon { display: none; }
+  :root[data-theme="dark"] #theme .sun { display: block; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) #theme .moon { display: none; }
+    :root:not([data-theme="light"]) #theme .sun { display: block; }
+  }
+  body.empty .new-chat { visibility: hidden; }
+
+  /* The orb: one canvas that moves between the middle and the header. */
+  .orb {
+    position: fixed; left: 0; top: 0; width: 300px; height: 300px; z-index: 3; pointer-events: none;
+    transform-origin: 0 0; transition: transform 720ms var(--ease-move);
+  }
+  .orb canvas { width: 100%; height: 100%; display: block; }
+  .orb.instant { transition: none; }
+
+  main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .welcome {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; padding: 0 16px 40px; gap: 18px;
+    transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out);
+  }
+  .hero-slot { width: min(300px, 62vw); aspect-ratio: 1; }
+  .welcome h1 {
+    margin: 0; font: 400 clamp(26px, 3.6vw, 36px)/1.2 "Sitka Display", "Sitka Text", Georgia, serif;
+    text-wrap: balance;
+  }
+  .welcome p { margin: 0; color: var(--muted); max-width: 40ch; }
+  body:not(.empty) .welcome { opacity: 0; transform: translateY(-12px); pointer-events: none; }
+
+  .log {
+    flex: 1; min-height: 0; overflow-y: auto; padding: 8px clamp(16px, 4vw, 32px) 24px;
+    scroll-behavior: smooth; transition: opacity 260ms ease 120ms;
+  }
+  body.empty .log { opacity: 0; }
+  .thread { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .msg {
+    transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out), filter 240ms ease;
+    @starting-style { opacity: 0; transform: translateY(8px) scale(0.98); filter: blur(2px); }
+  }
+  .you {
+    align-self: flex-end; max-width: min(78%, 520px); padding: 9px 15px; border-radius: 18px 18px 6px 18px;
+    background: var(--bubble); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .you.live { color: var(--muted); font-style: italic; background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+  .you.live::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--a); animation: caret 1s steps(1) infinite; }
+  @keyframes caret { 50% { opacity: 0; } }
+  .jarvis {
+    align-self: flex-start; max-width: min(86%, 600px);
+    font: 18px/1.45 "Sitka Text", Georgia, serif; overflow-wrap: anywhere;
+  }
+  .jarvis .word { transition: opacity 180ms ease, filter 180ms ease; }
+  .jarvis .word.hidden { opacity: 0; filter: blur(3px); }
+  .jarvis.thinking { color: var(--muted); font-style: italic; }
+  .jarvis.thinking span {
+    background: linear-gradient(90deg, var(--muted) 0%, var(--ink) 45%, var(--muted) 90%);
+    background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shimmer 1.6s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -220% 0; } }
+  .jarvis.bad { color: #C2313A; }
+  :root[data-theme="dark"] .jarvis.bad { color: #FF8A80; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .jarvis.bad { color: #FF8A80; } }
+  .jarvis small { display: block; margin-top: 2px; font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", sans-serif; color: var(--muted); }
+
+  /* A confirmation, asked in the conversation itself. */
+  .card {
+    align-self: flex-start; width: min(100%, 440px); padding: 14px 16px; border-radius: 14px;
+    background: var(--surface); box-shadow: inset 0 0 0 1px var(--line), 0 10px 30px -18px rgba(30, 35, 70, 0.4);
+  }
+  .card p { margin: 0 0 12px; font: 17px/1.4 "Sitka Text", Georgia, serif; }
+  .card .buttons { display: flex; gap: 8px; }
+  .card button {
+    padding: 7px 20px; border-radius: 999px; cursor: pointer; border: 1px solid var(--line); background: transparent;
+    transition: transform 160ms var(--ease-out), background-color 160ms ease;
+  }
+  .card button:active { transform: scale(0.97); }
+  .card button.yes { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  .card.answered { padding: 0 2px; background: transparent; box-shadow: none; }
+  .card.answered p { margin: 0; font: 14px/1.4 "Segoe UI Variable Text", "Segoe UI", sans-serif; color: var(--muted); }
+  .card.answered .buttons { display: none; }
+  body[data-state="confirm"] .card:not(.answered) { box-shadow: inset 0 0 0 1.5px var(--a), 0 10px 30px -18px rgba(30, 35, 70, 0.4); }
+
+  .composer-wrap { flex: none; padding: 0 clamp(16px, 4vw, 32px) 10px; position: relative; z-index: 2; }
+  .composer {
+    max-width: 720px; margin: 0 auto; display: flex; align-items: flex-end; gap: 6px; padding: 6px 6px 6px 16px;
+    border-radius: 24px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line);
+    transition: box-shadow 200ms ease;
+  }
+  .composer:focus-within { box-shadow: inset 0 0 0 1.5px var(--a); }
+  textarea {
+    flex: 1; min-height: 36px; max-height: 140px; resize: none; border: 0; outline: 0; padding: 7px 0;
+    background: transparent; color: var(--ink); font: inherit; line-height: 22px;
+  }
+  textarea::placeholder { color: var(--muted); }
+  .composer button {
+    width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 0;
+    cursor: pointer; background: transparent; transition: transform 160ms var(--ease-out), background-color 200ms ease, color 200ms ease;
+  }
+  .composer button:active { transform: scale(0.94); }
+  .composer button svg { width: 18px; height: 18px; }
+  .composer .send { background: var(--ink); color: var(--bg); }
+  .composer .send:disabled { opacity: 0.35; cursor: default; }
+  .composer .mic[aria-pressed="true"] { background: var(--a); color: #FFFFFF; }
+  .send .stop-icon, body.working .send .send-icon { display: none; }
+  body.working .send .stop-icon { display: block; }
+  .note { max-width: 720px; margin: 6px auto 0; text-align: center; font-size: 12px; color: var(--muted); }
+  #dock { padding: 4px 16px 10px; font-size: 12px; }
+  body.live #dock { display: none; }
+  body.down .note { color: #C2313A; }
+  .composer .mic:disabled { opacity: 0.35; cursor: default; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orb { transition: none; }
+    .msg { transition: opacity 200ms ease; @starting-style { opacity: 0; } }
+    .jarvis.thinking span, .you.live::after { animation: none; }
+    .welcome { transition: opacity 200ms ease; }
+    body:not(.empty) .welcome { transform: none; }
+  }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body data-state="idle" class="empty" data-kit-autoplay="off">
+<div class="bloom" aria-hidden="true"></div>
+<div class="edge" aria-hidden="true"></div>
+<div class="orb" id="orb" aria-hidden="true"><canvas id="orb-canvas"></canvas></div>
+
+<header>
+  <div class="head-slot" id="head-slot"></div>
+  <div class="who">
+    <strong>Jarvis</strong>
+    <span data-kit="label">Idle</span>
+  </div>
+  <div class="tools">
+    <button type="button" class="icon-button new-chat" id="new-chat" aria-label="New chat" title="New chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button type="button" class="icon-button" id="theme" aria-label="Switch light and dark" title="Switch light and dark">
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="welcome" aria-labelledby="hello">
+    <div class="hero-slot" id="hero-slot"></div>
+    <h1 id="hello">Good evening</h1>
+    <p>Say &ldquo;Hey Jarvis&rdquo;, or type below. Try &ldquo;send the clipboard to my phone&rdquo;.</p>
+  </section>
+  <div class="log" id="log">
+    <div class="thread" id="thread" role="log" aria-live="polite" aria-label="Conversation"></div>
+  </div>
+</main>
+
+<div class="composer-wrap">
+  <form class="composer" id="composer">
+    <label class="sr" for="text">Message Jarvis</label>
+    <textarea id="text" rows="1" placeholder="Message Jarvis"></textarea>
+    <button type="button" class="mic" id="mic" aria-pressed="false" aria-label="Talk" title="Talk">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+    </button>
+    <button type="submit" class="send" id="send" aria-label="Send" title="Send" disabled>
+      <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      <svg class="stop-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+    </button>
+  </form>
+  <p class="note">A demo: the conversation is acted out on this page, and nothing is sent anywhere.</p>
+</div>
+<nav id="dock"></nav>
+
+<script>
+// kit:begin
+// The demo kit: the seven states, a scripted run, the controls, and the microphone level.
+// Every demo page carries a copy between its kit markers; edit this file, then run
+// `uv run python scripts/build_ui_demos.py` (a test checks the copies match).
+//
+// A page reads Kit.scene in Kit.onFrame(fn) and styles itself from body[data-state].
+// Elements marked data-kit="heard" | "say" | "ask" | "tool" | "label" get their text here,
+// and buttons marked data-kit-answer="yes" | "no" answer the confirmation.
+// Nothing here makes a network request. The microphone is opened only after its button is
+// pressed, and its sound never leaves the page: only a loudness number is read.
+const Kit = (() => {
+  const STATES = ["idle", "listening", "thinking", "speaking", "confirm", "tool", "error"];
+  const NAMES = {
+    idle: "Idle",
+    listening: "Listening",
+    thinking: "Thinking",
+    speaking: "Speaking",
+    confirm: "Waiting for your yes",
+    tool: "Running a tool",
+    error: "Error",
+  };
+  // What each state shows when picked by hand, and in screenshots.
+  const EXAMPLE = {
+    idle: { say: "Say “Hey Jarvis”" },
+    listening: { heard: "send the clipboard to my phone" },
+    thinking: { heard: "send the clipboard to my phone" },
+    confirm: { ask: "Send what you copied to your phone?" },
+    tool: { tool: "send_to_phone", say: "Sending to your phone" },
+    speaking: { say: "Sent what you copied to your phone." },
+    error: { say: "Your phone isn’t paired yet. Open KDE Connect on the PC and press Pair." },
+  };
+  const SCRIPT = [
+    { state: "idle", ms: 1800, ...EXAMPLE.idle },
+    { state: "listening", ms: 2800, heard: "send the clipboard to my phone" },
+    { state: "thinking", ms: 1300, heard: "send the clipboard to my phone" },
+    { state: "confirm", ms: 2600, ...EXAMPLE.confirm, auto: "yes" },
+    { state: "idle", ms: 1600, ...EXAMPLE.idle },
+    { state: "listening", ms: 1700, heard: "find my phone" },
+    { state: "tool", ms: 1200, tool: "ring_phone", say: "Looking for your phone" },
+    { state: "error", ms: 3400, ...EXAMPLE.error },
+  ];
+  const AFTER_YES = [
+    { state: "tool", ms: 1400, ...EXAMPLE.tool },
+    { state: "speaking", ms: 2800, ...EXAMPLE.speaking },
+  ];
+  const AFTER_NO = [{ state: "speaking", ms: 1600, say: "Okay, I won’t." }];
+
+  const params = new URLSearchParams(location.search);
+  const still = params.has("still"); // a frozen frame, for screenshots
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const scene = {
+    state: "idle", heard: "", heardShown: "", say: "", ask: "", tool: "",
+    t: 0, since: 0, level: 0, mic: false, calm, still,
+    seq: 0, // counts every state change, so a page can tell a new step from the same one
+    picked: false, // this state was chosen by hand (a button, a key, ?state=), not by a run
+  };
+  const frames = [];
+  let queue = [];
+  let stepEnds = 0;
+  let looping = !still && !params.has("state");
+  let step = null;
+  let analyser = null;
+  let samples = null;
+  let fedLevel = 0; // a level from outside the page (the real Jarvis's microphone)
+  let fedAt = -1;
+
+  function show(entry, now) {
+    step = entry;
+    scene.state = entry.state;
+    scene.heard = entry.heard || "";
+    scene.say = entry.say || "";
+    scene.ask = entry.ask || "";
+    scene.tool = entry.tool || "";
+    scene.since = now;
+    scene.seq += 1;
+    scene.picked = Boolean(entry.picked);
+    stepEnds = entry.ms ? now + entry.ms / 1000 : Infinity;
+    document.body.dataset.state = entry.state;
+    for (const el of document.querySelectorAll("[data-kit]")) {
+      const key = el.dataset.kit;
+      if (key === "label") el.textContent = NAMES[entry.state];
+      else if (key !== "heard") el.textContent = scene[key] || "";
+    }
+    for (const button of document.querySelectorAll("[data-kit-state]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.kitState === entry.state));
+    }
+  }
+
+  function run(steps, now) {
+    queue = steps.slice();
+    show(queue.shift(), now);
+  }
+
+  function next(now) {
+    if (step && step.auto) return answer(step.auto === "yes");
+    if (queue.length) return show(queue.shift(), now);
+    if (looping) return run(SCRIPT, now);
+    stepEnds = Infinity;
+  }
+
+  function answer(yes) {
+    if (scene.state !== "confirm") return;
+    const now = performance.now() / 1000;
+    queue = (yes ? AFTER_YES : AFTER_NO).slice();
+    if (looping) queue.push(...SCRIPT);
+    show(queue.shift(), now);
+  }
+
+  function pick(state) {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state, ...EXAMPLE[state], picked: true }, performance.now() / 1000);
+  }
+
+  // A page's own turn, such as a typed message: these steps once, then rest.
+  function play(steps) {
+    looping = false;
+    updatePlay();
+    run(steps, performance.now() / 1000);
+  }
+
+  // Live pages: a state from a real event, held until the next one, and Jarvis's own mic level.
+  function set(state, fields = {}) {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state, ...fields }, performance.now() / 1000);
+  }
+
+  function feedLevel(value) {
+    fedLevel = Math.max(0, Math.min(1, Number(value) || 0));
+    fedAt = performance.now();
+  }
+
+  function stop() {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state: "idle", ...EXAMPLE.idle }, performance.now() / 1000);
+  }
+
+  function noise(t) {
+    return (Math.sin(t * 7.3) + Math.sin(t * 13.1 + 1.7) * 0.6 + Math.sin(t * 29.9 + 0.4) * 0.3) / 1.9;
+  }
+
+  function syntheticLevel(t, inState) {
+    switch (scene.state) {
+      case "listening": return Math.min(1, 0.3 + 0.45 * Math.abs(noise(t * 1.4)));
+      case "speaking": {
+        const syllable = Math.abs(Math.sin(t * 9.5)) * (0.55 + 0.45 * Math.abs(Math.sin(t * 2.1)));
+        return inState < 0.15 ? syllable * inState / 0.15 : syllable;
+      }
+      case "thinking": return 0.12 + 0.05 * Math.sin(t * 3);
+      case "tool": return 0.2;
+      default: return 0;
+    }
+  }
+
+  function micLevel() {
+    analyser.getFloatTimeDomainData(samples);
+    let sum = 0;
+    for (const v of samples) sum += v * v;
+    return Math.min(1, Math.sqrt(sum / samples.length) * 6);
+  }
+
+  function tick(ms) {
+    const now = ms / 1000;
+    if (!still && now >= stepEnds) next(now);
+    const t = still ? 2.2 : now;
+    const inState = still ? 1.4 : now - scene.since;
+    scene.t = t;
+    const fed = scene.state === "listening" && ms - fedAt < 400;
+    const target = fed ? fedLevel
+      : scene.mic && scene.state === "listening" ? micLevel() : syntheticLevel(t, inState);
+    scene.level = still ? target : scene.level + (target - scene.level) * 0.25;
+    // The words appear as they are heard.
+    const share = scene.state === "listening" && !still ? Math.min(1, inState / 1.8) : 1;
+    scene.heardShown = scene.heard.slice(0, Math.ceil(scene.heard.length * share));
+    for (const el of document.querySelectorAll('[data-kit="heard"]')) {
+      if (el.textContent !== scene.heardShown) el.textContent = scene.heardShown;
+    }
+    for (const fn of frames) fn(scene);
+    requestAnimationFrame(tick); // a frozen frame keeps drawing the same picture, so resizes redraw
+  }
+
+  async function toggleMic(button, status) {
+    if (scene.mic) {
+      scene.mic = false;
+      analyser.context.close();
+      analyser = null;
+      button.textContent = "Use my microphone";
+      status.textContent = "";
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const context = new AudioContext();
+      analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      samples = new Float32Array(analyser.fftSize);
+      context.createMediaStreamSource(stream).connect(analyser);
+      scene.mic = true;
+      button.textContent = "Stop using the microphone";
+      status.textContent = "Listening follows your voice. Nothing is recorded or sent.";
+      pick("listening");
+    } catch (error) {
+      status.textContent = "The microphone was not allowed. Allow it in the address bar and try again.";
+    }
+  }
+
+  let playButton = null;
+  function updatePlay() {
+    if (playButton) playButton.textContent = looping ? "Pause the demo" : "Play the demo";
+  }
+
+  function dock() {
+    const nav = document.querySelector("#dock");
+    if (!nav) return;
+    nav.setAttribute("aria-label", "Demo controls");
+    const states = document.createElement("div");
+    states.className = "kit-states";
+    states.setAttribute("role", "group");
+    states.setAttribute("aria-label", "Show a state");
+    STATES.forEach((state, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.kitState = state;
+      button.textContent = NAMES[state];
+      button.title = `${NAMES[state]} (key ${index + 1})`;
+      button.addEventListener("click", () => pick(state));
+      states.append(button);
+    });
+    const actions = document.createElement("div");
+    actions.className = "kit-actions";
+    playButton = document.createElement("button");
+    playButton.type = "button";
+    playButton.addEventListener("click", () => {
+      looping = !looping;
+      updatePlay();
+      if (looping) run(SCRIPT, performance.now() / 1000);
+    });
+    const mic = document.createElement("button");
+    mic.type = "button";
+    mic.textContent = "Use my microphone";
+    const status = document.createElement("p");
+    status.className = "kit-status";
+    status.setAttribute("role", "status");
+    mic.addEventListener("click", () => toggleMic(mic, status));
+    actions.append(playButton, mic);
+    nav.append(states, actions, status);
+    updatePlay();
+  }
+
+  const css = `
+  #dock { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: 8px 16px; padding: 10px 16px; color: var(--dock-fg); background: var(--dock-bg);
+    font: 13px/1.3 var(--dock-font, inherit); }
+  #dock button { font: inherit; color: inherit; background: transparent; cursor: pointer;
+    border: 1px solid var(--dock-line); border-radius: var(--dock-radius, 999px); padding: 5px 11px; }
+  #dock button:hover { border-color: var(--dock-fg); }
+  #dock button[aria-pressed="true"] { background: var(--dock-accent); color: var(--dock-on-accent);
+    border-color: var(--dock-accent); }
+  #dock button:focus-visible, [data-kit-answer]:focus-visible { outline: 2px solid var(--dock-accent);
+    outline-offset: 2px; }
+  .kit-states, .kit-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .kit-status { margin: 0; width: 100%; text-align: center; min-height: 1.3em; opacity: .8; }
+  body.kit-still #dock { display: none; }`;
+
+  function start() {
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.append(style);
+    if (still) document.body.classList.add("kit-still");
+    dock();
+    for (const button of document.querySelectorAll("[data-kit-answer]")) {
+      button.addEventListener("click", () => answer(button.dataset.kitAnswer === "yes"));
+    }
+    addEventListener("keydown", (event) => {
+      if (document.body.dataset.kitKeys === "off") return; // a live page: keys are for real use
+      if (event.target.closest && event.target.closest("input, textarea")) return;
+      const index = Number(event.key) - 1;
+      if (index >= 0 && index < STATES.length) pick(STATES[index]);
+      else if (event.key === " " && event.target === document.body) {
+        event.preventDefault();
+        playButton.click();
+      }
+    });
+    const first = params.get("state");
+    const now = performance.now() / 1000;
+    // <body data-kit-autoplay="off">: the page waits for you; "Play the demo" still runs it.
+    if (document.body.dataset.kitAutoplay === "off") looping = false;
+    updatePlay();
+    if (STATES.includes(first)) show({ state: first, ...EXAMPLE[first], picked: true }, now);
+    else if (looping) run(SCRIPT, now);
+    else show({ state: "idle", ...EXAMPLE.idle }, now);
+    requestAnimationFrame(tick);
+  }
+
+  if (document.readyState === "loading") addEventListener("DOMContentLoaded", start);
+  else start();
+  return {
+    STATES, NAMES, EXAMPLE, scene, onFrame: (fn) => frames.push(fn),
+    pick, answer, play, stop, set, feedLevel,
+  };
+})();
+// kit:end
+</script>
+<script>
+  const body = document.body;
+  const thread = document.querySelector("#thread");
+  const log = document.querySelector("#log");
+  const orb = document.querySelector("#orb");
+  const canvas = document.querySelector("#orb-canvas");
+  const ctx = canvas.getContext("2d");
+  const text = document.querySelector("#text");
+  const send = document.querySelector("#send");
+  const mic = document.querySelector("#mic");
+  const WORKING = new Set(["thinking", "confirm", "tool", "speaking"]);
+  // Served by jarvis serve, the page carries its address and token and shows real turns
+  // (ADR-103); opened from disk, it plays the demo.
+  const liveMeta = document.querySelector('meta[name="jarvis-live"]');
+  const LIVE = liveMeta ? JSON.parse(liveMeta.getAttribute("content")) : null;
+  if (LIVE) {
+    body.classList.add("live");
+    body.dataset.kitKeys = "off";
+    document.querySelector(".note").textContent = "Connecting to Jarvis on this computer...";
+  }
+
+  // Greeting by the hour.
+  const hour = new Date().getHours();
+  document.querySelector("#hello").textContent =
+    hour < 5 ? "Still up?" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  // Theme: follows Windows until you switch it; the choice is remembered on this computer.
+  const root = document.documentElement;
+  try { const saved = localStorage.getItem("jarvis-theme"); if (saved) root.dataset.theme = saved; } catch {}
+  document.querySelector("#theme").addEventListener("click", () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("jarvis-theme", root.dataset.theme); } catch {}
+  });
+
+  // The orb's place: the middle while the chat is empty, the header after.
+  function placeOrb(instant) {
+    const slot = document.querySelector(body.classList.contains("empty") ? "#hero-slot" : "#head-slot");
+    const r = slot.getBoundingClientRect();
+    orb.classList.toggle("instant", Boolean(instant));
+    orb.style.transform = `translate(${r.left}px, ${r.top}px) scale(${r.width / 300})`;
+    if (instant) requestAnimationFrame(() => orb.classList.remove("instant"));
+  }
+  function setEmpty(empty) {
+    if (body.classList.contains("empty") === empty) return;
+    body.classList.toggle("empty", empty);
+    placeOrb(Kit.scene.still); // a frozen frame shows the orb already in place
+  }
+  addEventListener("resize", () => placeOrb(true));
+  const ratio = devicePixelRatio || 1;
+  canvas.width = canvas.height = 300 * ratio;
+  ctx.scale(ratio, ratio);
+
+  // Messages
+  function add(el) {
+    thread.append(el);
+    setEmpty(false);
+    requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
+    return el;
+  }
+  function you(words, live) {
+    const el = document.createElement("div");
+    el.className = "msg you" + (live ? " live" : "");
+    el.textContent = words;
+    return add(el);
+  }
+  function jarvis(words, kind) {
+    const el = document.createElement("div");
+    el.className = "msg jarvis" + (kind ? ` ${kind}` : "");
+    if (kind === "thinking") {
+      const span = document.createElement("span");
+      span.textContent = words;
+      el.append(span);
+    } else {
+      for (const [i, word] of words.split(" ").entries()) {
+        const span = document.createElement("span");
+        span.className = "word hidden";
+        span.textContent = (i ? " " : "") + word;
+        el.append(span);
+      }
+    }
+    return add(el);
+  }
+  function card(question, onAnswer = (yes) => Kit.answer(yes), labels = [["Yes", true], ["No", false]]) {
+    const el = document.createElement("div");
+    el.className = "msg card";
+    const p = document.createElement("p");
+    p.textContent = question;
+    const buttons = document.createElement("div");
+    buttons.className = "buttons";
+    for (const [label, yes] of labels) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = yes === true ? "yes" : "no";
+      b.textContent = label;
+      b.addEventListener("click", () => onAnswer(yes));
+      buttons.append(b);
+    }
+    el.append(p, buttons);
+    return add(el);
+  }
+
+  let liveYou = null;     // your bubble while you speak
+  let pending = null;     // Jarvis's "thinking" line, replaced by what comes next
+  let openCard = null;    // a confirmation waiting for your answer
+  let speakingEl = null;  // the reply being spoken, revealed word by word
+
+  function settle(state) {
+    if (liveYou && state !== "listening") { liveYou.classList.remove("live"); liveYou = null; }
+    if (pending && state !== "thinking") { pending.remove(); pending = null; }
+    if (openCard && state !== "confirm") {
+      const said = state === "tool" || (state === "speaking" && !/won.t/.test(Kit.scene.say));
+      openCard.classList.add("answered");
+      openCard.querySelector("p").textContent = said ? "You said yes." : "You said no.";
+      openCard = null;
+    }
+    if (speakingEl && state !== "speaking") { reveal(speakingEl, 1); speakingEl = null; }
+  }
+  function reveal(el, share) {
+    const words = el.querySelectorAll(".word");
+    const shown = Math.ceil(words.length * share);
+    words.forEach((w, i) => w.classList.toggle("hidden", i >= shown));
+  }
+
+  // A hand-picked state shows the conversation that leads to it.
+  function story(state) {
+    thread.replaceChildren();
+    liveYou = pending = openCard = speakingEl = null;
+    if (state === "idle") { setEmpty(true); return; }
+    const phone = state === "error";
+    const asked = phone ? "find my phone" : Kit.EXAMPLE.listening.heard;
+    if (state === "listening") { liveYou = you("", true); return; }
+    you(asked, false);
+    if (state === "thinking") { pending = jarvis("Thinking", "thinking"); return; }
+    if (state === "error") { reveal(jarvis(Kit.EXAMPLE.error.say, "bad"), 1); return; }
+    const c = card(Kit.EXAMPLE.confirm.ask);
+    if (state === "confirm") { openCard = c; return; }
+    c.classList.add("answered");
+    c.querySelector("p").textContent = "You said yes.";
+    if (state === "tool") { pending = jarvis(Kit.EXAMPLE.tool.say, "thinking"); return; }
+    speakingEl = jarvis(Kit.EXAMPLE.speaking.say);
+  }
+
+  function enter(s) {
+    if (s.picked) return story(s.state);
+    settle(s.state);
+    switch (s.state) {
+      case "idle": break;
+      case "listening": liveYou = you("", true); break;
+      case "thinking": if (!pending) pending = jarvis("Thinking", "thinking"); break;
+      case "confirm": openCard = card(s.ask); break;
+      case "tool": pending = jarvis(s.say || "Working on it", "thinking"); break;
+      case "speaking": speakingEl = jarvis(s.say); break;
+      case "error": reveal(jarvis(s.say, "bad"), 1); break;
+    }
+  }
+
+  // Typed messages and the talk button play short turns of their own.
+  function replyTo(words) {
+    const lower = words.toLowerCase();
+    if (/clipboard|copied/.test(lower) && /phone/.test(lower)) {
+      return [
+        { state: "thinking", ms: 1100 },
+        { state: "confirm", ms: 0, ask: Kit.EXAMPLE.confirm.ask },
+      ];
+    }
+    if (/find|ring|where/.test(lower) && /phone/.test(lower)) {
+      return [{ state: "tool", ms: 1200, say: "Looking for your phone" }, { state: "error", ms: 0, say: Kit.EXAMPLE.error.say }];
+    }
+    if (/timer/.test(lower)) {
+      return [{ state: "thinking", ms: 800 }, { state: "speaking", ms: 2200, say: "Timer set for 10 minutes." }];
+    }
+    return [
+      { state: "thinking", ms: 1200 },
+      { state: "speaking", ms: 3600, say: `This page only acts out a few commands. In Jarvis, “${words}” would go to the model, which picks the tools to use.` },
+    ];
+  }
+  document.querySelector("#composer").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (body.classList.contains("working")) { LIVE ? live.send({ type: "stop" }) : Kit.stop(); return; }
+    const words = text.value.trim();
+    if (!words) return;
+    text.value = "";
+    grow();
+    if (LIVE) { live.typed(words); return; }
+    settle("thinking");
+    you(words, false);
+    Kit.play(replyTo(words));
+  });
+  text.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send.click(); }
+  });
+  function grow() {
+    text.style.height = "auto";
+    text.style.height = `${Math.min(140, text.scrollHeight)}px`;
+    send.disabled = !text.value.trim() && !body.classList.contains("working");
+  }
+  text.addEventListener("input", grow);
+  mic.addEventListener("click", () => {
+    if (LIVE) { live.talk(); return; }
+    if (Kit.scene.state === "listening") { Kit.stop(); return; }
+    const heard = "set a timer for 10 minutes";
+    Kit.play([{ state: "listening", ms: 2400, heard }, ...replyTo(heard)]);
+  });
+  document.querySelector("#new-chat").addEventListener("click", () => {
+    if (!LIVE) Kit.stop();
+    thread.replaceChildren();
+    liveYou = pending = openCard = speakingEl = null;
+    setEmpty(true);
+  });
+
+  // The orb, drawn as in the orb demo.
+  let radius = 0.5, wobble = 0.03, angle = 0, thick = 0, last = 0, seq = -1;
+  const css = (name) => getComputedStyle(body).getPropertyValue(name).trim();
+  function blob(r, t, amount) {
+    ctx.beginPath();
+    for (let i = 0; i <= 96; i++) {
+      const a = (i / 96) * Math.PI * 2;
+      const bend = Math.sin(a * 3 + t * 1.3) * 0.5 + Math.sin(a * 5 - t * 1.9) * 0.3 + Math.sin(a * 2 + t * 0.7) * 0.2;
+      const rr = r * (1 + bend * amount);
+      i ? ctx.lineTo(150 + Math.cos(a) * rr, 150 + Math.sin(a) * rr) : ctx.moveTo(150 + Math.cos(a) * rr, 150 + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+  }
+
+  Kit.onFrame((s) => {
+    if (s.seq !== seq) { seq = s.seq; if (!LIVE) enter(s); }
+    body.classList.toggle("working", WORKING.has(s.state));
+    send.setAttribute("aria-label", body.classList.contains("working") ? "Stop" : "Send");
+    send.disabled = !text.value.trim() && !body.classList.contains("working");
+    mic.setAttribute("aria-pressed", String(s.state === "listening" || (LIVE && live.micOn)));
+    if (liveYou) liveYou.textContent = s.heardShown;
+    if (speakingEl && !LIVE) reveal(speakingEl, s.still ? 1 : Math.min(1, (s.t - s.since) / Math.max(1.2, s.say.length / 22)));
+
+    const dt = s.still ? 0 : Math.min(0.05, s.t - last);
+    last = s.t;
+    const t = s.calm ? 0 : s.t;
+    const ease = s.still ? 1 : 0.12;
+    const sizes = { idle: 0.5, listening: 0.62, thinking: 0.58, speaking: 0.6, confirm: 0.64, tool: 0.55, error: 0.46 };
+    const wobbles = { idle: 0.03, listening: 0.05, thinking: 0.09, speaking: 0.04, confirm: 0.02, tool: 0.04, error: 0.06 };
+    const voice = s.state === "speaking" || s.state === "listening" ? s.level * 0.14 : 0;
+    radius += (sizes[s.state] + (s.state === "idle" ? Math.sin(t * 1.2) * 0.02 : 0) + voice - radius) * ease;
+    wobble += (wobbles[s.state] + (s.state === "listening" ? s.level * 0.1 : 0) - wobble) * ease;
+    const a = css("--a"), b = css("--b");
+    ctx.clearRect(0, 0, 300, 300);
+    const spin = s.state === "thinking" ? t * 1.6 : t * 0.3;
+    const gx = Math.cos(spin) * 90, gy = Math.sin(spin) * 90;
+    ctx.save();
+    ctx.filter = "blur(22px)";
+    ctx.globalAlpha = 0.55;
+    blob(150 * radius * 1.04, t, wobble);
+    ctx.fillStyle = b;
+    ctx.fill();
+    ctx.restore();
+    const g = ctx.createLinearGradient(150 - gx, 150 - gy, 150 + gx, 150 + gy);
+    g.addColorStop(0, a);
+    g.addColorStop(1, b);
+    blob(150 * radius, t, wobble);
+    ctx.fillStyle = g;
+    ctx.fill();
+    const shine = ctx.createRadialGradient(123, 117, 0, 123, 117, 150 * radius);
+    shine.addColorStop(0, "rgba(255,255,255,0.5)");
+    shine.addColorStop(0.5, "rgba(255,255,255,0)");
+    ctx.fillStyle = shine;
+    ctx.fill();
+    if (s.state === "tool") {
+      const m = t * 2.4;
+      ctx.fillStyle = a;
+      ctx.beginPath();
+      ctx.arc(150 + Math.cos(m) * 123, 150 + Math.sin(m) * 123, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // The edge glow follows the same state, faint while idle.
+    const turns = { idle: 0, listening: 20, thinking: 220, speaking: 40, confirm: 0, tool: 90, error: 0 };
+    angle = (angle + (s.calm ? 0 : turns[s.state]) * dt) % 360;
+    const want = { idle: 0, listening: 3 + s.level * 9, thinking: 5, speaking: 3 + s.level * 7,
+      confirm: 6 + (s.calm ? 0 : Math.sin(s.t * 2.6)), tool: 4, error: 5 }[s.state];
+    thick = s.still ? want : thick + (want - thick) * 0.2;
+    root.style.setProperty("--thick", `${thick.toFixed(1)}px`);
+    root.style.setProperty("--angle", `${(s.still ? 30 : angle).toFixed(1)}deg`);
+    root.style.setProperty("--glow", s.state === "idle" ? "0" : "1");
+  });
+
+  // Live: the real Jarvis, over this server's WebSocket. Events from voice and from the agent
+  // both arrive here; the state shown is worked out from both, the most pressing first.
+  const live = (() => {
+    if (!LIVE) return { micOn: false };
+    const note = document.querySelector(".note");
+    const cards = new Map(); // request or question id -> its card
+    let socket = null;
+    let voice = "off";
+    let agent = "idle";
+    let voiceOn = false;
+    let echo = null; // a typed message already shown, until its turn starts
+    let liveBubble = null;
+    let thinking = null;
+    let failedAt = -1e9;
+    let speakingUntil = 0;
+    let shown = "";
+    let askingId = null; // a question with no options: the next typed text answers it
+    let replied = false; // Jarvis already said something in this turn
+    const api = { micOn: false, send, typed, talk };
+
+    function send(message) {
+      if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+    }
+
+    function state() {
+      for (const item of cards.values()) if (!item.done) return "confirm";
+      if (voice === "listening" || voice === "transcribing") return "listening";
+      if (voice === "speaking" || performance.now() < speakingUntil) return "speaking";
+      if (agent === "running_tool") return "tool";
+      if (agent === "thinking" || agent === "awaiting_confirmation") return "thinking";
+      if (performance.now() - failedAt < 3500) return "error";
+      return "idle";
+    }
+    function refresh() {
+      const next = state();
+      if (next !== shown) { shown = next; Kit.set(next); }
+    }
+    setInterval(refresh, 250); // the reply and the error fade back to idle on their own
+
+    function stopThinking() { if (thinking) { thinking.remove(); thinking = null; } }
+    function reply(words, kind) {
+      stopThinking();
+      const el = jarvis(words, kind);
+      const all = el.querySelectorAll(".word");
+      const perWord = voice === "speaking" || voiceOn ? 290 : 45; // spoken aloud, or only shown
+      speakingUntil = performance.now() + all.length * perWord;
+      if (Kit.scene.calm) { reveal(el, 1); return; }
+      let shownWords = 0;
+      const timer = setInterval(() => {
+        shownWords += 1;
+        reveal(el, shownWords / all.length);
+        if (shownWords >= all.length) clearInterval(timer);
+      }, perWord);
+    }
+
+    function typed(words) {
+      if (askingId) {
+        send({ type: "answer", question_id: askingId, text: words });
+        you(words, false);
+        askingId = null;
+        return;
+      }
+      echo = words;
+      you(words, false);
+      send({ type: "command", text: words });
+    }
+    function talk() {
+      if (!voiceOn) return;
+      api.micOn = !api.micOn;
+      send({ type: "mic", on: api.micOn });
+    }
+
+    function confirmCard(request) {
+      if (cards.has(request.request_id)) return;
+      const ask = request.reason ? `${request.summary}? (${request.reason})` : `${request.summary}?`;
+      const el = card(ask, (yes) => send({ type: "confirm", request_id: request.request_id, approved: yes }));
+      cards.set(request.request_id, { el, done: false });
+      stopThinking();
+    }
+    function settleCard(id, said) {
+      const item = cards.get(id);
+      if (!item || item.done) return;
+      item.done = true;
+      item.el.classList.add("answered");
+      item.el.querySelector("p").textContent = said;
+    }
+    const SAID = { confirmed: "You said yes.", denied: "You said no.", timeout: "No answer in time, so I didn't.", cancelled: "Cancelled." };
+
+    function question(m) {
+      if (cards.has(m.question_id)) return;
+      const options = m.options || [];
+      const el = options.length
+        ? card(m.question, (option) => { send({ type: "answer", question_id: m.question_id, text: option }); settleCard(m.question_id, `You said ${option}.`); }, options.map((o) => [o, o]))
+        : card(m.question, () => {}, []);
+      if (!options.length) { askingId = m.question_id; text.focus(); }
+      cards.set(m.question_id, { el, done: false });
+      stopThinking();
+    }
+
+    function history(rows) {
+      for (const row of rows) {
+        if (row.text) you(row.text, false);
+        if (row.reply) reveal(jarvis(row.reply), 1);
+      }
+    }
+
+    function handle(m) {
+      switch (m.type) {
+        case "hello":
+          thread.replaceChildren();
+          cards.clear();
+          voiceOn = Boolean(m.voice && m.voice.enabled);
+          voice = voiceOn ? m.voice.state || "idle" : "off";
+          mic.disabled = !voiceOn;
+          mic.title = voiceOn ? "Talk (or hold the push-to-talk keys)" : "Voice is off in this session";
+          history(m.history || []);
+          if (!thread.children.length) setEmpty(true);
+          for (const item of m.open || []) handle(item);
+          agent = m.busy ? "thinking" : "idle";
+          break;
+        case "turn_started":
+          agent = "thinking";
+          replied = false;
+          if (echo !== null && m.text === echo) echo = null;
+          else if (liveBubble) { liveBubble.textContent = m.text; liveBubble.classList.remove("live"); liveBubble = null; }
+          else you(m.text, false);
+          stopThinking();
+          thinking = jarvis("Thinking", "thinking");
+          break;
+        case "agent_state_changed":
+          agent = m.state;
+          if (thinking && m.state === "running_tool") thinking.firstChild.textContent = "Working on it";
+          break;
+        case "voice_state_changed":
+          voice = m.state;
+          if ((m.state === "listening" || m.state === "transcribing") && !liveBubble) liveBubble = you("", true);
+          if (m.state !== "listening" && m.state !== "transcribing") api.micOn = false;
+          if (m.state === "idle" && liveBubble && !liveBubble.textContent) { liveBubble.remove(); liveBubble = null; }
+          break;
+        case "voice_level": Kit.feedLevel(m.level); break;
+        case "transcript_partial": if (liveBubble) liveBubble.textContent = m.text; break;
+        case "transcript_heard":
+          if (liveBubble) {
+            if (m.text) { liveBubble.textContent = m.text; liveBubble.classList.remove("live"); }
+            else liveBubble.remove();
+            liveBubble = null;
+          }
+          break;
+        case "confirmation_requested": confirmCard(m.request); break;
+        case "confirmation_resolved": settleCard(m.request_id, SAID[m.decision] || "Answered."); break;
+        case "question": question(m); break;
+        case "question_closed": settleCard(m.question_id, "Answered."); if (askingId === m.question_id) askingId = null; break;
+        case "assistant_message": replied = true; reply(m.text); break;
+        case "reminder_due": case "announcement": reply(m.text); break;
+        case "turn_finished":
+          agent = "idle";
+          stopThinking();
+          if (m.status === "cancelled") { if (!replied) reveal(jarvis("Stopped."), 1); }
+          else if (m.status !== "ok") failedAt = performance.now(); // a timeout, the step limit, an error
+          break;
+        case "error": reply(m.message, "bad"); failedAt = performance.now(); break;
+        default: break;
+      }
+      refresh();
+    }
+
+    function connect() {
+      socket = new WebSocket(`ws://127.0.0.1:${LIVE.port}/ws?token=${encodeURIComponent(LIVE.token)}`);
+      socket.addEventListener("open", () => {
+        body.classList.remove("down");
+        note.textContent = "Connected to Jarvis on this computer. What you type here goes to it.";
+      });
+      socket.addEventListener("message", (event) => {
+        try { handle(JSON.parse(event.data)); } catch (error) { console.warn("Jarvis sent", event.data, error); }
+      });
+      socket.addEventListener("close", () => {
+        body.classList.add("down");
+        note.textContent = "Jarvis is not running. Start it with jarvis serve; this window reconnects by itself.";
+        voice = "off"; agent = "idle"; api.micOn = false; mic.disabled = true;
+        refresh();
+        setTimeout(connect, 2000);
+      });
+    }
+    connect();
+    return api;
+  })();
+
+  placeOrb(true);
+</script>
+</body>
+</html>

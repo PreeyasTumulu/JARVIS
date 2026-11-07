@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from jarvis.adapters.http import ApiClient, ProviderError, explain_failure
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolError, ToolResult
 from jarvis.tools.data.currency import currency_code
-from jarvis.tools.data.http import ApiClient, ProviderError, explain_failure
 from jarvis.tools.data.spoken import money, percent_change
 from jarvis.tools.registry import tool
 

@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 import pytest
 
+from jarvis.adapters.http import ApiClient, ProviderError
 from jarvis.app import App, build_app
 from jarvis.config import Settings, load_settings
 from jarvis.core.channel import ConfirmationRequest
@@ -28,7 +29,6 @@ from jarvis.storage.db import Database
 from jarvis.tools.apps.index import AppEntry, AppIndex
 from jarvis.tools.browser.session import PageElement, PageSnapshot
 from jarvis.tools.calendar.feed import Calendar
-from jarvis.tools.data.http import ApiClient, ProviderError
 from jarvis.tools.data.hub import DataHub
 from jarvis.tools.data.market import Listing, Price
 from jarvis.tools.files.guard import FileGuard
@@ -245,14 +245,6 @@ def settings(tmp_path: Path) -> Settings:
     )
 
 
-@pytest.fixture(autouse=True)
-def launched(monkeypatch: pytest.MonkeyPatch) -> list[AppEntry]:
-    """Record app launches instead of starting real apps."""
-    calls: list[AppEntry] = []
-    monkeypatch.setattr("jarvis.tools.apps.tools.launch", calls.append)
-    return calls
-
-
 class FakeDesktop:
     """Stands in for windows, files, the browser, VS Code, and system controls in every test."""
 
@@ -281,6 +273,7 @@ class FakeDesktop:
         self.pressed: list[str] = []
         self.steal_focus_after: int | None = None  # chunks typed before another window takes over
         self.app_text: str | None = None  # what the focused field shows; None: what was typed
+        self.launch_shows_window = True  # a launched app opens a window (see `launched`)
 
     def add(self, title: str, exe: str, class_name: str = "Window", pid: int = 1) -> WindowInfo:
         window = WindowInfo(1000 + len(self.windows), title, pid, exe, class_name)
@@ -395,6 +388,21 @@ def desktop(monkeypatch: pytest.MonkeyPatch) -> FakeDesktop:
     monkeypatch.setattr("jarvis.platform.clipboard.get_text", lambda: fake.clipboard)
     monkeypatch.setattr("jarvis.platform.clipboard.set_text", fake.set_clipboard)
     return fake
+
+
+@pytest.fixture(autouse=True)
+def launched(monkeypatch: pytest.MonkeyPatch, desktop: FakeDesktop) -> list[AppEntry]:
+    """Record app launches instead of starting real apps. A launched app shows a window, as a
+    real one does, unless the test sets `desktop.launch_shows_window = False`."""
+    calls: list[AppEntry] = []
+
+    def launch(entry: AppEntry) -> None:
+        calls.append(entry)
+        if desktop.launch_shows_window:
+            desktop.add(entry.name, f"{entry.name.replace(' ', '')}.exe", pid=100 + len(calls))
+
+    monkeypatch.setattr("jarvis.tools.apps.tools.launch", launch)
+    return calls
 
 
 @pytest.fixture(autouse=True)

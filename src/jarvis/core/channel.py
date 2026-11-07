@@ -38,6 +38,31 @@ class UserChannel(Protocol):
         ...
 
 
+class ApprovedChannel:
+    """A scheduled action's channel (ADR-087): the yes you gave when you scheduled it counts
+    for exactly that call, and anything else is asked on the real channels as usual.
+
+    The policy gate still rates the call when it runs; only the question it would ask is
+    answered from the earlier yes, and only when the arguments' digest is the same.
+    """
+
+    def __init__(self, inner: UserChannel, approved_digest: str | None) -> None:
+        self._inner = inner
+        self._approved = approved_digest
+
+    @property
+    def name(self) -> str:
+        return "schedule"
+
+    async def confirm(self, request: ConfirmationRequest) -> bool:
+        if self._approved is not None and request.digest == self._approved:
+            return True
+        return await self._inner.confirm(request)
+
+    async def ask(self, question: str, options: Sequence[str] | None = None) -> str:
+        return await self._inner.ask(question, options)
+
+
 class FirstAnswerChannel:
     """Asks every channel at once (for example voice and the web UI). The first answer wins.
 

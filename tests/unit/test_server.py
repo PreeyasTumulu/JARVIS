@@ -1,4 +1,4 @@
-"""The web UI server: security checks, the WebSocket protocol, confirmations, and shared turns."""
+"""The local API: security checks, the WebSocket protocol, confirmations, and shared turns."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
+from jarvis import __version__
 from jarvis.core.channel import FirstAnswerChannel
 from jarvis.core.events import ToolCallStarted
 from jarvis.server.app import create_server
@@ -20,8 +21,6 @@ from jarvis.server.runtime import BUSY, Runtime
 from tests.conftest import Hang, Harness, MakeApp, reply
 
 TOKEN = "per-launch-token"
-PORT = 8765
-ORIGIN = f"http://testserver:{PORT}"
 HOSTS = ("testserver", "127.0.0.1", "localhost")
 
 
@@ -30,12 +29,13 @@ def served(make_app: MakeApp, script: Any = ()) -> Iterator[tuple[TestClient, Ha
     hub = WebHub()
     h = make_app(script, channel=FirstAnswerChannel(WebChannel(hub)))
     runtime = Runtime(h.app, hub)
-    with TestClient(create_server(runtime, token=TOKEN, port=PORT, hosts=HOSTS)) as client:
+    with TestClient(create_server(runtime, token=TOKEN, hosts=HOSTS)) as client:
         yield client, h
 
 
-def tab(client: TestClient, token: str = TOKEN, origin: str = ORIGIN) -> Any:
-    return client.websocket_connect(f"/ws?token={token}", headers={"origin": origin})
+def tab(client: TestClient, token: str = TOKEN, origin: str | None = None) -> Any:
+    headers = {"origin": origin} if origin is not None else {}
+    return client.websocket_connect(f"/ws?token={token}", headers=headers)
 
 
 def until(ws: WebSocketTestSession, kind: str, limit: int = 40) -> list[dict[str, Any]]:
@@ -49,24 +49,34 @@ def until(ws: WebSocketTestSession, kind: str, limit: int = 40) -> list[dict[str
     raise AssertionError(f"no {kind} in {[m['type'] for m in seen]}")
 
 
-def test_page_is_served_with_security_headers(make_app: MakeApp) -> None:
+def test_health_says_only_what_and_which_version(make_app: MakeApp) -> None:
     with served(make_app) as (client, _):
-        page = client.get("/")
-        assert page.status_code == 200
-        assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
-        assert page.headers["x-frame-options"] == "DENY"
-        assert page.headers["referrer-policy"] == "no-referrer"
-        assert client.get("/static/app.js").status_code == 200
-        assert client.get("/docs").status_code == 404
+        health = client.get("/health")
+        assert health.status_code == 200
+        assert health.json() == {"name": "jarvis", "version": __version__}
+        assert health.headers["x-content-type-options"] == "nosniff"
+        assert health.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("path", ["/", "/static/app.js", "/docs", "/openapi.json"])
+def test_there_is_no_page(make_app: MakeApp, path: str) -> None:
+    with served(make_app) as (client, _):
+        assert client.get(path).status_code == 404
 
 
 def test_other_host_names_are_refused(make_app: MakeApp) -> None:
     with served(make_app) as (client, _):
-        assert client.get("/", headers={"host": "evil.example"}).status_code == 400
+        assert client.get("/health", headers={"host": "evil.example"}).status_code == 400
 
 
-@pytest.mark.parametrize("origin", ["http://evil.example", "http://127.0.0.1:9999", ""])
-def test_websockets_from_other_origins_are_refused(make_app: MakeApp, origin: str) -> None:
+@pytest.mark.parametrize("origin", ["https://evil.example", "http://127.0.0.1:8765", "null"])
+def test_browsers_cannot_reach_the_api(make_app: MakeApp, origin: str) -> None:
+    with served(make_app) as (client, _):
+        assert client.get("/health", headers={"origin": origin}).status_code == 403
+
+
+@pytest.mark.parametrize("origin", ["http://evil.example", "http://127.0.0.1:8765", "null", ""])
+def test_websockets_from_browsers_are_refused(make_app: MakeApp, origin: str) -> None:
     with (
         served(make_app) as (client, h),
         pytest.raises(WebSocketDisconnect) as refused,
@@ -77,11 +87,16 @@ def test_websockets_from_other_origins_are_refused(make_app: MakeApp, origin: st
     assert h.llm.requests == []
 
 
-def test_a_wrong_token_is_refused_with_a_reason(make_app: MakeApp) -> None:
-    with served(make_app) as (client, _), tab(client, token="old-token") as ws:
-        with pytest.raises(WebSocketDisconnect) as refused:
-            ws.receive_json()
-        assert refused.value.code == 1008
+@pytest.mark.parametrize("token", ["old-token", ""])
+def test_a_wrong_or_missing_token_is_refused(make_app: MakeApp, token: str) -> None:
+    with (
+        served(make_app) as (client, h),
+        pytest.raises(WebSocketDisconnect) as refused,
+        tab(client, token=token) as ws,
+    ):
+        ws.receive_json()
+    assert refused.value.code == 1008
+    assert h.llm.requests == []
 
 
 def test_hello_then_a_typed_command(make_app: MakeApp, launched: list) -> None:
@@ -90,7 +105,7 @@ def test_hello_then_a_typed_command(make_app: MakeApp, launched: list) -> None:
         hello = ws.receive_json()
         assert hello["type"] == "hello"
         assert hello["voice"]["enabled"] is False
-        ws.send_json({"type": "command", "text": "open notepad"})
+        ws.send_json({"type": "command", "text": "could you get notepad up"})
         messages = until(ws, "turn_finished")
     kinds = [m["type"] for m in messages]
     assert kinds[0] == "turn_started"
@@ -256,7 +271,7 @@ def test_typed_replies_are_spoken_when_asked(make_app: MakeApp, speak: bool) -> 
         overrides={"server": {"speak_replies": speak}},
     )
     runtime = Runtime(h.app, hub)
-    server = create_server(runtime, token=TOKEN, port=PORT, hosts=HOSTS)
+    server = create_server(runtime, token=TOKEN, hosts=HOSTS)
     with TestClient(server) as client, tab(client) as ws:
         ws.receive_json()
         ws.send_json({"type": "command", "text": "say hi"})

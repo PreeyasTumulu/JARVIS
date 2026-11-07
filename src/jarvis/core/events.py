@@ -63,6 +63,19 @@ class ToolCallFinished:
 
 
 @dataclass(frozen=True)
+class AgentStateChanged:
+    """Which graph node a turn is in, and the UI state it maps to (core/graph.py, ADR-083).
+
+    States follow LiveKit's agent vocabulary (thinking, speaking) plus Jarvis's own
+    awaiting_confirmation and running_tool.
+    """
+
+    turn_id: str
+    node: str  # route, think, guard, gate, await_confirmation, execute, respond
+    state: str  # thinking, awaiting_confirmation, running_tool, responding
+
+
+@dataclass(frozen=True)
 class AssistantMessage:
     turn_id: str
     text: str
@@ -112,6 +125,14 @@ class ReminderDue:
     text: str  # what Jarvis says
 
 
+@dataclass(frozen=True)
+class Announcement:
+    """Something Jarvis says on its own, outside a command (the end of a focus session)."""
+
+    source: str
+    text: str
+
+
 Event = (
     TurnStarted
     | ModelReplied
@@ -119,6 +140,7 @@ Event = (
     | ConfirmationRequested
     | ConfirmationResolved
     | ToolCallFinished
+    | AgentStateChanged
     | AssistantMessage
     | TurnFinished
     | VoiceStateChanged
@@ -126,6 +148,7 @@ Event = (
     | TranscriptPartial
     | VoiceLevel
     | ReminderDue
+    | Announcement
     | NotificationsArrived
 )
 Handler = Callable[[Event], Awaitable[None] | None]

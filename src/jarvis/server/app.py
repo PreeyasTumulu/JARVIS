@@ -1,91 +1,117 @@
-"""The FastAPI app: a static page and one WebSocket, locked to this computer and this launch.
+"""The local API: JSON over HTTP and one WebSocket, for programs on this computer only.
 
-Browsers do not apply CORS to WebSockets, so any website you visit could try to talk to
-`ws://127.0.0.1`. Four checks keep it out (ADR-011, ADR-035):
+`GET /` is the chat window (ADR-103, server/ui.py). What keeps other programs and websites out:
 
 1. The server listens on 127.0.0.1 only (set in serve.py, not configurable).
 2. The Host header must name this computer, which defeats DNS rebinding.
-3. The WebSocket's Origin must be this page, and its URL must carry the random per-launch token.
-4. The page cannot be framed by another site (CSP frame-ancestors), so a hidden frame cannot
-   trick you into clicking Confirm.
+3. Browsers always send an Origin header with a WebSocket or a cross-site request and cannot
+   leave it out, so any HTTP request that carries one is refused. The one browser the
+   WebSocket accepts is the chat page itself: its exact Origin plus the UI token in the page.
+4. The WebSocket for programs, the bridge, and `/mcp/` need the per-launch token, which
+   `jarvis serve` writes to the data folder (only this Windows account can read it). The UI
+   token is a different one, so the page can never call the bridge or `/mcp/`.
+
+`/mcp/` offers Jarvis's public tools to MCP clients through `jarvis mcp serve` (ADR-085).
+
+`GET /health` says only that Jarvis is up and which version, so a client can find it.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import secrets
-from collections.abc import Sequence
-from pathlib import Path
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from jarvis import __version__
 from jarvis.bridge.service import BridgeRequest
+from jarvis.server import ui
 from jarvis.server.hub import Client
+from jarvis.server.mcp_server import McpGateway, mcp_app
 from jarvis.server.runtime import Runtime
 
 log = logging.getLogger(__name__)
 
-STATIC = Path(__file__).parent / "static"
 LOCAL_HOSTS = ("127.0.0.1", "localhost")
 POLICY_VIOLATION = 1008
+HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+}
 
 
-def security_headers(port: int, hosts: Sequence[str]) -> dict[str, str]:
-    sockets = " ".join(f"ws://{host}:{port}" for host in hosts)
-    return {
-        "Content-Security-Policy": (
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-            f"connect-src 'self' {sockets}; frame-ancestors 'none'; base-uri 'none'; "
-            "form-action 'none'"
-        ),
-        "X-Frame-Options": "DENY",
-        "X-Content-Type-Options": "nosniff",
-        "Referrer-Policy": "no-referrer",  # the token is in the page URL
-        "Cache-Control": "no-store",
-    }
+def _not_allowed() -> JSONResponse:
+    return JSONResponse({"error": "not allowed"}, status_code=403)
+
+
+def _token_ok(sent: str | None, token: str | None) -> bool:
+    return token is not None and sent is not None and secrets.compare_digest(sent, token)
 
 
 def create_server(
     runtime: Runtime,
     *,
     token: str,
-    port: int,
     hosts: Sequence[str] = LOCAL_HOSTS,
     bridge_token: str | None = None,
+    mcp: McpGateway | None = None,
+    ui_token: str | None = None,
+    port: int | None = None,
 ) -> FastAPI:
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    page_origins = ui.origins(port) if ui_token and port else frozenset()
+    mounted = mcp_app(mcp, token) if mcp is not None else None
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if mounted is None:
+            yield
+            return
+        async with mounted[1]():
+            yield
+
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(hosts))
-    origins = {f"http://{host}:{port}" for host in hosts}
-    headers = security_headers(port, hosts)
-
-    @app.get("/", include_in_schema=False)
-    async def index() -> FileResponse:
-        return FileResponse(STATIC / "index.html", headers=headers)
-
-    app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     @app.middleware("http")
-    async def revalidate(request: Request, call_next: Any) -> Response:
-        # Tiny local files: always check the ETag, so an upgraded Jarvis never runs an old script.
+    async def no_browsers(request: Request, call_next: Any) -> Response:
+        if request.headers.get("origin") is not None:
+            return _not_allowed()
         response: Response = await call_next(request)
-        response.headers.setdefault("Cache-Control", "no-cache")
+        response.headers.update(HEADERS)
         return response
+
+    @app.get("/health", include_in_schema=False)
+    async def health() -> JSONResponse:
+        return JSONResponse({"name": "jarvis", "version": __version__})
+
+    if page_origins and port is not None and ui_token is not None:
+        page_port, page_token = port, ui_token
+
+        @app.get("/", include_in_schema=False)
+        async def chat(request: Request) -> Response:
+            """The chat window. Only a navigation from nowhere or this page itself gets it."""
+            if request.headers.get("sec-fetch-site", "none") not in ("none", "same-origin"):
+                return _not_allowed()  # another site, even another port on this computer
+            html, policy = ui.page(page_port, page_token)
+            return HTMLResponse(
+                html,
+                headers={"Content-Security-Policy": policy, "X-Frame-Options": "DENY"},
+            )
 
     @app.post("/bridge", include_in_schema=False)
     async def bridge(request: Request) -> JSONResponse:
-        """Claude Code's hook asks you something (ADR-051). Not for browsers: a page can send
-        neither the bearer token nor a request without an Origin header."""
-        if request.headers.get("origin") is not None or bridge_token is None:
-            return JSONResponse({"error": "not allowed"}, status_code=403)
+        """Claude Code's hook asks you something (ADR-051)."""
         sent = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-        if not secrets.compare_digest(sent, bridge_token):
-            return JSONResponse({"error": "not allowed"}, status_code=403)
+        if not _token_ok(sent, bridge_token):
+            return _not_allowed()
         if runtime.bridge is None:
             return JSONResponse({"error": "the bridge is off"}, status_code=503)
         try:
@@ -97,29 +123,31 @@ def create_server(
     @app.websocket("/ws")
     async def socket(ws: WebSocket) -> None:
         origin = ws.headers.get("origin")
-        if origin not in origins:
-            log.warning("Refused a WebSocket connection from origin %r", origin)
+        sent = ws.query_params.get("token")
+        if origin is None:
+            allowed = _token_ok(sent, token)  # a program on this computer
+        else:
+            allowed = origin in page_origins and _token_ok(sent, ui_token)  # the chat page
+            if not allowed:
+                log.warning("Refused a WebSocket connection from origin %r", origin)
+        if not allowed:
             await ws.close(code=POLICY_VIOLATION)  # before accepting: the browser gets a 403
-            return
-        if not secrets.compare_digest(ws.query_params.get("token", ""), token):
-            # Our own page with an old token (Jarvis restarted). Accept only to say why, so the
-            # page can tell you to open the new link; nothing else is sent.
-            await ws.accept()
-            await ws.close(code=POLICY_VIOLATION, reason="invalid token")
             return
         await ws.accept()
         await converse(runtime, ws)
 
+    if mounted is not None:
+        app.mount("/mcp", mounted[0])
     return app
 
 
 async def converse(runtime: Runtime, ws: WebSocket) -> None:
-    """One tab's connection: send hello, stream events out, handle requests coming in."""
+    """One client's connection: send hello, stream events out, handle requests coming in."""
     client = Client(ws.send_text)
     runtime.hub.connect(client)
     client.send(runtime.hello())
     pump = asyncio.create_task(client.pump(), name="ws-pump")
-    log.info("Browser tab connected (%d open)", runtime.hub.client_count)
+    log.info("API client connected (%d open)", runtime.hub.client_count)
     try:
         while not client.dropped:
             raw = await ws.receive_text()
@@ -136,4 +164,4 @@ async def converse(runtime: Runtime, ws: WebSocket) -> None:
         runtime.hub.disconnect(client)
         pump.cancel()
         await asyncio.gather(pump, return_exceptions=True)
-        log.info("Browser tab disconnected (%d open)", runtime.hub.client_count)
+        log.info("API client disconnected (%d open)", runtime.hub.client_count)

@@ -16,17 +16,29 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolResult
+from jarvis.tools.base import Clearance, Prepared, Risk, Sensitivity, ToolContext, ToolResult
 
 ToolFn = Callable[..., Awaitable[ToolResult]]
+# Arguments that mean "not now". A tool without them must not run now when a model adds one.
+LATER_WORDS = frozenset(
+    {"at", "in_minutes", "minutes", "delay", "delay_minutes", "time", "when", "schedule", "later"}
+)
+
+
+class LaterArgument(ValueError):
+    """A timing argument on a tool that only runs now."""
+
+
 PrepareFn = Callable[[ToolContext, dict[str, Any]], Awaitable[Prepared]]
 
 _SECTION_HEADERS = {"returns", "raises", "example", "examples", "note", "notes", "yields"}
 _ARG_LINE = re.compile(r"^(\s*)(\w+)(?:\s*\([^)]*\))?:\s*(.*)$")
 
 
-@dataclass
+@dataclass(frozen=True, eq=False)
 class Tool:
+    """A registered tool. Frozen: nothing can lower a risk floor or swap a function at runtime."""
+
     name: str
     description: str
     risk: Risk
@@ -39,10 +51,15 @@ class Tool:
     egress: bool = False  # sends a request to an address the model chooses (see policy.py)
     parameters: dict[str, Any] | None = None  # a JSON schema given as is (MCP tools)
     route: re.Pattern[str] | None = None  # words that offer this tool (MCP servers' keywords)
+    # "Stop" ends the turn either way; False lets a call that already started finish (and be
+    # audited) in the background, for work that must not be cut in half (Pipecat's option).
+    cancel_on_interruption: bool = True
 
     def preparer(self, fn: PrepareFn) -> PrepareFn:
-        """Register a side-effect-free step that resolves and risk-rates arguments."""
-        self.prepare_fn = fn
+        """Register a side-effect-free step that resolves and risk-rates arguments (once)."""
+        if self.prepare_fn is not None:
+            raise ValueError(f"Tool {self.name} already has a preparer")
+        object.__setattr__(self, "prepare_fn", fn)
         return fn
 
     def schema(self) -> dict[str, Any]:
@@ -69,6 +86,14 @@ class Tool:
         call itself ({"function": "reply_email", "arguments": {...}}); that is unwrapped.
         """
         cleaned = dict(raw)
+        late = sorted(set(cleaned) & LATER_WORDS - set(self.args_model.model_fields))
+        if late:
+            # Unknown arguments are otherwise ignored, so "open VS Code at 9" called as
+            # open_app(name, at) would open it now (seen in the Phase 27 benchmark).
+            raise LaterArgument(
+                f"{self.name} runs now and takes no '{late[0]}'. To do it later, use "
+                "schedule_app for apps or set_reminder for anything else."
+            )
         inner = cleaned.get("arguments")
         if (
             isinstance(inner, dict)
@@ -78,12 +103,7 @@ class Tool:
             cleaned = dict(inner)
         for name, field in self.args_model.model_fields.items():
             value = cleaned.get(name)
-            if (
-                isinstance(value, str)
-                and value.strip().casefold() in NULL_WORDS
-                and not field.is_required()
-                and _accepts_none(field.annotation)
-            ):
+            if _is_null(value) and not field.is_required() and _accepts_none(field.annotation):
                 cleaned[name] = None
         return self.args_model.model_validate(cleaned).model_dump()
 
@@ -92,7 +112,9 @@ class Tool:
             return await self.prepare_fn(ctx, args)
         return Prepared(args=args, summary=describe_call(self.name, args), risk=self.risk)
 
-    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+    async def __call__(self, ctx: ToolContext, clearance: Clearance, **kwargs: Any) -> ToolResult:
+        """Run the tool. Only with a clearance from the policy gate for exactly these args."""
+        clearance.spend(self.name, kwargs)
         return await self.fn(ctx, **kwargs)
 
 
@@ -104,6 +126,7 @@ def tool(
     timeout_s: float | None = None,
     name: str | None = None,
     egress: bool = False,
+    cancel_on_interruption: bool = True,
 ) -> Callable[[ToolFn], Tool]:
     """Turn an async function into a Tool. Sensitivity defaults to private (fail closed)."""
 
@@ -123,6 +146,7 @@ def tool(
             args_model=_build_args_model(fn, arg_docs),
             fn=fn,
             egress=egress,
+            cancel_on_interruption=cancel_on_interruption,
         )
 
     return wrap
@@ -215,6 +239,17 @@ def _build_args_model(fn: ToolFn, arg_docs: dict[str, str]) -> type[BaseModel]:
 
 
 NULL_WORDS = {"null", "none", "nil", "undefined", ""}
+
+
+def _is_null(value: Any) -> bool:
+    """ "null", or {"null": true}, which Hermes wrote for set_reminder's `at` in the Phase 29
+    live test when it gave in_minutes instead."""
+    if isinstance(value, str):
+        return value.strip().casefold() in NULL_WORDS
+    if isinstance(value, dict) and len(value) == 1:
+        (key,) = value
+        return isinstance(key, str) and key.strip().casefold() in NULL_WORDS
+    return False
 
 
 def _accepts_none(annotation: Any) -> bool:

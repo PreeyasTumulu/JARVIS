@@ -11,22 +11,23 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
 from jarvis import __version__
-from jarvis.app import build_app
-from jarvis.bridge.service import bridge_running
 from jarvis.config import REPO_ROOT, ConfigError, Settings, load_settings
-from jarvis.console import ConsoleChannel, ConsoleRenderer, read_line
-from jarvis.core.agent import TurnStatus
 from jarvis.logging_setup import setup_logging
 from jarvis.storage.db import Database
 from jarvis.storage.repositories import AuditLog
-from jarvis.tools.mcp.hub import McpHub, RemoteTool
-from jarvis.voice.tts.base import TTSEngine
+
+# Claude Code runs `jarvis claude-hook` for its permission prompts and waits for it, so commands
+# that do not use the agent must not load it (3 seconds for the imports alone).
+if TYPE_CHECKING:
+    from jarvis.tools.mcp.hub import McpHub, RemoteTool
+    from jarvis.voice.tts.base import TTSEngine
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,10 +60,13 @@ def build_parser() -> argparse.ArgumentParser:
         help='teach "hey jarvis" your voice (8 short recordings, about two minutes)',
     )
 
-    serve = sub.add_parser("serve", help="open the web UI (with voice, if installed)")
+    serve = sub.add_parser(
+        "serve", help="run Jarvis in the background: voice, reminders, the bridge, the local API"
+    )
     serve.add_argument("--port", type=int, help="port on 127.0.0.1 (default from config)")
-    serve.add_argument("--no-browser", action="store_true", help="do not open the browser")
-    serve.add_argument("--no-voice", action="store_true", help="web page only, no microphone")
+    # Kept so start-at-login shortcuts made before the page was removed still work (ADR-081).
+    serve.add_argument("--no-browser", action="store_true", help=argparse.SUPPRESS)
+    serve.add_argument("--no-voice", action="store_true", help="no microphone")
     serve.add_argument("--wake", action="store_true", help='also listen for "hey jarvis"')
     serve.add_argument("--model", help="use a different model for this session")
     serve.add_argument("--tray", action="store_true", help="show a tray icon (used at login)")
@@ -108,10 +112,11 @@ def build_parser() -> argparse.ArgumentParser:
     mcp.add_argument(
         "action",
         nargs="?",
-        choices=["list", "tools", "test"],
+        choices=["list", "tools", "test", "serve"],
         default="list",
         help="list servers (the default), tools: everything a server offers, test: connect "
-        "and show what Jarvis exposes",
+        "and show what Jarvis exposes, serve: offer Jarvis's own tools to an MCP client over "
+        "stdio (the client runs this)",
     )
     mcp.add_argument("server", nargs="?", help="the server name, for tools and test")
 
@@ -136,9 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit = sub.add_parser("audit", help="show recent tool calls from the audit log")
     audit.add_argument("--last", type=int, default=20, help="how many entries (default 20)")
 
-    overlay = sub.add_parser("overlay", help="the fullscreen effect when you say Hey Jarvis")
-    overlay.add_argument("action", choices=["demo"], help="demo: show it once, recording nothing")
-
+    sub.add_parser("ui", help="open the chat window (needs jarvis serve running)")
     sub.add_parser("version", help="print the version")
     return parser
 
@@ -163,12 +166,23 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.command == "claude-hook":
         return claude_hook(settings, args.action, console)
+    if args.command == "ui":
+        from jarvis.server.ui import open_window, running_port
+
+        port = running_port(settings.data_dir)
+        if port is None:
+            console.print(
+                "Jarvis is not running. Start it with `uv run jarvis serve`, then try again."
+            )
+            return 1
+        console.print(f"Opened the chat window in {open_window(port)}.")
+        return 0
+    if args.command == "mcp" and args.action == "serve":
+        from jarvis.server.mcp_stdio import run_mcp_stdio
+
+        return run_mcp_stdio(settings)  # before the console log: stdout carries the protocol
     log_file = setup_logging(settings.data_dir, verbose=args.verbose)
 
-    if args.command == "overlay":
-        from jarvis.overlay.demo import run_demo
-
-        return run_demo(settings, console)
     if args.command == "audit":
         return show_audit(settings, args.last, console)
     if args.command == "index":
@@ -196,7 +210,6 @@ def main(argv: list[str] | None = None) -> int:
             settings,
             console,
             port=args.port or settings.server.port,
-            open_browser=settings.server.open_browser and not args.no_browser,
             voice=not args.no_voice,
             wake=args.wake,
             verbose=args.verbose,
@@ -245,9 +258,14 @@ def run_chat(
     verbose: bool,
     log_file: str,
 ) -> int:
+    from jarvis.app import build_app
+    from jarvis.console import ConsoleChannel, ConsoleRenderer, read_line
+    from jarvis.core.agent import TurnStatus
+
     with asyncio.Runner() as runner:
         app = build_app(settings, ConsoleChannel(console))
         app.bus.subscribe(ConsoleRenderer(console, verbose=verbose))
+        app.agent.warm_up_in_background()
         try:
             warning = runner.run(app.llm.check())
             if warning:
@@ -543,6 +561,8 @@ def claude_hook(
             "Removed Jarvis's hooks." if removed else "Jarvis's hooks were not installed."
         )
         return 0
+    from jarvis.bridge.service import bridge_running
+
     running = bridge_running(settings.data_dir)
     if action == "status":
         state = "installed" if hook.installed(settings_path) else "not installed"

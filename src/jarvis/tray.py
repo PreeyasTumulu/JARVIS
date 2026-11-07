@@ -1,4 +1,4 @@
-"""The tray icon: what Jarvis is doing, and quick controls (open the page, mic, stop, quit).
+"""The tray icon: what Jarvis is doing, and quick controls (mic, stop, quit).
 
 pystray runs its own Windows message loop on its own thread. Menu clicks arrive there, so every
 action is handed to the asyncio loop with `run_coroutine_threadsafe` or `call_soon_threadsafe`;
@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import webbrowser
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -61,13 +60,13 @@ class Tray:
         self,
         *,
         loop: asyncio.AbstractEventLoop,
-        url: Callable[[], str | None],
         stop: Callable[[], Coroutine[Any, Any, None]],
         quit: Callable[[], None],
         set_muted: Callable[[bool], Coroutine[Any, Any, None]] | None = None,
+        open_chat: Callable[[], object] | None = None,
     ) -> None:
+        self._open_chat = open_chat
         self._loop = loop
-        self._url = url
         self._stop = stop
         self._quit = quit
         self._set_muted = set_muted
@@ -85,12 +84,17 @@ class Tray:
             pystray.MenuItem(
                 lambda _item: f"Jarvis: {LABELS.get(self._state, self._state)}", None, enabled=False
             ),
-            pystray.MenuItem("Open Jarvis", self._on_open, default=True),
             pystray.MenuItem(
                 "Microphone",
                 self._on_mic,
                 checked=lambda _item: self._state != "muted",
                 visible=lambda _item: self._set_muted is not None,
+            ),
+            pystray.MenuItem(
+                "Open Jarvis",
+                self._on_open,
+                default=True,  # a double click on the icon opens the chat window too
+                visible=lambda _item: self._open_chat is not None,
             ),
             pystray.MenuItem("Stop", self._on_stop),
             pystray.Menu.SEPARATOR,
@@ -126,15 +130,17 @@ class Tray:
 
     # Menu actions: these run on pystray's thread.
 
-    def _on_open(self, _icon: Any = None, _item: Any = None) -> None:
-        url = self._url()
-        if url:
-            webbrowser.open(url)
-
     def _on_mic(self, _icon: Any = None, _item: Any = None) -> None:
         if self._set_muted is not None:
             muted = self._state != "muted"
             asyncio.run_coroutine_threadsafe(self._set_muted(muted), self._loop)
+
+    def _on_open(self, _icon: Any = None, _item: Any = None) -> None:
+        if self._open_chat is not None:
+            try:
+                self._open_chat()
+            except Exception:
+                log.warning("Could not open the chat window", exc_info=True)
 
     def _on_stop(self, _icon: Any = None, _item: Any = None) -> None:
         asyncio.run_coroutine_threadsafe(self._stop(), self._loop)

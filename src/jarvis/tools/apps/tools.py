@@ -1,9 +1,17 @@
-"""App control tools: open, focus (switch to), and close apps by spoken name."""
+"""App control tools: open, focus (switch to), and close apps by spoken name, now or later.
+
+Opening waits for the app's window and says how long it took (`[apps] open_wait_s`).
+`schedule_app` opens or closes an app later ("close Spotify in 20 minutes"); the scheduler
+runs it through the policy gate when it falls due (ADR-087).
+"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+import re
+import time
+from datetime import datetime
+from typing import Any, Literal
 
 from rapidfuzz import fuzz
 
@@ -12,6 +20,9 @@ from jarvis.tools.apps.index import AppEntry, launch, looks_unsaved, normalize, 
 from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolError, ToolResult
 from jarvis.tools.policy import app_risk
 from jarvis.tools.registry import tool
+from jarvis.tools.system.reminders import parse_at, spoken_when
+
+ALREADY_OPEN_S = 2.0  # an app that shows no new window this soon was already running
 
 TITLE_MATCH = 90
 
@@ -87,8 +98,30 @@ async def open_app(ctx: ToolContext, name: str) -> ToolResult:
     entry = await ctx.services.apps.get(name)
     if entry is None:
         raise ToolError(f"{name} is no longer in the app index.")
+    before = {w.hwnd for w in await app_windows(ctx, entry, name)}
+    started = time.perf_counter()
     await asyncio.to_thread(launch, entry)
-    return ToolResult.success(data={"opened": entry.name}, speech=f"Opening {entry.name}.")
+    wait_s = ctx.settings.apps.open_wait_s
+    while (elapsed := time.perf_counter() - started) < wait_s:
+        await asyncio.sleep(0.25)
+        windows = await app_windows(ctx, entry, name)
+        if any(w.hwnd not in before for w in windows):
+            seconds = round(time.perf_counter() - started, 1)
+            return ToolResult.success(
+                data={"opened": entry.name, "seconds": seconds},
+                speech=f"{entry.name} is open, in {seconds:g} seconds.",
+            )
+        if before and windows and elapsed >= ALREADY_OPEN_S:
+            return ToolResult.success(
+                data={"opened": entry.name, "already_running": True},
+                speech=f"{entry.name} was already open.",
+            )
+    if wait_s == 0:
+        return ToolResult.success(data={"opened": entry.name}, speech=f"Opening {entry.name}.")
+    return ToolResult.success(
+        data={"opened": entry.name, "seconds": None},
+        speech=f"Opening {entry.name}. It has not shown a window after {wait_s:g} seconds.",
+    )
 
 
 @open_app.preparer
@@ -195,4 +228,89 @@ async def _prepare_close_app(ctx: ToolContext, args: dict[str, Any]) -> Prepared
         )
     return Prepared(
         args={"name": display}, summary=f"Close {display}{count}", risk=risk, reason=reason
+    )
+
+
+async def _action_prepared(ctx: ToolContext, action: str, name: str) -> Prepared:
+    """What the open or close will be when it runs, rated as if it ran now."""
+    if action == "open":
+        return await _prepare_open_app(ctx, {"name": name})
+    try:
+        return await _prepare_close_app(ctx, {"name": name})
+    except ToolError:
+        entry = await resolve_app(ctx, name)  # not open yet: it may be by then
+    safe = entry.name.casefold() in {n.casefold() for n in ctx.settings.safety.safe_to_close}
+    return Prepared(
+        args={"name": entry.name},
+        summary=f"Close {entry.name}",
+        risk=Risk.SAFE if safe else Risk.CONFIRM,
+        reason=None if safe else "Closing apps asks first unless they are in safety.safe_to_close",
+    )
+
+
+def _due(ctx: ToolContext, in_minutes: float | None, at: str | None) -> float:
+    now = ctx.services.reminders.clock()
+    if in_minutes is not None:
+        if in_minutes <= 0:
+            raise ToolError("The time must be in the future.")
+        return now + in_minutes * 60
+    if at:
+        later = _RELATIVE.match(" ".join(at.casefold().split()))
+        if later is not None:  # the live test saw at="in 20 minutes"
+            minutes = float(later["count"]) * (60 if later["unit"].startswith("h") else 1)
+            return now + minutes * 60
+        return parse_at(at, datetime.fromtimestamp(now)).timestamp()
+    raise ToolError("Ask the user when: in how many minutes, or at what time.")
+
+
+_RELATIVE = re.compile(
+    r"^(?:in\s+)?(?P<count>\d+(?:\.\d+)?)\s*(?P<unit>minutes?|mins?|hours?|hrs?)(?:\s+from now)?$"
+)
+
+
+@tool(risk=Risk.SAFE, sensitivity=Sensitivity.PRIVATE, timeout_s=15)
+async def schedule_app(
+    ctx: ToolContext,
+    action: Literal["open", "close"],
+    name: str,
+    in_minutes: float | None = None,
+    at: str | None = None,
+) -> ToolResult:
+    """Open or close an app later, for "close Spotify in 20 minutes" or "open VS Code at 9".
+    For right now, use open_app or close_app.
+
+    Args:
+        action: "open" or "close".
+        name: The app name as the user said it, for example "spotify".
+        in_minutes: Minutes from now, for "in 20 minutes" (an hour is 60).
+        at: A clock time, for example "9 am", "17:30", or "tomorrow 9 am".
+    """
+    reminders = ctx.services.reminders
+    due_at = _due(ctx, in_minutes, at)
+    inner = await _action_prepared(ctx, action, name)
+    # This call ran past the gate, so a confirm-level action has your yes for these exact
+    # arguments; the scheduler hands that to the gate when the action runs (ADR-087).
+    approved = inner.digest if inner.risk is Risk.CONFIRM else None
+    plan = {"tool": f"{action}_app", "args": inner.args, "approved": approved}
+    item = reminders.add("app", inner.summary, due_at, plan)
+    when = spoken_when(item.due, datetime.fromtimestamp(reminders.clock()))
+    note = "" if reminders.running else " Keep Jarvis running for it to happen."
+    return ToolResult.success(
+        data={"id": item.id, "action": inner.summary, "due": when},
+        speech=f"I'll {inner.summary[:1].lower()}{inner.summary[1:]} at {when}.{note}",
+    )
+
+
+@schedule_app.preparer
+async def _prepare_schedule_app(ctx: ToolContext, args: dict[str, Any]) -> Prepared:
+    due_at = _due(ctx, args.get("in_minutes"), args.get("at"))
+    inner = await _action_prepared(ctx, args["action"], args["name"])
+    when = spoken_when(
+        datetime.fromtimestamp(due_at), datetime.fromtimestamp(ctx.services.reminders.clock())
+    )
+    return Prepared(
+        args={**args, "name": inner.args["name"]},
+        summary=f"{inner.summary} at {when}",
+        risk=inner.risk,
+        reason=inner.reason,
     )

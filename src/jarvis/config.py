@@ -6,6 +6,7 @@ Tables merge key by key, lists replace. Unknown keys are rejected so typos fail 
 
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from pathlib import Path
@@ -17,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from jarvis.tools.base import Risk, Sensitivity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+log = logging.getLogger(__name__)
 
 
 class ConfigError(Exception):
@@ -32,6 +34,7 @@ class AgentSettings(_Section):
     turn_timeout_s: float = Field(default=180, gt=0)
     tool_timeout_s: float = Field(default=20, gt=0)
     max_tool_calls_per_step: int = Field(default=4, ge=1)
+    max_tool_calls_per_turn: int = Field(default=8, ge=1, le=40)  # the guard's step cap
     history_turns: int = Field(default=8, ge=0)
     max_tool_result_chars: int = Field(default=4000, ge=200)
     tool_routing: Literal["keywords", "all"] = "keywords"
@@ -83,6 +86,32 @@ class RouterSettings(_Section):
     escalate: Literal["auto", "explicit", "never"] = "auto"
     daily_requests: dict[str, int] = {}  # per provider, to stay inside a free tier's daily limit
     cooldown_s: float = Field(default=300, gt=0)  # a provider that failed is skipped this long
+    # The stages a request passes through, in order, until one handles it (ADR-083). Every
+    # stage but "agent" answers without a model; "agent" must come last.
+    pipeline: list[Literal["exact_phrase", "arithmetic", "template", "agent"]] = [
+        "exact_phrase",
+        "arithmetic",
+        "template",
+        "agent",
+    ]
+    stage_timeout_ms: int = Field(default=150, ge=10, le=5000)  # a slow stage counts as no match
+
+    @model_validator(mode="after")
+    def _agent_last(self) -> RouterSettings:
+        if not self.pipeline or self.pipeline[-1] != "agent" or self.pipeline.count("agent") != 1:
+            raise ValueError('router.pipeline must end with "agent", and name it once')
+        if len(set(self.pipeline)) != len(self.pipeline):
+            raise ValueError("router.pipeline names a stage twice")
+        return self
+
+
+class MemorySettings(_Section):
+    """What the local model is shown of your memories each turn (ADR-084)."""
+
+    # Facts about you ("my manager is Ravi") and about what you are working on ("the report
+    # is due Friday"), each within its own character budget sized for an 8B model's context.
+    user_chars: int = Field(default=1200, ge=0, le=8000)
+    context_chars: int = Field(default=600, ge=0, le=8000)
 
 
 class SafetySettings(_Section):
@@ -100,6 +129,7 @@ class AppsSettings(_Section):
     match_threshold: float = Field(default=75, ge=0, le=100)
     aliases: dict[str, str] = {}
     process_names: dict[str, str] = {}  # app name to executable, for matching open windows
+    open_wait_s: float = Field(default=10, ge=0, le=60)  # how long "open" waits for a window
 
 
 class FilesSettings(_Section):
@@ -195,10 +225,16 @@ class NotificationsSettings(_Section):
     max_read: int = Field(default=5, ge=1, le=20)  # notifications read out at once
 
 
+class HistorySettings(_Section):
+    """How long past commands and the audit log are kept; 0 keeps them forever (ADR-075)."""
+
+    keep_days: float = Field(default=90, ge=0)  # commands, answers, their vectors, done reminders
+    audit_keep_days: float = Field(default=365, ge=0)
+
+
 class ServerSettings(_Section):
     port: int = Field(default=8765, ge=1024, le=65535)  # always on 127.0.0.1, never the network
-    open_browser: bool = True
-    speak_replies: bool = False  # also say the answers to commands typed on the page
+    speak_replies: bool = False  # also say the answers to commands sent through the local API
 
 
 class BridgeSettings(_Section):
@@ -209,15 +245,20 @@ class BridgeSettings(_Section):
     questions: bool = True  # answer AskUserQuestion by voice or the page
     permissions: bool = True  # allow or deny tool permissions by a clear spoken yes or no
     announce: bool = True  # say "Claude is waiting for you" and "Claude finished"
-    # Reach your phone when nobody answers at the PC (ADR-052): "" (off), "ntfy", or "twilio".
-    phone: Literal["", "ntfy", "twilio"] = ""
+    # Reach your phone when nobody answers at the PC (ADR-052, ADR-098): "" (off), "ntfy",
+    # "twilio", or "kdeconnect" (a notification over your Wi-Fi, then ntfy buttons if set up).
+    phone: Literal["", "ntfy", "twilio", "kdeconnect"] = "kdeconnect"
     escalate_after_s: float = Field(default=45, gt=0)
 
 
 class PhoneSettings(_Section):
-    """Your phone, for calls through Phone Link and for the bridge's phone escalation."""
+    """Your phone: alerts and files through KDE Connect, ntfy pushes, calls (ADR-098)."""
 
     number: str = ""  # your own number, e.g. "+919876543210" (local.toml only)
+    kdeconnect: bool = True  # ring, notify, and send files over your own Wi-Fi
+    kdeconnect_cli: str = "kdeconnect-cli"  # installed with the KDE Connect app
+    device: str = ""  # the KDE Connect device name or id; "" uses the one paired phone
+    ntfy_alerts: bool = True  # alerts go by ntfy when the phone is not on the Wi-Fi
     ntfy_server: str = "https://ntfy.sh"  # or your own ntfy server
     ntfy_topic: str = ""  # a long random topic name; anyone who knows it can read it
     twilio_from: str = ""  # a Twilio number that may call yours
@@ -230,11 +271,21 @@ class CallsSettings(_Section):
     method: Literal["whatsapp", "phone_link"] = "whatsapp"
 
 
+class ClipboardSettings(_Section):
+    """ "The second last thing I copied" (ADR-077). Off until you turn it on."""
+
+    history: bool = False
+    max_items: int = Field(default=20, ge=1, le=200)  # kept in memory only, never on disk
+    max_chars: int = Field(default=20000, ge=100)  # anything longer is not kept
+    poll_s: float = Field(default=1, ge=0.2)
+
+
 class TTSSettings(_Section):
     engine: Literal["piper", "sapi"] = "piper"
     piper_voice: str = "en_GB-alan-medium"
     piper_speed: float = Field(default=1.0, gt=0.25, le=3.0)
     rate: int = Field(default=0, ge=-10, le=10)  # SAPI only
+    stream: bool = True  # speak the reply sentence by sentence while the model writes it
 
 
 class VoiceSettings(_Section):
@@ -261,21 +312,7 @@ class VoiceSettings(_Section):
     max_utterance_s: float = Field(default=12, gt=1)
     no_speech_timeout_s: float = Field(default=5, gt=0.5)
     earcons: bool = True
-    live_transcript: bool = True  # transcribe while you speak, for the overlay and the page
-
-
-class OverlaySettings(_Section):
-    """The fullscreen effect when you say "Hey Jarvis" (ADR-070)."""
-
-    enabled: bool = True
-    # takeover: the whole screen while you speak, then an edge glow once Jarvis gets to work.
-    # edge: only the edge glow and the small panel.
-    mode: Literal["takeover", "edge"] = "takeover"
-    dim: float = Field(default=0.72, ge=0, le=0.9)  # how dark the desktop goes during a takeover
-    # Hidden from screenshots, screen shares, and Jarvis's own screen reading. Turn it on to
-    # record a demo.
-    show_in_captures: bool = False
-    max_visible_s: float = Field(default=240, gt=10)  # hide if Jarvis goes silent for this long
+    live_transcript: bool = True  # transcribe while you speak, sent to local API clients
 
 
 class McpServerSettings(_Section):
@@ -315,6 +352,93 @@ class McpSettings(_Section):
     servers: dict[str, McpServerSettings] = Field(default_factory=dict)
 
 
+class McpServerSideSettings(_Section):
+    """Jarvis's own tools for other MCP clients, through `jarvis mcp serve` (ADR-085).
+
+    Only public tools can be offered, whatever this list says: an MCP client such as Claude
+    Code sends tool results to a cloud model. A private tool listed here is refused at start.
+    """
+
+    enabled: bool = True
+    tools: list[str] = Field(
+        default_factory=lambda: [
+            "weather",
+            "calculate",
+            "convert_currency",
+            "market_data",
+            "crypto_price",
+            "web_search",
+            "ring_phone",
+            "notify_phone",
+        ]
+    )
+
+
+class SpotifySettings(_Section):
+    """Search uses SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET from .env (ADR-091)."""
+
+    market: str = Field(
+        default="IN", pattern=r"^[A-Z]{2}$"
+    )  # the country whose catalogue to search
+
+
+class DockerProject(_Section):
+    path: str  # the folder with the compose file
+
+
+class DockerSettings(_Section):
+    ready_timeout_s: float = Field(default=120, gt=0, le=1800)
+    projects: dict[str, DockerProject] = Field(default_factory=dict)  # "shop" = { path = "..." }
+
+
+class SshProfile(_Section):
+    host: str
+    user: str = ""
+    port: int = Field(default=22, ge=1, le=65535)
+    key: str = ""  # an identity file, for example "~/.ssh/id_ed25519"
+
+
+class SshSettings(_Section):
+    profiles: dict[str, SshProfile] = Field(default_factory=dict)
+
+
+class GitSettings(_Section):
+    repos: dict[str, str] = Field(default_factory=dict)  # name to folder (ADR-094)
+    remote: str = Field(default="origin", pattern=r"^[A-Za-z0-9._-]{1,100}$")
+
+
+class VisionSettings(_Section):
+    """Screen understanding with a local vision model (ADR-080, ADR-096)."""
+
+    enabled: bool = True
+    model: str = "gemma3:4b"
+    keep_alive_s: float = Field(default=30, ge=0, le=3600)  # then the main model loads again
+    max_side: int = Field(default=1600, ge=320, le=4096)  # the screenshot is scaled to this
+    timeout_s: float = Field(default=120, gt=0)
+
+
+class NewsSettings(_Section):
+    """The daily AI and tech digest from news feeds (ADR-097)."""
+
+    feeds: list[str] = Field(
+        default_factory=lambda: [
+            "https://hnrss.org/frontpage?points=150",
+            "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+            "https://techcrunch.com/category/artificial-intelligence/feed/",
+            "https://news.google.com/rss/search?q=artificial+intelligence+when:1d"
+            "&hl=en-IN&gl=IN&ceid=IN:en",
+        ]
+    )
+    max_stories: int = Field(default=8, ge=1, le=30)
+    max_age_hours: float = Field(default=36, gt=0)
+    cache_minutes: float = Field(default=30, ge=0)
+    folder: str = "{documents}/Jarvis News"
+
+
+class NotesSettings(_Section):
+    folder: str = "{documents}/Jarvis Notes"  # one Markdown file per day (ADR-088)
+
+
 class MailSettings(_Section):
     """Your mailbox over IMAP and SMTP with an app password in .env (ADR-057)."""
 
@@ -342,12 +466,13 @@ class CalendarSettings(_Section):
 class BriefingSettings(_Section):
     """The morning briefing (ADR-066)."""
 
-    parts: list[Literal["weather", "calendar", "reminders", "mail", "messages"]] = [
+    parts: list[Literal["weather", "calendar", "reminders", "mail", "messages", "news"]] = [
         "weather",
         "calendar",
         "reminders",
         "mail",
         "messages",
+        "news",
     ]
     offer: bool = True  # offer it once a day, the first time you use Jarvis in the morning
     offer_from_hour: int = Field(default=6, ge=0, le=23)
@@ -373,6 +498,7 @@ class Settings(_Section):
     agent: AgentSettings = AgentSettings()
     llm: LLMSettings
     router: RouterSettings = RouterSettings()
+    memory: MemorySettings = MemorySettings()
     safety: SafetySettings = SafetySettings()
     apps: AppsSettings = AppsSettings()
     files: FilesSettings = FilesSettings()
@@ -389,13 +515,22 @@ class Settings(_Section):
     mail: MailSettings = MailSettings()
     calendar: CalendarSettings = CalendarSettings()
     mcp: McpSettings = McpSettings()
+    mcp_server: McpServerSideSettings = McpServerSideSettings()
+    notes: NotesSettings = NotesSettings()
+    vision: VisionSettings = VisionSettings()
+    news: NewsSettings = NewsSettings()
+    spotify: SpotifySettings = SpotifySettings()
+    docker: DockerSettings = DockerSettings()
+    ssh: SshSettings = SshSettings()
+    git: GitSettings = GitSettings()
     briefing: BriefingSettings = BriefingSettings()
+    history: HistorySettings = HistorySettings()
     server: ServerSettings = ServerSettings()
     bridge: BridgeSettings = BridgeSettings()
     phone: PhoneSettings = PhoneSettings()
     calls: CallsSettings = CallsSettings()
+    clipboard: ClipboardSettings = ClipboardSettings()
     tts: TTSSettings = TTSSettings()
-    overlay: OverlaySettings = OverlaySettings()
     voice: VoiceSettings = VoiceSettings()
     dictation: DictationSettings = DictationSettings()
     data_dir: Path = Field(default_factory=default_data_dir)
@@ -437,6 +572,27 @@ def _read_toml(path: Path, *, required: bool) -> dict[str, Any]:
         raise ConfigError(f"{path} is not valid TOML: {exc}") from exc
 
 
+# Settings that no longer exist. An old local.toml that still has them loads, with a note in the
+# log, instead of failing validation (every section forbids unknown keys).
+RETIRED: dict[str, tuple[str, ...] | None] = {
+    "overlay": None,  # the whole section: the wake overlay was removed (ADR-081)
+    "server": ("open_browser",),  # the page was removed (ADR-081)
+}
+
+
+def _drop_retired(data: dict[str, Any]) -> None:
+    for section, keys in RETIRED.items():
+        if section not in data:
+            continue
+        if keys is None:
+            del data[section]
+            log.info("Ignoring the retired [%s] section in the config", section)
+            continue
+        for key in keys:
+            if isinstance(data[section], dict) and data[section].pop(key, None) is not None:
+                log.info("Ignoring the retired setting %s.%s in the config", section, key)
+
+
 def load_settings(
     config_dir: Path | None = None,
     *,
@@ -453,6 +609,7 @@ def load_settings(
         data = deep_merge(data, _read_toml(config_dir / "local.toml", required=False))
     if overrides:
         data = deep_merge(data, overrides)
+    _drop_retired(data)
 
     try:
         return Settings.model_validate(data)

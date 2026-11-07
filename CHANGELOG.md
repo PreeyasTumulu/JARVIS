@@ -2,14 +2,76 @@
 
 Every phase of Jarvis, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-Versions 0.4.0 to 1.6.0 are built on stacked `phase/<n>-<name>` branches with green CI and are waiting for hands-on review before they are merged to `main` and tagged. Details, test commands, and measurements for each are in [docs/ROADMAP.md](docs/ROADMAP.md); every design decision is in [docs/DECISIONS.md](docs/DECISIONS.md).
+Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they wait for a hands-on test. Details, test commands, and measurements for each are in [docs/ROADMAP.md](docs/ROADMAP.md); every design decision is in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## [Unreleased]
 
+### Added
+- The chat window is live: `jarvis serve` serves it, and `jarvis ui`, the tray's "Open Jarvis", or saying "open Jarvis" opens it in Brave's app mode. It shows typed and spoken turns, confirmations, questions, Stop, push-to-talk, and the last 20 turns. Only that page may use the socket (ADR-103).
+- Open-source readiness: a demo GIF from the chat interface at the top of the README, a quickstart that starts with the offline demo pages, and a CI check that the repository holds no personal data (`scripts/check_personal.py`, ADR-102).
+
 ### Changed
+- The UI demos, tests, and docs use made-up devices and addresses instead of the real ones from live tests.
+- `ui-demos/chat.html`: the orb and the edge glow brought together around a conversation. The orb glides from the middle into the header, your words and Jarvis's reply appear live, confirmations are cards in the conversation, and light and dark themes are included (ADR-101).
+- `ui-demos/`: six standalone UI concepts (reactor, orb, edge glow, terminal, pill, constellation). Each shows the same seven states, plays a scripted run, and can follow your real microphone. They are offline, one file each, with screenshots in the READMEs (ADR-100).
+- Your phone for free: "find my phone" rings it, "send this file / the clipboard / a screenshot to my phone", notifications, and reminders that ring the phone, through KDE Connect on your Wi-Fi or an ntfy push away from home; Claude Code's waiting questions reach the phone too (ADR-098).
+- Research on calls where Jarvis speaks: cost, Indian numbers, and the law (RESEARCH.md 2.4); not built (ADR-099).
+
+### Fixed
+- An optional argument the model writes as `{"null": true}` now counts as left out (seen with set_reminder's `at`).
+- "What's on my screen", "what does this error mean": a local vision model (gemma3:4b) looks at the screen with Windows OCR's exact text; nothing leaves the laptop (ADR-096).
+- "What's new in AI": a daily AI and tech digest from news feeds, saved as Markdown with links, and a line in the morning briefing (ADR-097).
+- "Play lofi beats on spotify": found with Spotify's search API and started in the app, saying "Playing ..." only when Spotify does (ADR-091).
+- "Start the shop project", "run redis on port 6379": compose projects and images started after a yes, then waited for until healthy or answering (ADR-092).
+- "Connect to my pi": SSH profiles from config open in Windows Terminal (ADR-093).
+- "What changed in my shop repo", "commit it", "push it": the local model drafts the message, and the commit and the push each ask first (ADR-094).
+
+### Fixed
+- A time given to a tool that only runs now ("open VS Code at 9" as open_app) is refused instead of running at once (ADR-095).
+- "Close Spotify in 20 minutes", "open VS Code at 9": apps opened or closed later, asked once when you say it and checked by the gate again when it runs (ADR-087).
+- Opening an app waits for its window and says how long it took.
+- Notes: "note that ...", "what did I note yesterday", "open my notes", in a Markdown file per day in Documents (ADR-088).
+- "Add groceries and 450 to my budget sheet": a row added to an Excel or CSV file after a yes, through Excel when the workbook is open (ADR-089).
+- "Show 18 percent of 2400 in the calculator": the sum typed into Windows Calculator and its answer checked (ADR-090).
+- Tests of their own for the router pipeline.
+- Jarvis as an MCP server: `jarvis mcp serve` offers the public tools in `[mcp_server] tools` to Claude Code, Claude Desktop, and other clients, through the running Jarvis's policy gate and audit log; a call that needs a yes is asked on Jarvis's own voice and terminal, naming the client (ADR-085).
+- `config/ollama/llama3.2-3b.Modelfile`: Llama 3.2 3B as a faster local model option (ADR-086).
+
+### Changed
+- The agent loop is a LangGraph graph (route, think, guard, gate, await_confirmation, execute, respond) whose policy gate no path can skip; a tool runs only with a one-time clearance from the gate for exactly its arguments (ADR-083).
+- Memories and past commands are found by meaning in ChromaDB, copied once from SQLite, with SQLite as the fallback; vectors are written after the answer (ADR-084).
+- "open notepad", "volume 30", and "mute" are answered without the model when the app is in the index (`[router] pipeline`). Every turn records who handled it (`handled_by`).
+- The same tool call twice in one turn runs once, and a turn whose calls stay invalid stops with status `limit`.
+- The web API client moved to `jarvis/adapters` and tries once more after a timeout or a 502, 503, or 504.
+
+### Added
+- Voice replies start speaking at the first sentence while the model is still writing (`[tts] stream`); `first_audio_ms` in each command's timings.
+- Memories about you and about the current work, with their own room in the prompt (`[memory] user_chars`, `context_chars`).
+- LangGraph and ChromaDB load in the background when `chat` or `serve` starts.
+
+### Documentation
+- ARCHITECTURE.md section 4 rewritten around the graph, with a diagram generated from the code (`scripts/architecture_graph.py`).
+- Research on Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, and the strongest JARVIS-style repos, with what Jarvis takes and where it does better (RESEARCH.md section 6). Piper's GPL licence confirmed, so the installer must keep it optional (ADR-006).
+
+### Removed
+- The web page, its shader, and the wake overlay, with `jarvis overlay`, the tray's Open Jarvis item, `[overlay]`, `[server] open_browser`, `glfw`, and `moderngl` (ADR-081). A new UI will be built from `ui-demos/`. Old configs and login shortcuts still work.
+
+### Added
+- The local API: `GET /health`, the bridge, and the WebSocket, refused to any browser and opened with the token in `bridge.json`.
+- "What's 10 + 10" is answered at once without the model: `calculate`, a safe evaluator for sums, percentages, powers, and square roots (ADR-082).
+- Past commands, answers, and finished reminders are deleted after 90 days and the audit log after 365 (`[history]`); 0 keeps them forever (ADR-075).
+- Focus sessions: reminders wait, timers still ring, and the end says what you missed (ADR-078).
+- Clipboard history, off by default and in memory only: "what did I copy earlier", "the second last thing I copied" (ADR-077).
+- "Forget what I asked about my doctor", "delete yesterday's commands", "clear my history": `forget_history`, after a yes.
+
+### Changed
+- A locked PC says nothing private: speech is cut off, reminders wait until you unlock, and answers stay on the page (ADR-076).
 - The microphone closes while the PC is locked: no wake word, push-to-talk, or dictation until you unlock it, and a question waiting for a spoken answer counts as no (ADR-074).
 
 ### Fixed
+- Jarvis closed by itself on its first spoken answer when voice was off: two copies of `msvcp140.dll` in one process (R58).
+- The end of a focus session was never shown in a text chat, and it was spoken over the reminder it had held. It is now printed, and Jarvis's own announcements are spoken one at a time.
+- A tool call the model wrote as bare JSON was read aloud instead of run.
 - A new confirmation card focused Confirm, so a stray Enter or Space could approve it. It now focuses Cancel.
 - After you said no, Jarvis could say "they said no", as if the other person had refused.
 - A cancelled tool showed "failed" on the page.
@@ -127,7 +189,7 @@ Versions 0.4.0 to 1.6.0 are built on stacked `phase/<n>-<name>` branches with gr
 ### Added
 - Architecture, roadmap, setup, decisions, and risks; the repository.
 
-[Unreleased]: https://github.com/PreeyasTumulu/JARVIS/compare/v0.3.0...phase/16-release-polish
+[Unreleased]: https://github.com/PreeyasTumulu/JARVIS/compare/v0.3.0...main
 [0.3.0]: https://github.com/PreeyasTumulu/JARVIS/releases/tag/v0.3.0
 [0.2.0]: https://github.com/PreeyasTumulu/JARVIS/releases/tag/v0.2.0
 [0.1.0]: https://github.com/PreeyasTumulu/JARVIS/releases/tag/v0.1.0

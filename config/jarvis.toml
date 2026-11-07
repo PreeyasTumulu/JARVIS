@@ -197,17 +197,14 @@ poll_s = 2                   # seconds between checks while Jarvis runs
 keep_days = 7                # notification text older than this is deleted
 max_read = 5                 # how many are read out at once
 
-[server]
-port = 8765                  # the web UI: http://127.0.0.1:8765 (never reachable from the network)
-open_browser = true          # open the page when `jarvis serve` starts
-speak_replies = false        # also say the answers to commands typed on the page
+[history]
+# Past commands, Jarvis's answers, and finished reminders older than this are deleted (ADR-075).
+keep_days = 90               # 0 keeps them forever
+audit_keep_days = 365        # the audit log; 0 keeps it forever
 
-[overlay]                     # the fullscreen effect when you say "Hey Jarvis" (ADR-070)
-enabled = true
-mode = "takeover"             # takeover: whole screen, then an edge glow; edge: only the glow
-dim = 0.72                    # how dark the desktop goes during a takeover, 0 to 0.9
-show_in_captures = false      # true shows it in screenshots and shares; use it to record a demo
-max_visible_s = 240           # hide if Jarvis goes silent for this long
+[server]
+port = 8765                  # the local API on 127.0.0.1 (never reachable from the network)
+speak_replies = false        # also say the answers to commands sent through the local API
 
 [bridge]
 # Claude Code asks you through Jarvis (install once with: uv run jarvis claude-hook install).
@@ -216,7 +213,9 @@ answer_timeout_s = 120       # no answer by then: Claude Code asks you as usual
 questions = true             # Claude's multiple-choice questions, answered by voice or the page
 permissions = true           # tool permissions: a clear spoken yes allows, no denies, silence asks as usual
 announce = true              # say "Claude is waiting for you" and "Claude finished"
-phone = ""                   # "" (off), "ntfy" (a push with answer buttons), or "twilio" (a real call)
+# "kdeconnect": a notification on your phone over your Wi-Fi (then ntfy buttons if a topic is set);
+# "ntfy" (a push with answer buttons), "twilio" (a paid call), or "" (off). ADR-098.
+phone = "kdeconnect"
 escalate_after_s = 45        # how long the PC gets before the phone is tried
 
 [calls]
@@ -225,7 +224,12 @@ escalate_after_s = 45        # how long the PC gets before the phone is tried
 method = "whatsapp"
 
 [phone]
+# Jarvis reaches your own phone for free (ADR-098): KDE Connect on the same Wi-Fi rings it,
+# notifies it, and receives files; ntfy carries short alerts when the phone is away.
 number = ""                # your own number, +91..., set it in local.toml
+kdeconnect = true
+device = ""                  # the KDE Connect device name; "" uses the one paired phone
+ntfy_alerts = true           # alerts go by ntfy when the phone is not on the Wi-Fi
 ntfy_server = "https://ntfy.sh"
 ntfy_topic = ""              # a long random name, in local.toml; anyone who knows it can read it
 twilio_from = ""             # a Twilio number allowed to call yours
@@ -256,6 +260,15 @@ max_events = 10
 enabled = true
 connect_timeout_s = 60       # the first start of a Docker image is slow
 call_timeout_s = 30
+
+[mcp_server]
+# Jarvis's own tools for other MCP clients (Claude Code, Claude Desktop): they run
+# `uv run jarvis mcp serve`, which reaches the running `jarvis serve` (ADR-085). Only public
+# tools can be offered, whatever this says; every call passes the policy gate, and a call
+# that needs a yes is asked on Jarvis's own voice and terminal, naming the client.
+enabled = true
+tools = ["weather", "calculate", "convert_currency", "market_data", "crypto_price", "web_search",
+         "ring_phone", "notify_phone"]
 
 [mcp.servers.github]
 # GitHub's official server in Docker. Starts once GITHUB_PERSONAL_ACCESS_TOKEN is in .env.
@@ -288,10 +301,17 @@ add_issue_comment = ["owner", "repo", "issue_number", "body"]
 
 [briefing]
 # "Good morning" or "brief me" (ADR-066). Email and messages are counts and senders only.
-parts = ["weather", "calendar", "reminders", "mail", "messages"]
+parts = ["weather", "calendar", "reminders", "mail", "messages", "news"]
 offer = true                 # offer it once a day, the first time you use Jarvis in the morning
 offer_from_hour = 6
 offer_until_hour = 12
+
+[clipboard]
+# "The second last thing I copied" (ADR-077). Off by default, because what you copy can be anything.
+history = false              # true keeps what you copy, in memory only, until the PC locks or Jarvis stops
+max_items = 20
+max_chars = 20000            # anything longer is not kept
+poll_s = 1
 
 [dictation]
 # Hold the hotkey, speak, release: the text appears where the cursor is, in any app (ADR-054).
@@ -304,3 +324,4 @@ remove_fillers = true        # drop "um" and "uh"
 [tts]
 engine = "piper"            # "piper", or "sapi" (built-in Windows voice); falls back to sapi if Piper is not installed
 rate = 0                     # -10 (slow) to 10 (fast)
+stream = true                # speak each sentence as the model writes it (false: wait for the whole reply)

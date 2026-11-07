@@ -13,7 +13,6 @@ from jarvis.app import App, build_app
 from jarvis.config import Settings
 from jarvis.console import ConsoleChannel, ConsoleRenderer
 from jarvis.core.channel import FirstAnswerChannel
-from jarvis.overlay.client import start_overlay
 from jarvis.platform.hotkeys import Hotkey, HotkeyListener, parse_hotkey
 from jarvis.platform.windows import session_locked
 from jarvis.voice.audio import (
@@ -48,7 +47,6 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
     with asyncio.Runner() as runner:
         app = build_app(settings, channel)
         app.bus.subscribe(ConsoleRenderer(console, verbose=verbose))
-        overlay = start_overlay(settings, app.bus)
         session = create_session(settings, app, wake_enabled=wake_enabled)
         voice_channel.attach(session)
         hotkeys: HotkeyListener | None = None
@@ -64,8 +62,6 @@ def run_voice(settings: Settings, console: Console, *, wake: bool, verbose: bool
         except KeyboardInterrupt:
             pass
         finally:
-            if overlay is not None:
-                overlay.close()
             if hotkeys is not None:
                 hotkeys.stop()
             runner.run(session.close())
@@ -109,6 +105,7 @@ def create_session(settings: Settings, app: App, *, wake_enabled: bool) -> Voice
         vad=SileroVAD(settings.models_dir, cfg.wake_word) if wake_enabled else None,
         dictation=Inserter(settings.dictation) if settings.dictation.enabled else None,
         is_locked=session_locked,
+        on_locked=lambda locked: setattr(app.services, "quiet_speech", locked),
     )
 
 

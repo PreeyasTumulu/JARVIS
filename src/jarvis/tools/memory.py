@@ -12,12 +12,17 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from operator import attrgetter
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from jarvis.storage.db import Database
 from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolError, ToolResult
 from jarvis.tools.naming import pick
 from jarvis.tools.registry import tool
+
+if TYPE_CHECKING:
+    from jarvis.config import MemorySettings
+
+MemoryKind = Literal["user", "context"]
 
 MAX_MEMORIES = 500  # found by meaning, so more than fit in a prompt
 MAX_CHARS = 300
@@ -30,6 +35,7 @@ class Memory:
     id: int
     text: str
     created: datetime
+    kind: str = "user"  # "user": about you; "context": what you are working on (ADR-084)
 
 
 class MemoryStore:
@@ -37,18 +43,36 @@ class MemoryStore:
         self._db = db
 
     def all(self) -> list[Memory]:
-        rows = self._db.execute("SELECT id, text, created_at FROM memories ORDER BY id DESC")
-        return [Memory(r["id"], r["text"], datetime.fromisoformat(r["created_at"])) for r in rows]
+        rows = self._db.execute("SELECT id, text, created_at, kind FROM memories ORDER BY id DESC")
+        return [
+            Memory(r["id"], r["text"], datetime.fromisoformat(r["created_at"]), r["kind"])
+            for r in rows
+        ]
 
     def texts(self) -> list[str]:
         return [memory.text for memory in self.all()[:PROMPT_MEMORIES]]
 
-    def add(self, text: str) -> Memory:
+    def prompt_texts(self, budgets: MemorySettings) -> list[str]:
+        """Newest first, each kind within its character budget, for the local model's prompt.
+
+        Older memories that do not fit are still found by meaning when a request is about
+        them (tools/recall.py), so the budget limits the prompt, not what Jarvis knows.
+        """
+        left = {"user": budgets.user_chars, "context": budgets.context_chars}
+        chosen: list[str] = []
+        for memory in self.all():
+            kind = memory.kind if memory.kind in left else "user"
+            if len(memory.text) <= left[kind]:
+                left[kind] -= len(memory.text)
+                chosen.append(memory.text)
+        return chosen
+
+    def add(self, text: str, kind: str = "user") -> Memory:
         rows = self._db.execute(
-            "INSERT INTO memories (text, created_at) VALUES (?, ?) RETURNING id",
-            (text, datetime.now(UTC).isoformat()),
+            "INSERT INTO memories (text, created_at, kind) VALUES (?, ?, ?) RETURNING id",
+            (text, datetime.now(UTC).isoformat(), kind),
         )
-        return Memory(int(rows[0][0]), text, datetime.now(UTC))
+        return Memory(int(rows[0][0]), text, datetime.now(UTC), kind)
 
     def remove(self, ids: list[int]) -> None:
         self._db.executemany("DELETE FROM memories WHERE id = ?", [(i,) for i in ids])
@@ -59,15 +83,17 @@ def clean(fact: str) -> str:
 
 
 @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PRIVATE, timeout_s=5)
-async def remember(ctx: ToolContext, fact: str) -> ToolResult:
+async def remember(ctx: ToolContext, fact: str, about: MemoryKind = "user") -> ToolResult:
     """Remember a fact the user tells you to keep, for example "remember that my manager is
     Ravi". Write it as a short statement about the user.
 
     Args:
         fact: The fact as one short sentence, for example "The user's manager is Ravi".
+        about: "user" for lasting facts about the user and the people in their life, or
+            "context" for what they are working on now, for example "The report is due Friday".
     """
     store = ctx.services.memory
-    memory = store.add(fact)
+    memory = store.add(fact, about)
     return ToolResult.success(
         data={"remembered": memory.text}, speech="Got it, I'll remember that."
     )
@@ -89,7 +115,12 @@ async def _prepare_remember(ctx: ToolContext, args: dict[str, Any]) -> Prepared:
     if ctx.flags.untrusted:
         risk = Risk.CONFIRM
         reason = "outside content is in this conversation, and a memory comes back in every prompt"
-    return Prepared(args={"fact": fact}, summary=f'Remember: "{fact}"', risk=risk, reason=reason)
+    return Prepared(
+        args={"fact": fact, "about": args.get("about") or "user"},
+        summary=f'Remember: "{fact}"',
+        risk=risk,
+        reason=reason,
+    )
 
 
 @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PRIVATE, timeout_s=5)

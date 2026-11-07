@@ -10,21 +10,35 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 1 | Skeleton: config, model client, agent loop, registry, audit, CLI | On `main` | v0.1.0 |
 | 2 | Voice: push-to-talk, then wake word | On `main` | v0.2.0 |
 | 3 | App index, VS Code, Docker, files | On `main` | v0.3.0 |
-| 4 | Data APIs, fetch_page, system tools | Built on `phase/4-data-system`, waiting for your test | v0.4.0 |
-| 5 | Web UI with live tool log and confirm buttons | Built on `phase/5-web-ui` (stacked on Phase 4), waiting for your test | v0.5.0 |
-| 6 | UI automation, Playwright, WhatsApp | Built on `phase/6-ui-whatsapp` (stacked on Phase 5), waiting for your test | v0.6.0 |
-| 7 | Notifications (feasibility spike first) | Built on `phase/7-notifications` (stacked on Phase 6), waiting for your test | v0.7.0 |
-| 8 | Model router, memory, tray, startup, packaging | Built on `phase/8-router-tray` (stacked on Phase 7), waiting for your test | v0.8.0 |
-| 9 | Test hardening, docs, demo (plus the Claude Code bridge, Brave, calls) | Built on `phase/9-hardening` (stacked on Phase 8), waiting for your test | v1.0.0 |
-| 10 | Dictation and media | Built on `phase/10-dictation-media` (stacked on Phase 9), waiting for your test | v1.1.0 |
-| 11 | Mail and calendar | Built on `phase/11-calendar-mail` (stacked on Phase 10), waiting for your test | v1.2.0 |
-| 12 | MCP servers (GitHub first) | Built on `phase/12-mcp` (stacked on Phase 11), waiting for your test | v1.3.0 |
-| 13 | Faster and smaller | Built on `phase/13-faster` (stacked on Phase 12), waiting for your test | v1.4.0 |
-| 14 | Memory by meaning, morning briefing | Built on `phase/14-memory-briefing` (stacked on Phase 13), waiting for your test | v1.5.0 |
-| 15 | Screen reading (Windows OCR) | Built on `phase/15-screen-reading` (stacked on Phase 14), waiting for your test | v1.6.0 |
-| 16 | Release polish (installer, changelog, templates) | Built on `phase/16-release-polish` (stacked on Phase 15), waiting for your review | unreleased |
-| 17 | WhatsApp calls | Built on `phase/17-whatsapp-calls` (stacked on Phase 16), waiting for your test | v1.7.0 |
-| 18 | New interface and wake overlay | Built on `phase/18-interface` (stacked on Phase 17), waiting for your test | v1.8.0 |
+| 4 | Data APIs, fetch_page, system tools | On `main`, not tagged, waiting for your test | v0.4.0 |
+| 5 | Web UI with live tool log and confirm buttons | On `main`, not tagged, waiting for your test | v0.5.0 |
+| 6 | UI automation, Playwright, WhatsApp | On `main`, not tagged, waiting for your test | v0.6.0 |
+| 7 | Notifications (feasibility spike first) | On `main`, not tagged, waiting for your test | v0.7.0 |
+| 8 | Model router, memory, tray, startup, packaging | On `main`, not tagged, waiting for your test | v0.8.0 |
+| 9 | Test hardening, docs, demo (plus the Claude Code bridge, Brave, calls) | On `main`, not tagged, waiting for your test | v1.0.0 |
+| 10 | Dictation and media | On `main`, not tagged, waiting for your test | v1.1.0 |
+| 11 | Mail and calendar | On `main`, not tagged, waiting for your test | v1.2.0 |
+| 12 | MCP servers (GitHub first) | On `main`, not tagged, waiting for your test | v1.3.0 |
+| 13 | Faster and smaller | On `main`, not tagged, waiting for your test | v1.4.0 |
+| 14 | Memory by meaning, morning briefing | On `main`, not tagged, waiting for your test | v1.5.0 |
+| 15 | Screen reading (Windows OCR) | On `main`, not tagged, waiting for your test | v1.6.0 |
+| 16 | Release polish (installer, changelog, templates) | On `main`, not tagged, waiting for your test | unreleased |
+| 17 | WhatsApp calls | On `main`, not tagged, waiting for your test | v1.7.0 |
+| 18 | New interface and wake overlay | On `main`, not tagged, waiting for your test | v1.8.0 |
+| 19 | Privacy: history expiry, forgetting, quiet when locked | On `main` (merged 2026-11-07), not tagged; waiting for your test | v1.9.0 |
+| 20 | Clipboard history and focus sessions | On `main` (merged 2026-11-07), not tagged; hand tested, two items need you | v1.10.0 |
+| 21 | Speed and coverage: arithmetic without the model | On `main` (merged 2026-11-07), not tagged; hand tested | v1.11.0 |
+| 22 | Remove the page and overlay | On `main` (merged 2026-11-07), not tagged; hand tested | v1.12.0 |
+| 23 | Research: other assistants | On `main` (merged 2026-11-07), not tagged; docs only | v1.12.0 |
+| 24 | Core on LangGraph and ChromaDB | On `main` (merged 2026-11-07), not tagged; hand tested on scratch data | v1.13.0 |
+| 25 | Jarvis as an MCP server | On `main` (merged 2026-11-07), not tagged; hand tested on scratch data | v1.14.0 |
+| 26 | Apps, files, and office | On `main` (merged 2026-11-07), not tagged; hand tested on scratch data and the real desktop | v1.15.0 |
+| 27 | Music, developer tools, browser | On `main` (merged 2026-11-07), not tagged; git hand tested live; Spotify, Docker, SSH need your setup | v1.16.0 |
+| 28 | Screen understanding and daily news | On `main` (merged 2026-11-07), not tagged; hand tested with real models and feeds | v1.17.0 |
+| 29 | Your phone, for free | On `main` (merged 2026-11-07), not tagged; hand tested on this laptop; pairing the phone needs you | v1.18.0 |
+| 30 | UI demos, then the chosen chat | On `main` (merged 2026-11-07), not tagged; checked in the browser; the real microphone needs you | v1.20.0 |
+| 31 | Open-source readiness | On `main` (merged 2026-11-07), not tagged; the release is prepared for you to tag | v1.21.0 |
+| 32 | The chat window, live | On `main` (merged 2026-11-07), not tagged; hand tested with a real serve on scratch data; voice in the window needs you | v1.22.0 |
 
 ## How each phase runs
 
@@ -833,6 +847,306 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** "Hey Jarvis" transforms the whole screen with no focus lost and clicks still working; your words appear as you speak; it recedes while Jarvis works and leaves no trace when done.
 
+## Phase 19: Privacy
+
+**Goal:** what Jarvis keeps has an end date, you can delete it by voice, and a locked PC says nothing private.
+
+**Scope**
+
+- `[history] keep_days` (90) and `audit_keep_days` (365); `storage/retention.py` runs at start and once a day (ADR-075).
+- `forget_history(about, when)`: confirm floor; matches words in the command or its answer; takes vectors and audit rows; the conversation is cleared and the request is not kept.
+- Locked PC: speech cut off, reminders held until you unlock, answers left on the page, `speak` refuses (ADR-076).
+
+**Test it**
+
+1. "what's the weather", then "forget what I asked about the weather". It asks first, says how many, and "what did I ask about the weather" then finds nothing.
+2. Set a reminder for a minute away ("remind me in one minute to stretch") and lock the PC. It says only that something is waiting; unlock and it says the reminder.
+
+**Not done, needs you:** both tests with a real lock. Everything here is tested with fakes.
+
+**Exit criteria:** nothing is kept past its keep time, a forgotten command is gone from history, vectors, audit, and conversation, and a locked PC says nothing private.
+
+## Phase 20: Clipboard history and focus sessions
+
+**Goal:** "the second last thing I copied" works without leaving anything on disk, and a focus session keeps Jarvis quiet and then says what you missed.
+
+**Scope**
+
+- `clipboard_history`, `clipboard_restore`, `clipboard_forget`, off by default (ADR-077).
+- `focus_start`, `focus_end`, `focus_status`; exact phrases skip the model (ADR-078).
+
+**Test it**
+
+1. Set `history = true` under `[clipboard]` in `config/local.toml` and restart. Copy two things, say "what did I copy earlier", then "put the second last thing I copied back on the clipboard", and press Ctrl+V.
+2. "Start a focus session for 2 minutes", then "remind me in one minute to stretch". Nothing is said at one minute. At two it says the session is over, that one reminder waited, and then the reminder.
+
+**Not done, needs you:** both tests by hand. Everything here is tested with fakes; the PC was locked during the build, and Windows refuses clipboard access then, so the real clipboard has not been read.
+
+**Exit criteria:** nothing copied reaches the disk, a marked copy is never kept, and a reminder due during a focus session is heard after it.
+
+## Phase 21: Speed and coverage
+
+**Goal:** a plain sum is answered at once, without the model, and the tests cover more of the code.
+
+**Scope**
+
+- `calculate(expression)`: a safe evaluator over the syntax tree (numbers, + - * / % **, sqrt); nothing reaches `eval` (ADR-082).
+- The fast path turns "what's 10 + 10", "15 percent of 240", "2 to the power of 10", "the square root of 144" into a `calculate` call with no model; anything else in the sentence sends it to the model, which also gets `calculate` for wordy math ("a 15 percent tip on 840").
+- A bare JSON tool call from the model runs instead of being read aloud; `claude-hook` no longer loads the agent.
+- Coverage floor in CI raised from 75 to 78 percent (78 measured).
+
+**Measured:** "what's 10 + 10" answers "20" in 0 ms of tool time and no model call; a wordy tip question takes one model call (3.3 s) and gets "126". `jarvis chat` starts and quits in 2.5 s (0.66 s of it importing the CLI); startup is measured again after the LangGraph move (ADR-079) rather than tuned on the loop that is being replaced.
+
+**Test it**
+
+1. "what's 10 + 10": it says "20" and the log line shows no model.
+2. "what's a 15 percent tip on 840 rupees": one model call, `calculate`, "126".
+
+**Exit criteria:** plain sums never wait for the model, and the evaluator refuses anything that is not arithmetic.
+
+## Phase 22: Remove the page and overlay
+
+**Goal:** the core carries no UI it is about to replace; voice and `jarvis chat` work as before, and the server is a local API the next UI can use (ADR-081).
+
+**Scope**
+
+- Deleted: the page (`server/static`), its shader, the OpenGL wake overlay (`jarvis/overlay`), `jarvis overlay demo`, the tray's Open Jarvis item, `[overlay]`, `[server] open_browser`, and the `glfw` and `moderngl` dependencies.
+- The server keeps `GET /health`, `POST /bridge`, and the WebSocket protocol; it refuses any request with an `Origin` header and needs the token from `bridge.json`.
+- Started from a terminal, `jarvis serve` also takes y or n there.
+- Old configs and start-at-login shortcuts keep working.
+- Found while testing and fixed: Jarvis crashed on its first Piper sentence when voice was off (R58).
+
+**Test it**
+
+1. `uv run jarvis chat`, then "what's 10 + 10".
+2. `uv run jarvis serve --no-voice`, then `curl http://127.0.0.1:8765/health`.
+
+**Exit criteria:** nothing of the page or overlay is left in the code, voice and chat behave as before, no website can reach the API, and Jarvis does not crash when it speaks.
+
+## Phase 23: Research
+
+**Goal:** before the core is rebuilt, know how the strongest open-source assistants solve routing, tools, safety, memory, latency, and UI states, and what Jarvis should take or do differently.
+
+**Done:** [RESEARCH.md](RESEARCH.md) section 6 (a table per project, what we take with the phase it lands in, where Jarvis does better, licences) and the full report with about 120 sources in [research/open-source-assistants-2026.md](research/open-source-assistants-2026.md). Four claims the next phase builds on were checked by hand against their primary source. Findings that changed the plan: Phase 24 gains a tiered router pipeline, a `handled_by` field, a guard node, named graph states, tool interruption options, streaming TTS, and a per-stage latency breakdown; R59 records the small-model tool-call risk; Piper's GPL licence is confirmed in the installed package, which keeps ADR-006 (optional, never bundled) binding on the Phase 31 installer.
+
+**Exit criteria:** every project in the brief is covered with sources, and each "take" item names the phase that builds it.
+
+## Phase 24: Core on LangGraph and ChromaDB
+
+**Goal:** the agent loop is a graph whose policy gate no path can skip, obvious commands never wait for a model, and voice replies start speaking before the model has finished (ADR-079, ADR-083, ADR-084).
+
+**Scope**
+
+- The turn is a LangGraph graph: route, think, guard, gate, await_confirmation, execute, respond (ARCHITECTURE.md 4.1, drawn from the code and checked by a test). Every node publishes `AgentStateChanged` with a named state.
+- A router pipeline before the model (`[router] pipeline`, `stage_timeout_ms`): exact phrases, sums, and one-slot templates ("open {app}" for apps in the index, "volume {n}", mute). `handled_by` on every turn in history and the audit log.
+- A guard before the gate: one repair of a near-miss name or broken JSON, no repeated call in a turn, `max_tool_calls_per_turn`.
+- Clearances: a tool runs only with a one-time clearance from the gate for exactly its arguments. Source scans keep every entry point behind the gate.
+- `cancel_on_interruption` per tool: a send that already started finishes and is audited when it ends.
+- ChromaDB for memories and past commands, copied once from SQLite, with SQLite as the fallback. Memory kinds `user` and `context` with their own budgets; vectors written after the turn.
+- Streamed replies: the local model streams, text that could be a tool call is held back, and Piper speaks sentence by sentence (SAPI too). `[tts] stream`. `first_token_ms` and `first_audio_ms` join the stage times.
+- `jarvis/adapters`: the web API client moved there and gained keys from .env, one retry after a timeout or a 502, 503, or 504, and logs without query strings.
+- LangGraph and ChromaDB import in a warm-up thread when `chat` or `serve` starts. LangSmith tracing is forced off (R60).
+
+**Test it**
+
+1. `uv run jarvis chat`, then "open notepad": "Opening Notepad." with no model line (the second time on a fresh data folder, R61).
+2. "what's 12 times 7": "84", no model.
+3. "remember that my manager is Ravi", then "who is my boss": "Ravi".
+4. `uv run jarvis voice`, push to talk, "why do cats purr": speech starts before the reply is finished.
+5. `uv run pytest tests/unit/test_gate_coverage.py`.
+
+**Measured (2026-11-07):** imports: LangGraph 2.7 s, ChromaDB 1.0 s, both off the startup path (warm-up thread, 3.0 s in the background on a cold start). Router stages: 0 to 3 ms once the app index is built. Streaming, warm model: first text after 0.9 to 1.4 s against 5.7 to 7.1 s for whole replies; first audio with real Piper (silent player) 2.8 s and 3.6 s against 3.7 s and 5.0 s for the whole reply plus the first sentence, and no gain for a reply of one long sentence. Tool choice ([benchmarks/phase24.md](benchmarks/phase24.md), the model alone, without the router stages): jarvis-hermes3 89% of 97 at a 3.0 s median (Phase 17: 91% of 90); llama3.2:3b 88% at 0.4 s.
+
+**Exit criteria:** every tool entry point meets the gate (checked by tests), every turn says who handled it, and a streamed voice reply is never spoken twice or over a confirmation.
+
+## Phase 25: Jarvis as an MCP server
+
+**Goal:** other MCP clients can use Jarvis's tools without a way around its policy gate, its audit log, or its privacy rule (ADR-085). Also: Llama 3.2 3B measured as a faster default and kept as an option (ADR-086).
+
+**Scope**
+
+- `jarvis mcp serve`: a stdio MCP server that clients start; it lists the offered tools and forwards each call to the running `jarvis serve` with the token from `bridge.json`.
+- `/mcp/` on the local API (Streamable HTTP, behind the API's checks) and `Agent.run_call`: the argument check, the gate, the clearance, and the audit, one call at a time with turns, outside the conversation.
+- `[mcp_server] enabled` and `tools`; private tools are never offered whatever the list says, and each refused name is logged once.
+- Confirmations name the client on every channel ("Claude Code wants to: Open Paint"); refusals reach the client in plain words.
+- The live end-to-end test checks safety before the first tool choice, so a wrong tool cannot hide a leak.
+
+**Test it**
+
+1. `uv run jarvis serve`, then in Claude Code `claude mcp add jarvis -- uv run --directory <this folder> jarvis mcp serve`.
+2. Ask Claude Code "use the jarvis calculate tool for 12 * 7": 84, and `uv run jarvis audit --last 1` shows `mcp:...`.
+3. Add `open_app` to `[mcp_server] tools`, restart the client, ask it to open Paint: Jarvis asks you, naming Claude Code.
+
+**Measured (2026-11-07):** a forwarded call takes 0.1 to 0.4 s; "Jarvis is not running" comes back in about 2 s. Models, live end-to-end suite: Hermes 3 8B 51 of 54 in 322 s, Llama 3.2 3B 50 of 54 in 95 s, both with every safety check passed; streamed first audio 2.8 to 3.6 s against 1.2 to 1.5 s.
+
+**Exit criteria:** no private tool can be offered, every call is audited with the client's name, and nothing that needs a yes runs without one from you.
+
+## Phase 26: Apps, files, and office
+
+**Goal:** the everyday desk jobs from the brief: apps opened with timing or later, a file opened by name, notes, a row in a sheet, and the Calculator app (ADR-087 to ADR-090).
+
+**Scope**
+
+- `open_app` waits for the window and says how long it took; `schedule_app` opens or closes later, with the yes asked once when you say it (`ApprovedChannel`), the gate again when it runs, and never late.
+- `open_file` takes the name as you said it ("open my resume") in one call.
+- `take_note`, `read_notes`, `open_notes`; "note that ..." in the router's template stage.
+- `add_sheet_row`: Excel through pywin32 (found by the running object table or the workbook window), openpyxl with a backup, CSV; always asks first and reads back.
+- `calculator_show`: Scientific mode, the sum typed, the display read and checked.
+- Router pipeline tests; the benchmark gained seven cases for these tools.
+
+**Test it**
+
+1. "open notepad": it says how long it took.
+2. "close spotify in 1 minute", say yes, wait: Spotify closes and Jarvis says so.
+3. "note that the plumber comes on tuesday", then "what did I note today".
+4. With a budget workbook in Documents open in Excel: "add tea and 40 to my budget sheet", yes: the row appears, unsaved.
+5. "show 18 percent of 2400 in the calculator".
+
+**Measured (2026-11-07):** Calculator opened in 1.1 s and read back 432 and 4875 correctly; a scheduled open fired and ran through the gate; a note took 6 ms without the model; a row through a running Excel and through openpyxl each took 0.1 to 1.1 s. Tool choice ([benchmarks/phase26.md](benchmarks/phase26.md)): jarvis-hermes3 92% of 104, six of the seven new cases right.
+
+**Exit criteria:** nothing is written to a file without a yes, a scheduled action never runs late or without the gate, and every answer from Calculator is checked against Jarvis's own.
+
+## Phase 27: Music, developer tools, browser
+
+**Goal:** the music and developer jobs from the brief: Spotify search and play, Docker with a readiness wait, SSH profiles, and git commit and push behind a yes (ADR-091 to ADR-095). Media keys and Brave site search were already done (Phases 10 and 9).
+
+**Scope**
+
+- `play_spotify`: search API with client credentials, the desktop app, play on Spotify's media session, and a check of what plays.
+- `docker_up`: compose projects from config or images with names and ports only; readiness by health check or answering ports.
+- `ssh_connect`: profiles from config, opened in Windows Terminal.
+- `git_changes`, `git_commit`, `git_push`: diff for the local model, commit and push each asked.
+- Timing arguments on tools that only run now are refused (ADR-095), found by the benchmark.
+
+**Test it**
+
+1. Add the Spotify keys, then "play snowman by wys on spotify".
+2. With Docker Desktop running and a project in `[docker.projects]`: "start the shop project".
+3. With a profile in `[ssh.profiles]`: "connect to my pi".
+4. With a repository in `[git.repos]`: "what changed in jarvis", "commit it", "push it".
+
+**Measured (2026-11-07):** live with the real model on a scratch repository and a local remote: the diff was read in 0.2 s, the drafted message was "Add discount feature to cart", and the commit and the push each took about 1.3 s after a yes; the remote has the commit. Phase 26 benchmark (hermes3, 104 commands with seven new ones): 92%, the miss being "open vs code at 9 tomorrow" as open_app, which led to ADR-095.
+
+**Exit criteria:** nothing reaches a remote, a server, or Docker without your yes or your own typing, and Spotify is never said to play when it does not.
+
+## Phase 28: Screen understanding and daily news
+
+**Goal:** questions about the screen answered by a local vision model, and a daily AI and tech digest you can hear and keep (ADR-080, ADR-096, ADR-097).
+
+**Scope**
+
+- `look_at_screen`: the screenshot and Windows OCR's text to gemma3:4b on Ollama, secrets hidden, the answer marked as outside content; Hermes loaded again right after.
+- `ai_news`: RSS and Atom feeds through the adapter, recent stories, the same story merged across feeds, one sentence each by a cloud model (Hermes as fallback), saved as Markdown with links; a `news` part in the briefing.
+- The adapter's `get_bytes` for feeds, with the same retry, rate limit, and redaction as JSON calls.
+
+**Test it**
+
+1. Open something with an error message, then "what's on my screen" or "what does this error mean".
+2. "What's new in AI", then open today's file in `Documents\Jarvis News`.
+3. "Good morning": the briefing ends with how many AI stories there are.
+
+**Measured (2026-11-07):** vision on a synthetic screen with real OCR and gemma3: 14.8 s cold, 22 s for a quick follow-up (the models swap), both answers right where gemma3 alone misread the year; Hermes back in memory afterwards. Digest from the four real feeds: 8 stories in 2.7 to 3.5 s with Groq, 15.7 to 16.2 s with Hermes alone. Tool choice ([benchmarks/phase28.md](benchmarks/phase28.md)): jarvis-hermes3 96 of 108 (89%) as scored; all four new cases right; two misses were expectations the new tools made out of date ("what's on my screen" now goes to look_at_screen, "latest news about OpenAI" to ai_news), now accepted. The model passed refresh=true to ai_news every time, so a digest under an hour old is read instead.
+
+**Exit criteria:** no screenshot leaves the laptop, every digest story keeps its link, and a story without text is never filled in by the model.
+
+## Phase 29: Your phone, for free
+
+**Goal:** Jarvis and Claude Code can get your attention on your phone and hand it things, at no cost (ADR-098). Calls where Jarvis speaks were researched first and not built (ADR-099, RESEARCH.md 2.4).
+
+**Scope**
+
+- `jarvis.adapters.phone`: KDE Connect (`kdeconnect-cli`) over the Wi-Fi, ntfy pushes when the phone is away, timeouts, and errors that say how to fix them.
+- `ring_phone`, `notify_phone`, `send_to_phone`; "find my phone" without the model; a `phone` routing group.
+- `set_reminder(on_phone=true)` rings the phone when the reminder is due.
+- The Claude Code bridge's phone step defaults to `kdeconnect`; `ring_phone` and `notify_phone` are offered to MCP clients.
+
+**Test it**
+
+1. Pair the phone (SETUP.md 5s), then "find my phone".
+2. "Send the clipboard to my phone" (answer yes), then a file: "send my resume to my phone".
+3. "Remind me on my phone in 2 minutes to stretch", and wait.
+4. Leave a Claude Code question unanswered for 45 s: the phone shows it.
+
+**Measured (2026-11-07):** KDE Connect's device list in about 2.1 s; an ntfy push in 0.75 to 0.87 s, read back from ntfy.sh with priority 5; "find my phone" handled by the exact phrase stage; Hermes set a phone reminder with `on_phone` in 8.9 s once `{"null": true}` was accepted. Tool choice: Hermes 104 of 113 (92%), all five phone commands right, and the nine misses are the same as before Phase 29 ([phase29.md](benchmarks/phase29.md)).
+
+**Exit criteria:** nothing reaches anyone but you, a file never leaves the Wi-Fi, and a phone that cannot be reached is explained, never silently skipped.
+
+## Phase 30: UI demos
+
+**Goal:** see and compare how the new interface could look before building it (ADR-100).
+
+**Scope**
+
+- Six concepts in `ui-demos/`, each one HTML file. All of them show the seven states: idle, listening, thinking, speaking, waiting for your yes, running a tool, and error.
+- One kit (`_kit.js`), copied into each page by `scripts/build_ui_demos.py`. It holds the scripted run, the state buttons and keys, the opt-in real microphone level, reduced motion, and frozen frames for screenshots.
+- `scripts/capture_ui_demos.py` makes the screenshots with Playwright and Edge. An index page and `ui-demos/README.md` show them.
+
+**Test it**
+
+1. Double-click `ui-demos/index.html`, then open each concept and watch one full run.
+2. Press `1` to `7`, answer Yes and No on the confirmation, and press Space to play the run again.
+3. Press "Use my microphone", allow it, and speak: listening should follow your voice.
+
+**Measured (2026-11-07):** all 42 states (six concepts by seven) captured and checked at 1000 by 625 and at a phone's 390 by 844. Two layout problems were found and fixed: the pill's confirmation pushed its buttons apart, and the edge glow read as a hard frame. A third fix: the terminal showed a failed tool as "ok". The 24 README screenshots come to 664 KB.
+
+**Exit criteria:** every concept shows all seven states, opens offline with no network requests, and is checked by a test.
+
+**The chosen direction (2026-11-07, v1.20.0):** you picked the orb and the edge glow. `ui-demos/chat.html` combines them around a conversation (ADR-101).
+- **The orb:** glides from the middle into the header.
+- **The edge glow:** a thin turning ring plus a soft inset bloom.
+- **The conversation:** live words both ways, and confirmation cards.
+- **Typing:** type, talk, or stop.
+- **Themes:** light and dark, with a remembered switch.
+
+It was checked in all seven states, light and dark, at 1000 by 680 and 390 by 844, plus a live typed run with Yes, the mic, and New chat. That found and fixed two problems: a hard inner edge in the glow, and an answered confirmation left as an empty box. Six design and animation skills were installed for it: emil-design-eng, improve-animations, choreograph, animation-performance, impeccable, and ui-ux-pro-max. review-animations is also installed, but only you can start it (`/review-animations`).
+
+## Phase 31: Open-source readiness
+
+**Goal:** the repository can be shared: nothing personal in it, a demo up top, and a quickstart that works (ADR-102).
+
+**Scope**
+
+- `scripts/check_personal.py` in CI and as a test: home folder paths, home network addresses, real-looking phone numbers, real emails, and API keys, with the obvious fakes allowed. The live tests' real phone model and Wi-Fi address were replaced, and the history was checked clean.
+- `docs/demo.gif` from `ui-demos/chat.html` by `scripts/make_demo_gif.py`.
+- README: the GIF, the quickstart, and the stale numbers. CONTRIBUTING: the personal data rule and the demo scripts. `.env.example` was checked against every key the code reads.
+- RELEASING.md: the v1.21.0 checklist, every hands-on item in one list, and the merge and tag commands for you to run.
+
+**Measured (2026-11-07):** the first scan found 5 hits in the tracked files after the clean-up of the phone model and address (3 in the check's own patterns, an SSH test target, a made-up number), and all were resolved. The GIF has 172 frames at 648 by 403, 1.4 MB.
+
+**Exit criteria:** `check_personal.py` passes in CI, the README shows the demo, and nothing is merged or tagged without you.
+
+## Phase 32: The chat window, live
+
+**Goal:** the approved chat interface works with the real Jarvis (ADR-103).
+
+**Scope**
+
+- `GET /` serves `server/ui/chat.html` (kept identical to `ui-demos/chat.html`) with the UI token and a per-request script nonce. The WebSocket accepts that page's exact Origin with the UI token, and nothing else from a browser.
+- The page's live mode, from the existing events:
+  - typed commands, Stop, and push-to-talk;
+  - confirmation and question cards;
+  - live transcripts and replies word by word;
+  - reminders;
+  - history on open;
+  - a reconnecting status line.
+- `jarvis ui`, "Open Jarvis" in the tray, and the `open_chat` tool with exact phrases ("open Jarvis", "show the chat").
+
+**Test it**
+
+1. `uv run jarvis serve --tray`, then `uv run jarvis ui`.
+2. Type "what is 15 times 12", then "open paint" and answer No, then something long and press Stop.
+3. With voice on, press the mic button, speak, and press it again.
+
+**Measured (2026-11-07):** on a scratch data folder with voice off:
+- **A sum:** answered "180".
+- **"open paint":** the real gate's card, "Open Paint? (Paint is not in the app allowlist)". No settled it to "You said no." and "Okay, I won't.", and nothing opened.
+- **A model turn:** went thinking, tool, thinking, speaking, then "The capital of France is Paris." in about 13 s.
+- **Stop:** cancelled the turn. The first try printed "Stopped." twice and then showed the error state; both were fixed.
+- **A reload and a restart:** the reload brought the history back, and the token survived the restart.
+- **Refusals:** a cross-site fetch got 403, and a foreign Host got 400.
+
+**Exit criteria:** no website can open the socket or read the page, and everything the terminal can do with a turn, the window can too.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -845,3 +1159,20 @@ Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each wou
 | 13 | Faster and smaller | built (above) |
 | 14 | Memory by meaning | built (above) |
 | 15 | Screen reading | built (above) |
+
+## Next: the November 2026 brief
+
+Planned on 2026-11-05 from your brief, in this order. Research comes before the core rewrite so the design can take what works elsewhere. Each phase is hand tested and logged in [HANDTESTS.md](HANDTESTS.md); anything only you can do goes on one list.
+
+| Phase | Name | What |
+|---|---|---|
+| 22 | Remove the page and overlay (done) | Delete the HTML page, shader, and OpenGL overlay and their dependencies; the server stays as a JSON API; confirmations in the CLI and by voice (ADR-081) |
+| 23 | Research (done) | Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, strong "JARVIS" repos: architecture, plugins, UI, what users like, what is weak; "what we take, what we do better" in RESEARCH.md |
+| 24 | Core on LangGraph and ChromaDB (done) | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; from Phase 23: a tiered router pipeline with `handled_by` on every turn, a guard node (schema check, one repair, no duplicate calls, a step cap), named graph states mapped to UI states, tool options `cancel_on_interruption` and `timeout_secs`, sentence-streamed Piper, a per-stage latency breakdown, a test that every tool entry point meets the gate; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
+| 25 | Jarvis as an MCP server (done) | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
+| 26 | Apps, files, and office (done) | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
+| 27 | Music, developer tools, browser (done) | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
+| 28 | Screen understanding and daily news (done) | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
+| 29 | Phone calls (done: your phone for free) | Researched cost, Indian numbers, and legal limits; you chose free alerts and file sending by KDE Connect and ntfy over paid calls (ADR-098, ADR-099) |
+| 30 | UI demos (done) | Six standalone concepts in `ui-demos/` with seven states each, screenshots in the README (ADR-100) |
+| 31 | Open-source readiness (done) | Demo GIF, quickstart, `.env.example` checked, and a CI check that no personal paths, addresses, numbers, emails, or keys are committed (ADR-102) |

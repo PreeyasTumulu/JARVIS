@@ -1,4 +1,9 @@
-"""Timers and reminders, stored in SQLite and announced by a scheduler while Jarvis runs.
+"""Timers, reminders, and scheduled app actions, stored in SQLite and run by a scheduler.
+
+A scheduled action ("close Spotify in 20 minutes", kind "app") is not announced but run: the
+scheduler hands it to `run_action`, which sends it through the agent's policy gate (ADR-087).
+An action is never run late: one that fell due while Jarvis was not running is reported as
+missed instead.
 
 `jarvis chat` and `jarvis voice` run the scheduler. A reminder that falls due while Jarvis is not
 running is announced as missed the next time it starts, if it is less than a day late; older ones
@@ -9,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import re
 import time
@@ -46,21 +52,35 @@ _GENERIC_LABELS = {"timer", "countdown", "alarm", "reminder"}
 @dataclass(frozen=True)
 class Reminder:
     id: int
-    kind: str  # "timer" or "reminder"
+    kind: str  # "timer", "reminder", or "app" (a scheduled action)
     message: str
     due_at: float
     created_at: float
+    action: dict[str, Any] | None = None  # for "app": the tool, its arguments, an approval
+
+    @property
+    def on_phone(self) -> bool:
+        """A reminder that also rings your phone (ADR-098)."""
+        return self.kind == "reminder" and bool((self.action or {}).get("phone"))
 
     @property
     def due(self) -> datetime:
         return datetime.fromtimestamp(self.due_at)
 
     def announcement(self, late_s: float) -> str:
+        if self.kind == "app":
+            when = clock_time(self.due)
+            return f"I did not {lowered(self.message)} at {when}: Jarvis was not running then."
         if late_s > MISSED_AFTER_S:
             return f"You missed a {self.kind} at {clock_time(self.due)}: {self.message}."
         if self.kind == "timer":
             return f"Timer done: {self.message}."
         return f"Reminder: {self.message}."
+
+
+def lowered(summary: str) -> str:
+    """ "Close Spotify" as it reads inside a sentence: "close Spotify"."""
+    return summary[:1].lower() + summary[1:]
 
 
 def clock_time(moment: datetime) -> str:
@@ -150,21 +170,39 @@ class ReminderStore:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    def add(self, kind: str, message: str, due_at: float, now: float) -> Reminder:
+    def add(
+        self,
+        kind: str,
+        message: str,
+        due_at: float,
+        now: float,
+        action: dict[str, Any] | None = None,
+    ) -> Reminder:
         with self._db.transaction() as conn:
             cursor = conn.execute(
-                "INSERT INTO reminders (kind, message, due_at, created_at) VALUES (?, ?, ?, ?)",
-                (kind, message, due_at, now),
+                "INSERT INTO reminders (kind, message, due_at, created_at, action_json) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (kind, message, due_at, now, json.dumps(action) if action else None),
             )
             reminder_id = int(cursor.lastrowid or 0)
-        return Reminder(reminder_id, kind, message, due_at, now)
+        return Reminder(reminder_id, kind, message, due_at, now, action)
 
     def pending(self) -> list[Reminder]:
         rows = self._db.execute(
-            "SELECT id, kind, message, due_at, created_at FROM reminders "
+            "SELECT id, kind, message, due_at, created_at, action_json FROM reminders "
             "WHERE status = 'pending' ORDER BY due_at"
         )
-        return [Reminder(*tuple(row)) for row in rows]
+        return [
+            Reminder(
+                id=row[0],
+                kind=row[1],
+                message=row[2],
+                due_at=row[3],
+                created_at=row[4],
+                action=json.loads(row[5]) if row[5] else None,
+            )
+            for row in rows
+        ]
 
     def finish(self, reminder_id: int, status: str, now: float) -> None:
         self._db.execute(
@@ -180,9 +218,12 @@ class Reminders:
         self.clock = clock
         self.changed = asyncio.Event()
         self.running = False  # true while a scheduler is announcing reminders
+        self.quiet = False  # a focus session is on: reminders wait, timers still ring (ADR-078)
 
-    def add(self, kind: str, message: str, due_at: float) -> Reminder:
-        reminder = self.store.add(kind, message, due_at, self.clock())
+    def add(
+        self, kind: str, message: str, due_at: float, action: dict[str, Any] | None = None
+    ) -> Reminder:
+        reminder = self.store.add(kind, message, due_at, self.clock(), action)
         self.changed.set()
         return reminder
 
@@ -201,10 +242,14 @@ class ReminderScheduler:
         reminders: Reminders,
         bus: EventBus,
         announce: Callable[[str], Awaitable[None]],
+        run_action: Callable[[Reminder], Awaitable[str]] | None = None,
+        alert_phone: Callable[[str], Awaitable[object]] | None = None,
     ) -> None:
         self._reminders = reminders
         self._bus = bus
         self._announce = announce
+        self._run_action = run_action
+        self._alert_phone = alert_phone
 
     async def run(self) -> None:
         reminders = self._reminders
@@ -215,7 +260,7 @@ class ReminderScheduler:
                 now = reminders.clock()
                 pending = reminders.pending()
                 for item in pending:
-                    if item.due_at <= now:
+                    if item.due_at <= now and not (reminders.quiet and item.kind == "reminder"):
                         await self._fire(item, now)
                 waits = [item.due_at - now for item in pending if item.due_at > now]
                 delay = max(0.05, min([MAX_SLEEP_S, *waits]))
@@ -229,14 +274,31 @@ class ReminderScheduler:
         if late > DROP_AFTER_S:
             self._reminders.store.finish(item.id, "missed", now)
             return
-        self._reminders.store.finish(item.id, "done", now)  # first, so it can never repeat
-        text = item.announcement(late)
+        if item.kind == "app" and (late > MISSED_AFTER_S or self._run_action is None):
+            self._reminders.store.finish(item.id, "missed", now)  # never run an action late
+            text = item.announcement(late)
+        else:
+            self._reminders.store.finish(item.id, "done", now)  # first, so it can never repeat
+            text = await self._action(item) if item.kind == "app" else item.announcement(late)
         log.info("%s %d is due", item.kind.capitalize(), item.id)
         await self._bus.publish(ReminderDue(reminder_id=item.id, kind=item.kind, text=text))
+        if item.on_phone and self._alert_phone is not None:
+            try:
+                await self._alert_phone(text)
+            except Exception:
+                log.warning("Reminder %d could not reach the phone", item.id, exc_info=True)
         try:
             await self._announce(text)
         except Exception:
             log.exception("Announcing %s %d failed", item.kind, item.id)
+
+    async def _action(self, item: Reminder) -> str:
+        assert self._run_action is not None
+        try:
+            return await self._run_action(item)
+        except Exception:
+            log.exception("Scheduled action %d failed", item.id)
+            return f"I couldn't {lowered(item.message)}. The details are in the log file."
 
 
 def match_reminders(pending: list[Reminder], which: str) -> list[Reminder]:
@@ -294,7 +356,11 @@ async def set_timer(
 
 @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PRIVATE, timeout_s=5)
 async def set_reminder(
-    ctx: ToolContext, message: str, in_minutes: float | None = None, at: str | None = None
+    ctx: ToolContext,
+    message: str,
+    in_minutes: float | None = None,
+    at: str | None = None,
+    on_phone: bool = False,
 ) -> ToolResult:
     """Remind the user about something later, after some minutes or at a clock time.
 
@@ -302,6 +368,8 @@ async def set_reminder(
         message: What to remind the user about, for example "stretch" or "call mom".
         in_minutes: Minutes from now, for "in 10 minutes" (2 hours is 120).
         at: A clock time or date and time, for example "17:30", "5:30 pm", or "2026-10-16 09:00".
+        on_phone: True only when the user asks to be reminded on their phone or to have their
+            phone ring ("remind me on my phone", "ring my phone at 7").
     """
     reminders = ctx.services.reminders
     now = reminders.clock()
@@ -316,10 +384,11 @@ async def set_reminder(
     text = re.sub(r"^(to|about)\s+", "", " ".join(message.split()), flags=re.I).rstrip(".")
     if not text:
         raise ToolError("Ask the user what the reminder is for.")
-    item = reminders.add("reminder", text, due_at)
+    item = reminders.add("reminder", text, due_at, {"phone": True} if on_phone else None)
     when = spoken_when(item.due, datetime.fromtimestamp(now))
-    data = {"id": item.id, "message": text, "due": when}
-    speech = f"Reminder set for {when}: {text}.{_not_running_note(ctx)}"
+    data = {"id": item.id, "message": text, "due": when, "on_phone": on_phone}
+    phone = " Your phone will ring too." if on_phone else ""
+    speech = f"Reminder set for {when}: {text}.{phone}{_not_running_note(ctx)}"
     return ToolResult.success(data=data, speech=speech)
 
 
@@ -332,7 +401,12 @@ async def list_reminders(ctx: ToolContext) -> ToolResult:
     if not pending:
         return ToolResult.success(data=[], speech="You have no timers or reminders.")
     items: list[dict[str, Any]] = [
-        {"kind": item.kind, "message": item.message, "due": spoken_when(item.due, now)}
+        {
+            "kind": "scheduled action" if item.kind == "app" else item.kind,
+            "message": item.message,
+            "due": spoken_when(item.due, now),
+            **({"on_phone": True} if item.on_phone else {}),
+        }
         for item in pending
     ]
     first = items[0]

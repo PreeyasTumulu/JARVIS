@@ -454,11 +454,231 @@ Yours, asked 2026-11-01, all as recommended.
 - **How:** `WTSQuerySessionInformationW` with `WTSSessionInfoEx`, which needs no window. If Windows cannot answer, voice stays as it was and one warning is logged, because turning voice off on an error could leave it off for good.
 - **Not covered:** Jarvis can still speak while locked: a command already running finishes and says its answer, and reminders still sound.
 
+### ADR-075: Past commands expire, and you can delete them by voice
+
+- **Decision (2026-11-02, chosen without asking because you said to build everything now; easy to change):** commands, answers, their vectors, and finished reminders are deleted after 90 days, and the audit log after 365 (`[history] keep_days`, `audit_keep_days`; 0 keeps them forever). `forget_history` deletes by words or by time, always after a yes, and takes the audit rows of those turns too. The request itself is not kept, and the conversation is cleared, so "forget what I asked about my doctor" leaves no "doctor" behind. SQLite's `secure_delete` overwrites deleted text.
+- **Why:** answers can quote private content (R50), and there was no way to remove them except deleting the whole database. The first start after this deletes anything already past those ages.
+- **Words, not meaning:** recall finds by meaning, but a deletion should be easy to predict. Every word you name must appear in the command or its answer, and the question says how many and shows one.
+- **Not covered:** `jarvis.db.corrupt-*` copies from an old recovery, Windows backups, and what a page already showing the conversation keeps until it reloads.
+
+### ADR-076: Nothing private is said aloud while the PC is locked
+
+- **Decision (2026-11-02, as recommended):** locking cuts off speech at once. A reminder or a Claude Code notice says only "I have something for you. Unlock the PC to hear it", and its words wait until you unlock (the newest 10). The answer to a command still running is not said; it is on the page and in the history. The `speak` tool refuses.
+- **Why:** the microphone already closes (ADR-074), but Jarvis could still read a private reminder to whoever is in the room (R55).
+- **The cost:** a timer on a locked PC tells you something is waiting, not which timer. There is no setting: a locked PC is the case this protects.
+- **Not covered:** this lives in the voice session, so `jarvis chat` and a page with voice off do not know about the lock.
+
+### ADR-077: Clipboard history is off by default and stays in memory
+
+- **Decision (2026-11-02, chosen without asking because you said to build everything now):** `[clipboard] history = true` keeps the last 20 things you copy, in memory only. It is emptied when the PC locks and when Jarvis stops. It leaves out what looks like a secret, what is over 20,000 characters, and what the copying app marked as not for recording (the formats password managers and Jarvis's own dictation use). `clipboard_restore` puts one back privately, so it does not come back as a new copy, and you press Ctrl+V yourself.
+- **Why off:** what you copy can be anything, including a password from an app that does not mark it. Windows' own Win+V history is a separate choice you already control. Nothing is written to disk, so a crash or the database file cannot give it away.
+- **Why not Win+V's history:** its API is meant for the app in the foreground, and Jarvis rarely is. Not measured here.
+- **Not covered:** while on, a password copied from an app that does not mark it sits in memory until the next lock, and if the model reads the list it enters the audit log, as `clipboard_read` always has. Only the first 200 characters of each are shown to the model.
+
+### ADR-078: Focus sessions quiet Jarvis, not Windows
+
+- **Decision (2026-11-02, chosen without asking):** "start a focus session for 50 minutes" (25 by default) holds Jarvis's reminders until the end. Timers still ring, commands still work, and the end says how long it was, how many messages came and from whom, and how many reminders waited. Reminders stay pending, so they survive a restart and then announce themselves as missed. The session itself is kept in the preferences.
+- **Why not Do Not Disturb:** Windows has no supported API to turn it on. The known way writes to an undocumented store and can break with any update, so it is not done (R57). Turn it on yourself from the notification panel if you want other apps quiet too.
+- **Not covered:** Claude Code's notices still speak during a session, because they are usually waiting on you.
+
+### ADR-079: The agent loop moves to LangGraph and memory moves to ChromaDB
+
+- **Decision (2026-11-05, your choice over the recommended "keep the current core"):** the agent loop becomes a LangGraph graph with the same steps ADR-003 already split it into (call model, gate, confirm, execute, respond), and memories and past commands move from SQLite vector rows to a ChromaDB persistent store in the data folder. Supersedes ADR-003. Embeddings still come from nomic-embed-text on Ollama and are handed to ChromaDB, so ChromaDB never downloads its own model and nothing leaves the laptop. SQLite keeps everything that is not a vector (audit, history text, preferences, contacts, reminders).
+- **Why:** both are what people expect to see in an agent project, LangGraph gives checkpointing and a graph that can be drawn, and ChromaDB gives metadata filters and a real index instead of a full scan.
+- **Cost:** a rewrite of tested code, heavier dependencies, and a one-time migration of the existing vectors. The policy gate, confirmation, and privacy guard stay outside the graph's control: they are nodes the graph must pass through, not prompts.
+- **Done (Phase 24):** see ADR-083 and ADR-084.
+
+### ADR-080: Screen understanding uses a local vision model
+
+- **Decision (2026-11-05, your choice, recommended):** "what's on my screen" takes a screenshot and sends it to a small vision model on Ollama. The screenshot never leaves the laptop. Windows OCR (Phase 15) stays as the fast path for reading text.
+- **Why:** screen content is private by the project rule, and only a local model keeps that rule.
+- **Cost:** a model download of about 3 GB and a few seconds per answer on a 4 GB GPU; it competes with Hermes for video memory, so one of them is unloaded while the other runs.
+- **Done (Phase 28):** see ADR-096.
+
+### ADR-081: The web page and the overlay are removed; the server stays as an API
+
+- **Decision (2026-11-05, your choice, recommended):** the HTML page, its shader, and the OpenGL wake overlay are deleted, along with the dependencies only they used. The localhost server stays as a small JSON and WebSocket API for the Claude Code bridge and for the UI that will be rebuilt from `ui-demos/`. Confirmations are answered in the CLI and by voice until then. Supersedes ADR-070 to ADR-073.
+- **Why:** the UI will be redesigned from the demos, and the core should not carry a UI it is about to replace.
+- **Cost:** no visual feedback on wake until the new UI exists.
+- **Done in Phase 22:** with no page, the API refuses any request with an `Origin` header (every browser sends one), and the WebSocket token is published with the port in `bridge.json` for local clients. `glfw` and `moderngl` are gone. An old `[overlay]` section or `[server] open_browser` is ignored with a log line instead of failing the config. `--no-browser` stays as a hidden no-op so start-at-login shortcuts made before keep working.
+
+### ADR-082: Plain sums skip the model
+
+- **Decision (2026-11-05):** a request that is only arithmetic ("what's 10 + 10", "15 percent of 240", "9 squared") is turned into an expression and answered by `calculate` on the fast path (ADR-056), with no model call. The evaluator walks the syntax tree and allows only numbers, the four operations, powers (exponent up to 1000), modulo, and square roots; results over 1e100 or complex ones are refused. The model gets the same tool for wordy math.
+- **Why:** an 8B model is slow at arithmetic and sometimes wrong; a sum should be instant and exact.
+- **Cost:** spoken math has many phrasings; one the parser does not know still goes to the model, which then calls `calculate`, so it is slower but still right.
+
+### ADR-083: The graph, the router pipeline, the guard, and clearances
+
+- **Decision (2026-11-05, all as recommended):** the turn is a LangGraph graph of seven nodes (route, think, guard, gate, await_confirmation, execute, respond; ARCHITECTURE.md 4.1). Confirmation is a node that waits on the channel, not LangGraph's `interrupt()`, because a voice answer arrives on the same event loop within seconds and nothing has to survive a restart. The checkpointer is in memory, one thread per turn, deleted when the turn ends. Before the model, a router pipeline (`exact_phrase`, `arithmetic`, `template`, then `agent`; `[router] pipeline`) may propose a call, and every turn records the stage or model that handled it as `handled_by`. A guard repairs one near-miss call, never runs the same call twice in a turn, and caps calls per turn. A tool runs only with a one-time clearance the policy gate issues for exactly the approved arguments, and source scans in the tests keep every entry point behind the gate. No second model routes requests: the stages are code. Replies are spoken sentence by sentence while the local model writes them; if it speaks and then calls a tool, the stream closes at the call so nothing talks over a confirmation. LangSmith tracing is switched off inside the process. Secrets stay in .env.
+- **Why:** the research (RESEARCH.md 6.2) showed every mature assistant answers obvious commands without a model and names its states; the graph makes the gate a node with no edge around it instead of a convention; clearances make skipping the gate fail loudly even from new code; streaming took Home Assistant's first audio from 5.31 s to 0.56 s.
+- **Cost:** LangGraph adds about 2.5 s to import (warmed up in a thread at start), and a template match answers in the tool's own words, which are plainer than the model's. A turn that speaks and then calls a tool speaks its final answer only when the turn ends.
+
+### ADR-084: Vectors in ChromaDB, two kinds of memory, written after the turn
+
+- **Decision (2026-11-05, all as recommended):** vectors live in a ChromaDB persistent store in the data folder, one collection per kind (`memory`, `history`) and embedding model, telemetry off, with Jarvis handing it the nomic-embed-text vectors (no embedding function of its own). On first open the SQLite `embeddings` rows are copied in once; the table stays one release as the fallback, used when ChromaDB cannot open. Memories have a kind: `user` (facts about you) and `context` (the current work), each with its own character budget in the prompt (`[memory] user_chars`, `context_chars`). Vectors are written after the answer is out (`recall.after_turn`), never on the reply path.
+- **Why:** ChromaDB gives an index and metadata filters instead of a full scan; the copy keeps every existing memory; writing after the turn keeps embedding time out of the reply.
+- **Cost:** about 1 s more at start (warmed up in a thread) and a dependency of its own. A memory saved in one turn is found by meaning from the next turn on, not within the same turn.
+
+### ADR-085: Jarvis as an MCP server
+
+- **Decision (2026-11-07, all as recommended):** MCP clients (Claude Code, Claude Desktop, others) run `jarvis mcp serve`, a stdio command that forwards every call to the running `jarvis serve` at `/mcp/` on the local API, with the per-launch token from `bridge.json` (the pattern of `jarvis claude-hook`). Only public tools listed in `[mcp_server] tools` are offered; the default list is weather, calculate, convert_currency, market_data, crypto_price, and web_search. Private tools are never offered, whatever the config says. Every call goes through `Agent.run_call`: the argument check, the policy gate, a one-time clearance, and the audit log (`handled_by = "mcp:<client>"`), one at a time with voice and chat turns. A call that needs a yes is asked on Jarvis's own voice, terminal, and API clients as "Claude Code wants to: Open Paint"; the client's own approval never counts. Results go back as the data and its one-line summary, without the reply hints written for Jarvis's own model; outside content stays marked as data.
+- **Why:** an MCP client usually sends tool results to a cloud model, so the privacy rule decides what can be offered, not the config. Forwarding to the running Jarvis keeps one policy gate, one audit log, and a person to ask, and the client's config never changes when the token does. The client's model cannot approve its own request.
+- **Cost:** tools work only while `jarvis serve` runs (a call says so otherwise). The tool list is read when the client starts, so a changed `[mcp_server] tools` needs a client restart. A call that needs a yes can wait up to `confirm_timeout_s`.
+
+### ADR-086: Hermes 3 8B stays the default; Llama 3.2 3B is ready as an option
+
+- **Decision (2026-11-07, as recommended):** the default local model stays `jarvis-hermes3`. `config/ollama/llama3.2-3b.Modelfile` makes `jarvis-llama3.2` (the same 8192-token context), one config line away. Measured on the live end-to-end suite: Hermes 51 of 54 in 322 s, Llama 50 of 54 in 95 s; first audio of a streamed reply 2.8 to 3.6 s against 1.2 to 1.5 s. Both passed every safety check. The tool-choice benchmark gave 89% and 88%.
+- **Why:** Llama's misses are worse in kind: twice it answered with tool syntax as text ("open wikipedia and browser_type ..."), which would be read aloud, and once it made up a reply from a contact that does not exist ("Zork said hi back."). Hermes's misses were reasonable alternatives (opening Notepad for a vague request).
+- **Cost:** about three times slower replies than Llama. Revisit when the guard refuses replies that contain tool names or "call X with", which would remove Llama's worst failure.
+
+### ADR-087: Apps opened with timing, and opened or closed later
+
+- **Decision (2026-11-07, as recommended: both):** `open_app` waits up to `[apps] open_wait_s` (10 s) for a new window and says how long it took ("Notepad is open, in 1.1 seconds"), or that the app was already running. `schedule_app` opens or closes an app later ("close Spotify in 20 minutes", "open VS Code at 9"). It is a reminder of kind `app` (migration 10 adds `action_json`), so it survives a restart and is listed and cancelled with the timers. When you schedule it, the action is rated as if it ran now, and a yes is asked then if it needs one. When it falls due, the scheduler runs it through `Agent.run_call` and the policy gate rates it again; the earlier yes answers the gate's question only for the same arguments (`ApprovedChannel`, bound to the digest), and anything else is asked as usual. An action is never run late: one that fell due while Jarvis was off is reported as missed.
+- **Why:** asking again in 20 minutes would usually find you away, and a no by timeout would make "close Spotify in 20 minutes" fail exactly when it is useful; asking now, when you said it, is the meaningful yes. The gate still runs at the time, so a blocked app stays blocked.
+- **Cost:** a scheduled close runs while you may be away. Apps still ask about unsaved work, and you can cancel it ("cancel the spotify one").
+
+### ADR-088: Notes as one Markdown file per day
+
+- **Decision (2026-11-07, as recommended):** "note that ...", "jot down ...", "write down ...", and "make a note: ..." save a timestamped line in `{documents}/Jarvis Notes/<date>.md` (`[notes] folder`), answered by the router's template stage without a model. "Read my notes", "what did I note yesterday", and "open today's notes" (Notepad) read and open them. Notes read back are marked as data, because anything can edit a file in Documents. "Add a note to ..." without "that" or a colon is left to the model, since it can mean another app.
+- **Why:** plain files you own, readable without Jarvis, one per day so "yesterday's notes" is one file; the template stage makes the most common note instant and removed a wrong argument the live model passed.
+- **Cost:** notes are not searched by meaning yet, and a note can only be added, not edited, by voice.
+
+### ADR-089: Adding a row to a spreadsheet
+
+- **Decision (2026-11-07, as recommended, with one correction):** `add_sheet_row` always asks first (risk confirm) with the row shown, and reads the row back. A workbook open in Excel is written through Excel itself (pywin32), found in the running object table or, when Excel has not registered there yet, through its workbook window (`WM_GETOBJECT`). Jarvis never saves it: the file on disk changes when you save. A closed `.xlsx` or `.xlsm` is written with openpyxl after a copy is kept in `backups\sheets` in the data folder. A `.csv` gets one line in its own delimiter. A workbook locked by another program is refused. A spreadsheet made after the file index was built triggers one rebuild before giving up.
+- **Correction:** the question said "Ctrl+Z works" for the Excel route. It does not: Excel clears its undo history for changes made by another program. What holds instead: nothing is saved, so closing without saving drops the row.
+- **Why:** writing into the open workbook keeps what you typed there and avoids a locked file; the backup covers what openpyxl may drop (images, some charts) when it saves.
+- **Cost:** a new dependency (openpyxl). Excel converts what it is given as if you typed it ("2026-11-07" becomes a date), while openpyxl keeps text as text.
+
+### ADR-090: Sums shown in the Calculator app
+
+- **Decision (2026-11-07, as recommended):** `calculator_show` is offered only when you ask for the Calculator app. Jarvis works the sum out first, opens Calculator, switches it to Scientific (Alt+2, so 2 + 3 * 4 is 14), clears it, types the sum, presses Enter, and reads the display through UI Automation. Its answer is Jarvis's own; when the display differs it says both. Only + - * / and brackets are typed.
+- **Why:** you see the sum in the app you asked for, and the two answers check each other.
+- **Cost:** it depends on Calculator's keyboard shortcuts and its English "Display is" text (R65), and it takes the focus for about a second.
+
+### ADR-091: Spotify through its search API and the desktop app
+
+- **Decision (2026-11-07, as recommended):** `play_spotify` searches Spotify's Web API with client credentials (SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in .env: no login, no Premium), opens the result in the desktop app with its `spotify:` link, and presses play on Spotify's own media session. It then checks what Spotify reports as playing and says "Playing ..." only when that matches; otherwise it says it opened the item and asks you to press play. Without the keys it opens Spotify's search for the words. The tool is public and counts as egress, so a song request right after private content asks first.
+- **Why:** a song request is public data, the search API needs no account login, and checking the media session keeps Jarvis from claiming something plays when it does not.
+- **Cost:** whether play starts the new item or resumes the old one is up to the Spotify app; then you press play once. Not yet tried with your keys (R67).
+
+### ADR-092: Docker work started and waited for
+
+- **Decision (2026-11-07, as recommended):** `docker_up` starts a compose project listed in `[docker.projects.<name>]` (`docker compose up -d` in its folder) or runs an image (`docker run -d` with only a container name and published ports). Both ask first. Then it waits up to `[docker] ready_timeout_s` until each container is healthy, or running with its published ports answering on 127.0.0.1, and says how long it took; a container that stops is reported with the end of its log, secrets hidden.
+- **Why:** "start the database" is only done when you can connect to it; allowing only names and ports keeps a request from becoming an arbitrary command line.
+- **Cost:** a port that answers is not always an app that is ready (R68); an image is pulled first when it is missing, which can take minutes.
+
+### ADR-093: SSH profiles open a terminal you drive
+
+- **Decision (2026-11-07, as recommended):** `[ssh.profiles.<name>]` (host, user, port, key) and `ssh_connect` open Windows Terminal (or a console) running `ssh` to the profile. Jarvis never types into the session, sends commands, or reads it. Host and user names are checked, so neither can start with "-" and become an ssh option.
+- **Why:** a remote shell is the most powerful thing Jarvis could touch; you keep it in your own hands, and passwords and host keys are answered by you.
+- **Cost:** no "check the disk on my server" by voice; that would be a later, confirm-every-command tool.
+
+### ADR-094: Git commit and push, each after a yes
+
+- **Decision (2026-11-07, as recommended):** repositories are listed in `[git.repos]`. `git_changes` gives the branch, the files, and the diff, from which the local model drafts the message (git tools are private, so they never reach a cloud model). `git_commit` asks with the message and the files and commits what is staged, or every change when nothing is staged. `git_push` asks again with the branch, the remote, and the number of commits (and says when it is the main branch); it sets the upstream for a new branch and never forces. Git never prompts in the background.
+- **Why:** a commit is easy to undo and a push is public, but both carry your name, so both are asked; drafting from the diff locally keeps the code on the laptop.
+- **Cost:** the message is only as good as the local model; you hear it before it is used. Your own commit hooks run as usual.
+
+### ADR-095: A time on a tool that only runs now is an error
+
+- **Decision (2026-11-07):** tool arguments the tool does not declare are still ignored, except words that mean later (`at`, `in_minutes`, `time`, `when`, `delay`, ...): those make the call invalid with "use schedule_app or set_reminder".
+- **Why:** the Phase 27 benchmark had the model call `open_app(name="vs code", at="tomorrow 9")`; the ignored `at` would have opened VS Code at once.
+- **Cost:** none seen; the model retries with the right tool.
+
+### ADR-096: gemma3 with the OCR text, then Hermes loaded again
+
+- **Decision (2026-11-07, as recommended):** `look_at_screen` captures every screen, scales it to at most 1600 pixels, and sends it to `gemma3:4b` on Ollama's own API with Windows OCR's exact text of the same pixels and the question. The vision model stays loaded `[vision] keep_alive_s` (30 s), and Hermes is loaded again in the background right after, so the next command does not wait. Secret-looking values are hidden from the OCR text and from the answer, and the answer is marked as outside content. `read_screen` (OCR only) stays for reading text word for word.
+- **Why:** gemma3:4b was already installed and answered in 2 s warm, but read 2026 as 2028 on its own; with the OCR text it read the year and the amounts right in the live test. Only one of the two models fits in 4 GB, so the reload hides the swap from the next ordinary command.
+- **Cost:** 15 s for a first question with the model cold and about 22 s for an immediate follow-up, since the models swap places each time (R70).
+
+### ADR-097: The AI and tech digest from feeds, written by a cloud model
+
+- **Decision (2026-11-07, as recommended):** `ai_news` reads the RSS and Atom feeds in `[news] feeds` (Hacker News, The Verge AI, TechCrunch AI, Google News "artificial intelligence") through the web API adapter, keeps stories from the last 36 hours, merges the same story from two feeds, and keeps 8, taking turns between feeds. A cloud model writes one sentence per story (the news is public), with Hermes as the fallback; feed text is marked as data, a story with no real text is said by its title only, and a story the model skips keeps its title. The digest is made once a day and saved as Markdown with links in `[news] folder` (`Documents/Jarvis News/<date>.md`); later requests read the file. The morning briefing gains a `news` part: "8 AI and tech stories today; say what's new in AI to hear them."
+- **Why:** feeds are free, need no keys, and keep each story's link; a cloud model writes a better digest in about 3 s, while Hermes takes about 16 s.
+- **Cost:** the live test found a story repeated across two feeds and invented details for link-only Hacker News items; both are fixed with tests, but a summary can still be less exact than its article (R71).
+
+### ADR-098: Your phone for free: KDE Connect on the Wi-Fi, ntfy away from it
+
+- **Decision (2026-11-07, your choice after the call research in RESEARCH.md section 2.4):** no paid calls. Jarvis reaches your own phone through `jarvis.adapters.phone`: KDE Connect (`kdeconnect-cli`, already installed and seeing your phone) when the phone is on the same Wi-Fi, and an ntfy push to `[phone] ntfy_topic` when it is not. Three tools:
+  - `ring_phone` (safe, public): rings loudly, even on silent; away from the Wi-Fi it sends an urgent push instead. "Find my phone" and "where's my phone" are exact phrases, with no model.
+  - `notify_phone(message, title)` (safe, public, egress): a notification. The way is picked when the call is prepared and pinned into its arguments, so what runs is exactly what was decided; a pinned KDE Connect send that fails is an error, never a silent push over the internet. When the push would go over the internet and the conversation holds private data, it asks first.
+  - `send_to_phone(item, text)` (confirm floor, private): a file (through the file guard: inside the allowed folders, never a secret file, up to 200 MB), a web link, the clipboard, a screenshot (taken only after the yes), or text. Wi-Fi only; nothing of this goes through ntfy.
+  - `set_reminder(..., on_phone=true)` ("remind me on my phone at 7"): the reminder also notifies the phone and rings it; the phone failing never stops the spoken reminder.
+  - The Claude Code bridge's phone step defaults to `kdeconnect`: after `escalate_after_s` with no answer, the phone shows what Claude asks ("Answer at the PC"), then the ntfy push with answer buttons follows when a topic is set.
+  - `ring_phone` and `notify_phone` are offered to MCP clients by default, so Claude Code can tell you on your phone that it finished. Both only ever reach your own phone.
+- **Why:** you did not want to spend money, and "call me" really means "get my attention". KDE Connect is free and open source, keeps everything on your own network with TLS, and was already paired-ready on this laptop; ntfy is free and covers the phone away from home.
+- **Cost:** KDE Connect needs the phone paired once and on the same Wi-Fi, and its command line took about 2 s to list devices here (R72). ntfy topics are readable by anyone who knows the name (R73). Jarvis cannot speak in a call to anyone; "tell mom I'll be late" stays a WhatsApp message (your choice), and calls stay WhatsApp or Phone Link calls where you talk.
+
+### ADR-099: No calls where Jarvis speaks, for now
+
+- **Decision (2026-11-07):** the Twilio route researched for Phase 29 (a disclosure, your message, a recorded reply transcribed on the laptop) is not built. The research and its sources stay in RESEARCH.md section 2.4.
+- **Why:** it costs money every month and every minute, needs a foreign number that Indian phones label "International call", and an Indian number needs a registered business.
+- **Cost:** none now. If you change your mind, the shape is ready: a disclosure first, contacts and your own number only after a confirm naming the person, emergency and short codes refused, reminders that may call you on opt-in.
+
+### ADR-100: Six UI concepts as standalone pages with one shared kit
+
+- **Decision (2026-11-07, as recommended):** `ui-demos/` holds six concepts (reactor, orb, edge glow, terminal, pill, constellation) and an index page. Each is one HTML file with inline CSS and JavaScript, opened by double-click, with no build step, dependencies, web fonts or network requests. They use fonts Windows 11 already has.
+  - **States:** every page shows the same seven states: idle, listening, thinking, speaking, and Jarvis's own waiting for your yes, running a tool, and error.
+  - **The run:** a scripted run uses real Jarvis lines from Phase 29. State buttons and keys 1 to 7 pick a state.
+  - **The microphone:** "Use my microphone" drives listening from the real microphone level, and only a loudness number is read.
+  - **The kit:** these parts live once in `ui-demos/_kit.js`. `scripts/build_ui_demos.py` copies it between markers in each page, and a test fails when a copy is out of date.
+  - **Screenshots:** `scripts/capture_ui_demos.py` captures frozen frames (`?state=...&still`) with Playwright and Edge for the READMEs.
+- **Why:** you can compare directions side by side before one is rebuilt as the real UI.
+  - **No live hookup:** the local API refuses every browser page (ADR-081), and a live hookup would have meant weakening that rule.
+  - **One file each:** each page opens anywhere, offline, with nothing to install.
+  - **The kit:** keeps the seven states the same everywhere without a build step for whoever opens them.
+- **Cost:** the pages are simulations. The real UI still has to bind these states to the `/ws` events, with a safe way for a local page to connect (R74). The real microphone was not tried, because it needs your permission in the browser.
+
+### ADR-101: The chosen direction: the orb and the edge glow around a chat
+
+- **Decision (2026-11-07, your choice after seeing the six concepts):** the new interface takes its shape from the orb and the edge glow, as a chat. `ui-demos/chat.html`:
+  - **The orb:** sits large in the middle while the chat is empty, then glides up into the header once you talk (720 ms, a strong ease-in-out; New chat sends it back).
+  - **The edge glow:** the window's edge glows in the orb's colour for the current state. It is a thin turning ring plus a soft inset bloom; the demo's wider second ring left a hard inner edge.
+  - **The conversation:** your words appear in your bubble as you speak, and Jarvis's reply appears word by word while it is spoken. A confirmation is a card in the conversation with Yes and No. Once answered, it becomes a quiet line ("You said yes.").
+  - **Typing:** a message box with a mic button, and a send button that becomes Stop while Jarvis works.
+  - **Themes:** light and dark follow Windows, and a button switches them; the choice is remembered on this computer. The state colours are the same in both.
+  - **Type:** Sitka for Jarvis's words and Segoe UI Variable for yours.
+  - **Motion,** following the emil-design-eng skill: custom ease-out curves, interface motion under 300 ms, transitions rather than keyframes so changes can be interrupted, messages that enter from 98% scale with a 2 px blur and never from nothing, a press scale on every button, and reduced motion keeping fades but dropping movement.
+  - **The kit:** gains `play`, `stop`, `picked`, and `data-kit-autoplay="off"`, so the chat waits for you instead of starting the scripted run.
+- **Why:** you liked the orb's speaking animation and the edge glow, and asked for a chat-like interface built from them.
+- **Cost:** it is still a demo, simulated on the page (ADR-100). Wiring it to `jarvis serve` is the next UI step, and needs the safe local-page connection noted in R74.
+
+### ADR-102: Open-source readiness: no personal data, a demo GIF, and a release you start
+
+- **Decision (2026-11-07, as recommended):**
+  - **Your details become generic.** The UI demos say "your phone" instead of your phone's model, tests use made-up devices and example addresses, and the Wi-Fi address copied from a Phase 29 live test is gone. The screenshots were made again.
+  - **A personal-data check.** `scripts/check_personal.py` runs in CI and as a test. It fails on home folder paths, this machine's temporary folders, home network addresses outside 192.168.1.x and 10.0.0.x, real-looking +91 numbers, real email addresses, and API keys. A short list of the obvious fakes the tests use is allowed.
+  - **History.** It was checked and holds only fake keys and numbers, so nothing needs rewriting.
+  - **The demo GIF.** `docs/demo.gif` is recorded from `ui-demos/chat.html` by `scripts/make_demo_gif.py`, using Playwright and Pillow with one palette for the whole run.
+  - **The README:** the GIF up top, a quickstart that starts with "just look" and offline pages, and the stale lines fixed: test counts, the benchmark, the removed page.
+  - **The release** is prepared, not made: RELEASING.md has the v1.21.0 checklist, every hands-on item in one list, and the exact merge and tag commands. You run them.
+- **Why:** the repo is about to be shared, and live tests on a real laptop print real details. A check in CI catches the next one before it is pushed. Merging and tagging are yours, because hands-on items are still open.
+- **Cost:** the check only knows patterns. A name, a device or a town can still slip through, so CONTRIBUTING.md asks for made-up values. The GIF shows the demo page, not a real Jarvis turn.
+
+### ADR-103: The chat window, served by jarvis serve and shown as a Brave app
+
+- **Decision (2026-11-07, as recommended):** the chat interface from ADR-101 becomes the real interface.
+  - **Serving:** `jarvis serve` serves it at `http://127.0.0.1:<port>/`. The page is `src/jarvis/server/ui/chat.html`, the same file as `ui-demos/chat.html`, copied by `scripts/build_ui_demos.py` and checked by a test. With the meta tag the server adds, the page goes live; opened from disk, it is still the demo.
+  - **The window:** your default browser in app mode (`--app=`). That is Brave here, with Edge or Chrome as the fallback: its own window, no tabs or address bar, and no new software.
+  - **Opening it:** only when you ask: `jarvis ui`, "Open Jarvis" in the tray (also a double click on the icon), or saying "open Jarvis", which is an exact phrase for the new `open_chat` tool.
+  - **The glow:** stays inside the window.
+  - **History:** the last 20 turns appear when the window opens. New chat clears the view, not the history.
+  - **What it does:** typed commands, the mic button as push-to-talk on Jarvis's own microphone, Stop, and confirmation cards answered with Yes and No. Questions come as cards with their options, or are answered by typing. Your spoken words appear as they are heard, replies appear word by word, and reminders and announcements show too. The state shown comes from both the voice and the agent events, the most pressing first: a waiting yes, listening, speaking, a tool, thinking, then an error.
+- **Security** (this changes one rule of ADR-081):
+  - **The one browser allowed:** the WebSocket now accepts a browser, but only with an Origin of exactly this page (`http://127.0.0.1:<port>` or `http://localhost:<port>`) plus the UI token.
+  - **The UI token** is a separate one, kept in the data folder so an open window survives a restart. It never opens `/bridge`, `/mcp/`, or the programs' socket, and the programs' token is never accepted from a browser.
+  - **The page itself:** it refuses framing (`frame-ancestors 'none'`, `X-Frame-Options: DENY`) and any request marked cross-site or same-site. A per-request nonce lets only its own two scripts run under a strict Content-Security-Policy, which allows only this computer's socket.
+  - **What stays:** the Host check and the refusal of every other HTTP request that carries an Origin.
+- **Why:** you approved the look, and asked for it to work for real. Serving the page from Jarvis itself keeps one origin that websites cannot read, frame, or imitate.
+- **Cost:** any program running as you can read the page and its token, as it can already read bridge.json. Browser extensions in your Brave profile run in the app window too (R75).
+
 ## Open decisions
 
 These need you; nothing is blocked on them.
 
-1. **Phone escalation:** off, ntfy (free; install the ntfy app and pick a long random topic), or Twilio (paid; needs an account, a number, and the Studio flow). Recommended: ntfy for questions first.
+1. **Phone escalation:** decided in ADR-098: KDE Connect by default, ntfy buttons once you set a topic. Twilio stays available but off.
 
 The Claude Code hooks (once open decision 1) were installed on 2026-10-20 after `jarvis claude-hook test` passed.
 The Ollama speed settings (once open decision 2) were found already set on this laptop on 2026-10-20 (`OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, confirmed in Ollama's log); every Phase 13 measurement includes them.

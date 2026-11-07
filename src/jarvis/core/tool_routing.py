@@ -26,6 +26,16 @@ PAST_REQUEST = re.compile(
     r"|\bi asked (you )?(about|earlier|before)\b"
     r"|\b(earlier|before|previously) i asked\b|\bquestion (i asked|earlier|before)\b"
 )
+# Deleting past requests: only forget_history, or the words above would offer recall instead.
+FORGET_PAST = re.compile(
+    r"\b(forget|delete|clear|erase|wipe|remove)\b.*"
+    r"\b(history|commands?|requests?|what i (asked|said|told)|i asked|i said)\b"
+)
+# A focus session, not the focus_app tool that the word "focus" would otherwise offer.
+FOCUS_SESSION = re.compile(
+    r"\bfocus (session|mode|time|timer)\b|\bpomodoro\b|\bdeep work\b|\bstop focusing\b"
+    r"|\bend (my |the )?focus\b"
+)
 
 
 @dataclass(frozen=True)
@@ -37,11 +47,15 @@ class Group:
 
 GROUPS: dict[str, Group] = {
     "apps": Group(
-        ("open_app", "focus_app", "close_app"),
+        ("open_app", "focus_app", "close_app", "schedule_app", "open_chat"),
         re.compile(
             r"\b(open|launch|start|run|close|quit|exit|switch|focus|bring up|go to|app|apps|"
             r"application|window)\b"
         ),
+    ),
+    "notes": Group(
+        ("take_note", "read_notes", "open_notes"),
+        re.compile(r"\b(note|notes|noted|jot|write (it |that |this )?down)\b"),
     ),
     "files": Group(
         ("find_file", "open_file", "read_file", "get_selected_file", "vscode_open"),
@@ -51,8 +65,27 @@ GROUPS: dict[str, Group] = {
             r"|\.\w{2,4}\b"
         ),
     ),
+    "phone": Group(
+        ("ring_phone", "notify_phone", "send_to_phone"),
+        re.compile(
+            r"\b(my phone|my mobile|the phone|to (my )?phone|on (my )?phone|ring me|"
+            r"find my phone|notify me|ping me|alert me)\b"
+        ),
+    ),
+    "git": Group(
+        ("git_changes", "git_commit", "git_push"),
+        re.compile(r"\b(git|commit|commits|push|pushed|repo|repository|branch|diff|changes)\b"),
+    ),
+    "ssh": Group(
+        ("ssh_connect",),
+        re.compile(r"\b(ssh|server|servers|vps|raspberry|pi)\b|\bconnect (to|into)\b"),
+    ),
+    "music": Group(
+        ("play_spotify", "media_control", "now_playing"),
+        re.compile(r"\b(spotify|song|songs|album|playlist|music|play)\b"),
+    ),
     "docker": Group(
-        ("docker_list", "docker_logs", "docker_start", "docker_stop", "open_app"),
+        ("docker_list", "docker_logs", "docker_start", "docker_stop", "docker_up", "open_app"),
         re.compile(r"\b(docker|containers?|compose|postgres|redis|mongo|mysql|nginx|images?)\b"),
     ),
     "web": Group(
@@ -61,6 +94,18 @@ GROUPS: dict[str, Group] = {
             r"\b(search|look up|lookup|google|news|latest|website|site|web|page|article|link|"
             r"url|summari[sz]e|wiki\w*|browser)\b|https?://|\.(com|org|net|io|dev|in)\b"
         ),
+    ),
+    "math": Group(
+        ("calculate", "calculator_show"),
+        re.compile(
+            r"\b(calculate|compute|plus|minus|times|multiplied|divided|percent|percentage|"
+            r"square root|squared|cubed|sum of|tip on|average of|calculator)\b"
+            r"|\d\s*[-+*/x^%]\s*\d"
+        ),
+    ),
+    "sheets": Group(
+        ("add_sheet_row", "find_file"),
+        re.compile(r"\b(sheets?|spreadsheets?|excel|xlsx|csv|workbook|row|budget)\b"),
     ),
     "market": Group(
         ("market_data", "crypto_price", "convert_currency"),
@@ -84,28 +129,42 @@ GROUPS: dict[str, Group] = {
             "set_brightness",
             "lock_screen",
             "screenshot",
-            "clipboard_read",
-            "clipboard_write",
         ),
         re.compile(
             r"\b(volume|louder|quieter|softer|mute|unmute|sound|audio|speakers?|brightness|"
-            r"brighter|dimmer|dim|screen|display|lock|screenshot|screen ?shot|clipboard|copy|"
-            r"copied|paste)\b"
+            r"brighter|dimmer|dim|screen|display|lock|screenshot|screen ?shot)\b"
         ),
     ),
+    "clipboard": Group(
+        (
+            "clipboard_read",
+            "clipboard_write",
+            "clipboard_history",
+            "clipboard_restore",
+            "clipboard_forget",
+        ),
+        re.compile(r"\b(clipboard|copy|copied|paste)\b"),
+    ),
     "time": Group(
-        ("set_timer", "set_reminder", "list_reminders", "cancel_reminder"),
+        ("set_timer", "set_reminder", "list_reminders", "cancel_reminder", "schedule_app"),
         re.compile(
-            r"\b(remind\w*|timers?|alarms?|countdown)\b"
+            r"\b(remind\w*|timers?|alarms?|countdown|schedul\w*|cancel)\b"
             r"|\bin \d+(\.\d+)? ?(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b"
             r"|\bat \d{1,2}(:\d{2})? ?(am|pm)?\b"
         ),
     ),
+    "news": Group(
+        ("ai_news", "web_search"),
+        re.compile(
+            r"\b(news|headlines|what's new in (ai|tech)|whats new in (ai|tech)|tech (news|stories)"
+            r"|ai (news|stories)|digest)\b"
+        ),
+    ),
     "screen": Group(
-        ("read_screen", "read_window_text"),
+        ("look_at_screen", "read_screen", "read_window_text"),
         re.compile(
             r"\b(on (my|the) screen|read (the|my) screen|what('s| is) on (my |the )?screen|"
-            r"screen says|my screen)\b"
+            r"screen says|my screen|looking at|this error|this window|this page|screenshot)\b"
         ),
     ),
     "ui": Group(
@@ -220,6 +279,12 @@ def select_tools(text: str, registry: Registry, meant: Sequence[str] = ()) -> li
     never as part of "everything", so a big server cannot crowd out the built-in tools.
     `meant` are groups semantic routing found when keywords found none."""
     lowered = text.casefold()
+    if FOCUS_SESSION.search(lowered):
+        wanted = {"focus_start", "focus_end", "focus_status", *ALWAYS}
+        return [tool for tool in registry if tool.name in wanted]
+    if FORGET_PAST.search(lowered) and "clipboard" not in lowered:
+        wanted = {"forget_history", *ALWAYS}
+        return [tool for tool in registry if tool.name in wanted]
     if PAST_REQUEST.search(lowered):
         wanted = {"recall", "list_memories", *ALWAYS}
         return [tool for tool in registry if tool.name in wanted]

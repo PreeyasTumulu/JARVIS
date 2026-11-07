@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from jarvis.adapters.http import ApiClient
 from jarvis.config import MarketSettings
 from jarvis.storage.db import Database
-from jarvis.tools.data.http import ApiClient
 from jarvis.tools.data.market import (
     Listing,
     MarketData,

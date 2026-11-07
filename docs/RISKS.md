@@ -117,7 +117,7 @@ What is not covered: an injected instruction can still trigger `safe` actions th
 
 ### R8. Audio
 
-- No acoustic echo cancellation is planned, so Jarvis's own voice can trigger the wake word. Wake word detection pauses while it speaks. Barge-in uses the push-to-talk hotkey.
+- No acoustic echo cancellation is planned, so Jarvis's own voice can trigger the wake word. Wake word detection pauses while it speaks. Barge-in uses the push-to-talk hotkey. Phase 23 found that neither Pipecat nor LiveKit documents echo cancellation for laptop speakers either, so voice barge-in stays an open problem across the field, not only here.
 - Whisper `small.en` handles Indian English well in general, but names of people and Indian companies may be misheard. Contact and ticker aliases help, and a multilingual model is a config option.
 - Phase 2 was verified with synthesized speech (Windows SAPI voice) through the real models, not with a person talking into the laptop's microphone. Real-room accuracy, wake word false triggers, and the 0.8 s end-of-speech pause need your testing and probably some tuning (`wake_threshold`, `vad_threshold`, `end_silence_ms`).
 - On this laptop the Windows default input is AudioRelay's virtual microphone, which is silent unless the phone app streams to it, and the ASUS noise-cancelling input was also silent during setup. `config/local.toml` points Jarvis at the Realtek array. Jarvis checks the level at startup and warns about a silent device.
@@ -233,7 +233,7 @@ openWakeWord's "hey jarvis" model scores synthetic voices near 1.0 and real ones
 
 ### R50. The command history is kept, and now searchable
 
-Every command and Jarvis's answer has been kept in `jarvis.db` since Phase 1; recall makes it searchable by meaning, and answers can include private content (a message read out, an email summary). It never leaves the laptop and never reaches a cloud model, but anyone with your Windows account can read the database. There is no automatic expiry yet; deleting `%LOCALAPPDATA%\Jarvis\jarvis.db` clears everything (contacts, memories, and history together).
+Every command and Jarvis's answer has been kept in `jarvis.db` since Phase 1; recall makes it searchable by meaning, and answers can include private content (a message read out, an email summary). It never leaves the laptop and never reaches a cloud model, but anyone with your Windows account can read the database. Commands now expire after 90 days and the audit log after 365, and "forget what I asked about ..." deletes on request (ADR-075). Expiry runs only while Jarvis is running. `jarvis.db.corrupt-*` files from an old recovery keep what they held; delete them yourself if you have any.
 
 ### R51. Reading and clicking by OCR
 
@@ -247,7 +247,7 @@ OCR reads what is visible, so a window must be in front (Jarvis brings it forwar
 - The names of the end call button are a best guess until a real call shows them. If "hang up" says there is no call, end it in the app.
 - "Hey Jarvis" keeps listening during a call, so Jarvis can hear the call and be woken by it. Pausing it needs a reliable way to see a call, which needs a real call first. For now, turn the microphone off from the tray during calls.
 
-### R53. The overlay is a window on top of everything
+### R53. The overlay is a window on top of everything (retired: removed in Phase 22)
 
 - Checked live with a test window and only its pixels: transparent, clicks pass through, the focus stays put, hidden from capture, first light 65 ms after the message, gone after hiding. Not checked: a real fullscreen game, a second monitor, a resolution change while it is running, and sleep and resume.
 - It covers the primary monitor only.
@@ -266,8 +266,88 @@ OCR reads what is visible, so a window must be in front (Jarvis brings it forwar
 
 - Until 2026-11-02 the wake word kept listening on a locked PC, so anyone in the room could wake it and a spoken yes could approve a confirmation. Jarvis does not recognise whose voice it is. The microphone now closes while the PC is locked (ADR-074).
 - It is checked once a second, so a wake word in the first second after locking can still start a recording. The recording is dropped at the next check.
-- Jarvis can still speak while locked: a command already running says its answer, and reminders sound. Either could say something private to whoever is in the room.
+- Speech goes quiet too (ADR-076): locking cuts it off, and a reminder says only that something is waiting. The check is once a second, so up to a second of a private sentence can still be heard. Only the voice session knows about the lock; `jarvis chat` does not.
 - Windows' lock state was read correctly on a locked PC on this laptop. A real lock and unlock with Jarvis running is not verified yet. If voice stays off after unlocking, this check is the first place to look; the log says when voice goes off and comes back.
+
+### R56. Clipboard history can hold a password
+
+It is off until you turn it on. While on, it skips secret-shaped text and anything marked as not for recording, but a password copied from an app that does not mark it stays in memory until the PC locks or Jarvis stops. Windows refuses clipboard access while the PC is locked, so reading the real marks has not been checked yet (only with fakes), nor which password managers actually mark their copies. "Forget what I copied" empties it.
+
+### R57. Focus sessions cannot silence Windows
+
+Windows offers no supported way to turn on Do Not Disturb, so other apps' pop-ups and sounds continue during a focus session. Only Jarvis's own reminders wait. Claude Code's notices still speak. The count of messages comes from the notifications Jarvis reads, so only apps on `notifications.apps`.
+
+### R58. Two copies of the C++ runtime in one process
+
+The winrt packages (notifications, OCR, media) ship their own `msvcp140.dll`. Windows keeps one module per DLL name in a process, so if that copy loads first, onnxruntime (Piper and the wake word) binds to it and the process dies with an access violation. It showed in Phase 22 as `jarvis serve --no-voice` closing on the first spoken answer; voice mode escaped only because the wake word loads onnxruntime before any winrt module. `import jarvis` now loads Windows' own copy from System32 first, and `tests/unit/test_dll_order.py` repeats the crash order in a fresh interpreter. A winrt or onnxruntime update could change this; the test is the check. A PC without the Visual C++ runtime falls back to the bundled copy and can still crash; installing the runtime fixes it.
+
+### R59. Small models and tool calls
+
+Hermes 3 8B sits below every size the field recommends for tool calling: Open WebUI's docs say models under about 30B often produce malformed tool-call JSON, and Home Assistant users report small local models switching the wrong device (research/open-source-assistants-2026.md). Jarvis narrows the tools per turn and answers obvious commands without a model, and Phase 24 adds a guard node that checks arguments, tries one repair, and counts failures per tool, so the cost becomes a measured number instead of a guess.
+
+### R60. Tracing that would send a turn to the cloud
+
+LangGraph sends traces to LangSmith's cloud service when `LANGSMITH_TRACING` (or the older `LANGCHAIN_TRACING_V2`) is set, and a trace holds the whole turn: what you said, tool results, private data. A developer machine often has those set for other projects. `core/graph.py` sets all four variables to `false` in Jarvis's own process before LangGraph is imported, whatever the environment or .env says. A future LangGraph that reads a new variable name would bypass this; check the names on every LangGraph upgrade.
+
+### R61. Startup and the first request
+
+LangGraph takes about 2.5 s to import on this laptop and ChromaDB about 1 s. Both are imported lazily and warmed up in a background thread by `jarvis chat` and `jarvis serve`, so the prompt and the server are ready at once. A command in the first few seconds waits for the warm-up to finish (a lock stops a second build). `jarvis ask` (one command and exit) pays the import every time.
+
+### R62. Streamed replies and tool calls
+
+A streamed reply is spoken before the model has finished, so text the model writes before deciding to call a tool can be heard ("Let me check that."). Text that could be a call (`{`, `<`, a code fence) is held back, and the stream closes when a call arrives, but a model that writes an ordinary sentence and then a call will have said that sentence. Ollama must stream tool calls for its OpenAI endpoint (it does since 0.8); an older Ollama answers without them and the reply is treated as text. `[tts] stream = false` turns streaming off.
+
+### R63. Tools offered to another program
+
+`jarvis mcp serve` lets another program, often driven by a cloud model, call Jarvis's tools. Only public tools can be offered, every call meets the policy gate and is audited with the client's name, and a call that needs a yes is asked on Jarvis's own channels. What remains: a public tool can still act on this laptop (adding `type_text`, `click`, or `press_keys` to `[mcp_server] tools` lets the client type into your windows within the gate's rules), and the client sees the results of what it may call. The default list only reads public data and does sums. The client's name comes from its own handshake and is not proof of who it is; anything that can run `jarvis mcp serve` as you can call the listed tools.
+
+### R64. Writing to spreadsheets
+
+Excel joins the running object table only after its window first loses focus, so a workbook you just opened is found through its window instead (seen in the live test). Rows written through Excel cannot be undone with Ctrl+Z (Excel clears its undo history for automation); they are not saved until you save. openpyxl rewrites a closed workbook and can drop parts it does not understand, so a copy is kept first in `backups\sheets` (not deleted automatically yet). Excel turns typed-looking values into dates and numbers, as it does for you. A workbook open in Excel under another Windows account cannot be reached and is refused.
+
+### R65. The Calculator app
+
+`calculator_show` presses Alt+2 for Scientific mode and reads the display by its accessible text, "Display is ...". A Calculator update that changes the shortcut, or Windows in another language, would break reading the answer; Jarvis then still says its own answer and that it could not read the display. Typing goes through SendInput and stops if Calculator loses the focus.
+
+### R66. Actions that run later
+
+A scheduled open or close runs while you may be away, with the yes you gave when you scheduled it, for exactly that app and action. It is never run late after Jarvis was off, the gate rates it again when it runs, and apps still ask about unsaved work. Cancel it with "cancel the ... one".
+
+### R67. Spotify playback
+
+Opening a `spotify:` link and pressing play may resume what played before instead of the new item, depending on the Spotify app's version and state. Jarvis checks the media session and says so rather than claiming success. Not yet tried with real keys on this laptop. Spotify's search API can change its free terms.
+
+### R68. Docker readiness
+
+A published port that accepts a connection is taken as ready, but an app can accept connections before it serves requests; images with a health check are judged by it instead. `docker compose ps --format json` printed one JSON array in older Compose and one object per line in newer ones; both are read. Not yet tried against a running engine on this laptop (Docker Desktop was not running).
+
+### R69. Git from Jarvis
+
+Commit hooks run as they do from a terminal and can take time or fail. A push that needs credentials Git cannot ask for in the background fails with that reason. Pushing to main asks like any push, with the branch named; protect main on GitHub if you want a second guard.
+
+### R70. The vision model and video memory
+
+gemma3:4b and Hermes do not fit in 4 GB of video memory together, so each screen question unloads Hermes and loads gemma3, and the reload afterwards turns it back. A first question takes about 15 s and a quick follow-up about 22 s. What the screen shows can contain instructions ("ignore your rules"); the answer is marked as outside content and secrets are hidden, but the model reads everything on every screen, including other windows.
+
+### R71. The news digest
+
+Feeds change their addresses and formats; a feed that fails is left out and named in the result. A one-sentence summary can still lose or slightly bend a detail of its article (the live test caught a model calling a Zig library "a Go library" before the fix); the saved file keeps the link to check. Google News links are redirects through Google. Feeds are parsed with Python's own XML parser, whose expat protects against entity expansion attacks.
+
+### R72. KDE Connect on Windows
+
+The phone must be paired once and on the same Wi-Fi with the KDE Connect app open in the background; Android may stop it to save battery. On this laptop `kdeconnect-cli --list-available` printed no device while `--list-devices` showed the phone reachable, so Jarvis reads the full list and checks "paired" and "reachable" itself. Listing took about 2 s, so ringing or notifying takes 2 to 4 s. A ring keeps ringing until you stop it on the phone. Sending files over `--share` was not tried live, because the phone was not paired during the test. When several phones are paired, `[phone] device` must name one.
+
+### R73. ntfy alerts
+
+An alert by ntfy goes through ntfy.sh (or your own server) over the internet, and anyone who knows the topic name can read it: use a long random topic, or set `NTFY_TOKEN` with a protected topic. A notification asks first when the conversation holds private data; reminders send their own text, which you set. Files, the clipboard, and screenshots never go this way. Android may delay pushes in battery saver unless ntfy is allowed to run unrestricted.
+
+### R74. The UI demos
+
+The demos are simulations: their timings and levels are scripted, so a real turn may feel different, for example a longer think on a cold model. Browsers treat microphone access on pages opened from disk differently: Edge and Chrome ask, and others may refuse. Serving the folder with `python -m http.server` on 127.0.0.1 gives a page the browser trusts. The real UI cannot connect to `jarvis serve` from a browser page until the local API gets a safe way to accept one (ADR-081 refuses every Origin today). The blurs and the 240-star canvas cost some GPU while a page is open. Each page stops moving when Windows has animations turned off.
+
+### R75. The chat window in your browser
+
+The window is your own Brave (or Edge) profile in app mode, so that profile's extensions run there too. An extension allowed on all sites can read the page, its token, and your conversation. A program running as you can fetch the page and read the token, as it can read bridge.json; the token opens only the chat socket, which can type commands but cannot skip a confirmation. An open window reconnects every 2 s while Jarvis is down, with the token kept across restarts. If `ui_token` is deleted, reload the window. The mic button is push-to-talk on Jarvis's own microphone, not the browser's, so the browser never asks for the microphone; with `jarvis serve --no-voice` it is greyed out.
 
 ### R11. Cancellation
 

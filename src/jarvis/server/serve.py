@@ -1,8 +1,9 @@
-"""`jarvis serve`: the web UI, with voice and reminders, in one process and one event loop.
+"""`jarvis serve`: voice, reminders, the Claude Code bridge, and the local API in one process.
 
-The page, the push-to-talk hotkey, "Hey Jarvis", and reminders all drive the same agent, so
-everything shows up in every open tab. Confirmations race the page against voice: whichever
-answers first wins (ADR-022). The server listens on 127.0.0.1 only.
+Push-to-talk, "Hey Jarvis", reminders, and local API clients all drive the same agent, so every
+event reaches every connected client. Confirmations race voice, the terminal (when there is
+one), and API clients: whichever answers first wins (ADR-022). The API listens on 127.0.0.1
+only, and its address and token are written to the data folder for local clients (ADR-081).
 """
 
 from __future__ import annotations
@@ -11,9 +12,8 @@ import asyncio
 import contextlib
 import faulthandler
 import logging
-import secrets
 import socket
-import webbrowser
+import sys
 from typing import TYPE_CHECKING, Any
 
 import uvicorn
@@ -32,14 +32,15 @@ from jarvis.bridge.service import (
     withdraw_address,
 )
 from jarvis.config import Settings
-from jarvis.console import ConsoleRenderer
+from jarvis.console import ConsoleChannel, ConsoleRenderer
 from jarvis.core.channel import FirstAnswerChannel, UserChannel
+from jarvis.server import ui
 from jarvis.server.app import create_server
 from jarvis.server.hub import WebChannel, WebHub
+from jarvis.server.mcp_server import McpGateway
 from jarvis.server.runtime import Runtime
 
 if TYPE_CHECKING:
-    from jarvis.overlay.client import OverlayClient
     from jarvis.platform.hotkeys import HotkeyListener
     from jarvis.tray import Tray
     from jarvis.voice.channel import VoiceChannel
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 
 HOST = "127.0.0.1"
 VOICE_RETRY_S = (10.0, 20.0, 40.0, 60.0, 120.0)  # then every two minutes
-STARTUP_HANG_S = 300  # no page after this long: write every thread's stack to the log folder
+STARTUP_HANG_S = 300  # not serving after this long: write every thread's stack to the log folder
 log = logging.getLogger(__name__)
 
 
@@ -65,7 +66,6 @@ def run_serve(
     console: Console,
     *,
     port: int,
-    open_browser: bool,
     voice: bool,
     wake: bool,
     verbose: bool,
@@ -88,7 +88,7 @@ def run_serve(
             voice_channel = VoiceChannel()
         except ImportError:
             console.print(
-                "[yellow]Voice support is not installed, so the page runs without it. "
+                "[yellow]Voice support is not installed, so Jarvis runs without it. "
                 "Install it with: uv sync --extra voice --extra piper[/yellow]"
             )
         except ValueError as exc:
@@ -99,10 +99,12 @@ def run_serve(
     channels: list[UserChannel] = [WebChannel(hub)]
     if voice_channel is not None:
         channels.append(voice_channel)
+    if sys.stdin is not None and sys.stdin.isatty():
+        channels.append(ConsoleChannel(console))  # started from a terminal: y or n there too
     app = build_app(settings, FirstAnswerChannel(*channels))
     app.bus.subscribe(ConsoleRenderer(console, verbose=verbose))
+    app.agent.warm_up_in_background()
     runtime = Runtime(app, hub)
-    token = secrets.token_urlsafe(24)
     hang_report = _arm_hang_report(settings)
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(
@@ -111,8 +113,6 @@ def run_serve(
                 console,
                 voice_channel,
                 port=port,
-                token=token,
-                open_browser=open_browser,
                 wake=wake or settings.voice.wake_word_enabled,
                 tray=tray,
             )
@@ -124,7 +124,7 @@ def run_serve(
 
 
 def _arm_hang_report(settings: Settings) -> Any:
-    """If startup never reaches the page (started at login, with no console to look at),
+    """If startup never gets to serving (started at login, with no console to look at),
     write where every thread is stuck to logs/startup-hang.txt."""
     path = settings.data_dir / "logs" / "startup-hang.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -139,15 +139,12 @@ async def _serve(
     voice_channel: VoiceChannel | None,
     *,
     port: int,
-    token: str,
-    open_browser: bool,
     wake: bool,
     tray: bool = False,
 ) -> None:
     app = runtime.app
     voice = _Voice(runtime, console, voice_channel, wake=wake) if voice_channel else None
     icon: Tray | None = None
-    overlay = _start_overlay(app) if voice_channel else None
     background: list[asyncio.Task[Any]] = []
     try:
         warning = await app.llm.check()
@@ -156,40 +153,43 @@ async def _serve(
         voice_ready = await voice.start() if voice is not None else False
         session = voice.session if voice is not None else None
         await app.start_background(session.announce if session else _speaker(app, console))
-        # MCP servers (Docker) connect while the page loads, not on the first command.
+        # MCP servers (Docker) connect now, not on the first command.
         background.append(asyncio.create_task(app.agent.prepare_tools(), name="mcp"))
         if app.services.semantic is not None:
             background.append(
                 asyncio.create_task(app.services.semantic.warm(), name="semantic-routing")
             )
 
-        bridge_token = None
+        # One token for local clients, published with the port: the bridge hook and API
+        # clients read it from the data folder, which only this Windows account can open.
+        token = publish_address(app.settings.data_dir, port)
         if app.settings.bridge.enabled:
-            bridge_token = publish_address(app.settings.data_dir, port)
             runtime.bridge = _bridge(runtime, console)
         config = uvicorn.Config(
-            create_server(runtime, token=token, port=port, bridge_token=bridge_token),
+            create_server(
+                runtime,
+                token=token,
+                bridge_token=token if runtime.bridge is not None else None,
+                mcp=McpGateway(app.agent) if app.settings.mcp_server.enabled else None,
+                ui_token=ui.ui_token(app.settings.data_dir),  # only the chat page has it (ADR-103)
+                port=port,
+            ),
             host=HOST,
             port=port,
             log_config=None,  # Jarvis's own logging setup stays in charge
             access_log=False,
-            lifespan="off",
+            lifespan="on",  # runs the MCP session manager for /mcp/
         )
         server = uvicorn.Server(config)
-        url = f"http://{HOST}:{port}/?token={token}"
         if tray:
-            icon = _start_tray(runtime, server, url, session)
+            icon = _start_tray(runtime, server, session)
         if voice is not None:
             voice.tray = icon
             if not voice_ready:
                 background.append(asyncio.create_task(voice.keep_trying(), name="voice-retry"))
-        background.append(
-            asyncio.create_task(_when_ready(server, url, console, open_browser, runtime))
-        )
+        background.append(asyncio.create_task(_when_ready(server, console, runtime)))
         await server.serve()
     finally:
-        if overlay is not None:
-            overlay.close()
         if icon is not None:
             icon.close()
         for task in background:
@@ -284,11 +284,10 @@ async def _start_voice(
     session = runner.create_session(app.settings, app, wake_enabled=wake)
     try:
         await runner.prepare(session, app.settings, console)
-    except Exception as exc:  # a broken microphone or model must not take the page down
+    except Exception as exc:  # a broken microphone or model must not take Jarvis down
         log.warning("Voice could not start: %s", exc, exc_info=True)
         console.print(
-            f"[yellow]Voice could not start ({escape(str(exc))}); the page works without it."
-            "[/yellow]"
+            f"[yellow]Voice could not start ({escape(str(exc))}); Jarvis works without it.[/yellow]"
         )
         return None, None
     channel.attach(session)
@@ -296,18 +295,8 @@ async def _start_voice(
     return session, hotkeys
 
 
-def _start_overlay(app: App) -> OverlayClient | None:
-    try:
-        from jarvis.overlay.client import start_overlay
-
-        return start_overlay(app.settings, app.bus)
-    except Exception as exc:  # the effect must never stop Jarvis from starting
-        log.warning("The overlay could not start: %s", exc, exc_info=True)
-        return None
-
-
 def _start_tray(
-    runtime: Runtime, server: uvicorn.Server, url: str, session: VoiceSession | None
+    runtime: Runtime, server: uvicorn.Server, session: VoiceSession | None
 ) -> Tray | None:
     try:
         from jarvis.tray import Tray
@@ -319,10 +308,10 @@ def _start_tray(
 
     icon = Tray(
         loop=asyncio.get_running_loop(),
-        url=lambda: url,
         stop=runtime.stop,
         quit=quit_jarvis,
         set_muted=session.set_muted if session is not None else None,
+        open_chat=lambda: ui.open_window(server.config.port),
     )
     try:
         icon.start()
@@ -336,7 +325,7 @@ def _start_tray(
 
 
 def _bridge(runtime: Runtime, console: Console) -> BridgeService:
-    """Claude Code's questions reach you by voice and on every open page (ADR-051)."""
+    """Claude Code's questions reach you by voice and through every API client (ADR-051)."""
     web = WebChannel(runtime.hub)
     speak = _speaker(runtime.app, console)
 
@@ -361,7 +350,7 @@ def _bridge(runtime: Runtime, console: Console) -> BridgeService:
         runtime.app.settings.bridge,
         [on_page, by_voice],
         announce,
-        phone=phone_asker(runtime.app.settings),
+        phone=phone_asker(runtime.app.settings, device=runtime.app.services.phone),
     )
 
 
@@ -375,21 +364,21 @@ def _speaker(app: App, console: Console) -> Any:
     return speak
 
 
-async def _when_ready(
-    server: uvicorn.Server, url: str, console: Console, open_browser: bool, runtime: Runtime
-) -> None:
+async def _when_ready(server: uvicorn.Server, console: Console, runtime: Runtime) -> None:
     while not server.started:  # noqa: ASYNC110 (uvicorn exposes no event for this)
         await asyncio.sleep(0.05)
     faulthandler.cancel_dump_traceback_later()
     log.info("Jarvis %s is ready on port %s", __version__, server.config.port)
     lines = [
-        f"[bold]Jarvis {__version__}[/bold] is running at [link={url}]{escape(url)}[/link]",
-        "[dim]The link carries a one-time token; it changes every time Jarvis starts.[/dim]",
+        f"[bold]Jarvis {__version__}[/bold] is running. Open the chat window with `jarvis ui`, "
+        'the tray icon, or by saying "open Jarvis"; or type in a terminal with `jarvis chat`.',
+        f"[dim]Local API on {HOST}:{server.config.port}; its token is in the data folder "
+        "and changes every time Jarvis starts.[/dim]",
     ]
     voice = runtime.voice
     if voice is not None:
         cfg = runtime.app.settings.voice
-        talk = f"Hold {escape(cfg.ptt_hotkey)} or use the mic button to talk"
+        talk = f"Hold {escape(cfg.ptt_hotkey)} to talk"
         if voice.wake_enabled:
             talk += ', or say "Hey Jarvis"'
         lines.append(f"{talk}. {escape(cfg.stop_hotkey)} stops.")
@@ -398,6 +387,3 @@ async def _when_ready(
             lines.append(f"Hold {escape(dictation.hotkey)} to dictate into any app.")
     lines.append("Ctrl+C here quits.")
     console.print("\n".join(lines))
-    if open_browser:
-        with contextlib.suppress(Exception):
-            await asyncio.to_thread(webbrowser.open, url)

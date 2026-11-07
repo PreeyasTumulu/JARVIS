@@ -1,14 +1,15 @@
 """The local API: JSON over HTTP and one WebSocket, for programs on this computer only.
 
-There is no page any more (ADR-081); a new UI will connect here. What keeps other programs and
-websites out:
+`GET /` is the chat window (ADR-103, server/ui.py). What keeps other programs and websites out:
 
 1. The server listens on 127.0.0.1 only (set in serve.py, not configurable).
 2. The Host header must name this computer, which defeats DNS rebinding.
 3. Browsers always send an Origin header with a WebSocket or a cross-site request and cannot
-   leave it out, so any request that carries one is refused. No website can reach the API.
-4. The WebSocket, the bridge, and `/mcp/` need the per-launch token, which `jarvis serve`
-   writes to the data folder (only this Windows account can read it).
+   leave it out, so any HTTP request that carries one is refused. The one browser the
+   WebSocket accepts is the chat page itself: its exact Origin plus the UI token in the page.
+4. The WebSocket for programs, the bridge, and `/mcp/` need the per-launch token, which
+   `jarvis serve` writes to the data folder (only this Windows account can read it). The UI
+   token is a different one, so the page can never call the bridge or `/mcp/`.
 
 `/mcp/` offers Jarvis's public tools to MCP clients through `jarvis mcp serve` (ADR-085).
 
@@ -26,11 +27,12 @@ from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from jarvis import __version__
 from jarvis.bridge.service import BridgeRequest
+from jarvis.server import ui
 from jarvis.server.hub import Client
 from jarvis.server.mcp_server import McpGateway, mcp_app
 from jarvis.server.runtime import Runtime
@@ -61,7 +63,10 @@ def create_server(
     hosts: Sequence[str] = LOCAL_HOSTS,
     bridge_token: str | None = None,
     mcp: McpGateway | None = None,
+    ui_token: str | None = None,
+    port: int | None = None,
 ) -> FastAPI:
+    page_origins = ui.origins(port) if ui_token and port else frozenset()
     mounted = mcp_app(mcp, token) if mcp is not None else None
 
     @contextlib.asynccontextmanager
@@ -87,6 +92,20 @@ def create_server(
     async def health() -> JSONResponse:
         return JSONResponse({"name": "jarvis", "version": __version__})
 
+    if page_origins and port is not None and ui_token is not None:
+        page_port, page_token = port, ui_token
+
+        @app.get("/", include_in_schema=False)
+        async def chat(request: Request) -> Response:
+            """The chat window. Only a navigation from nowhere or this page itself gets it."""
+            if request.headers.get("sec-fetch-site", "none") not in ("none", "same-origin"):
+                return _not_allowed()  # another site, even another port on this computer
+            html, policy = ui.page(page_port, page_token)
+            return HTMLResponse(
+                html,
+                headers={"Content-Security-Policy": policy, "X-Frame-Options": "DENY"},
+            )
+
     @app.post("/bridge", include_in_schema=False)
     async def bridge(request: Request) -> JSONResponse:
         """Claude Code's hook asks you something (ADR-051)."""
@@ -104,12 +123,15 @@ def create_server(
     @app.websocket("/ws")
     async def socket(ws: WebSocket) -> None:
         origin = ws.headers.get("origin")
-        if origin is not None:
-            log.warning("Refused a WebSocket connection from origin %r", origin)
+        sent = ws.query_params.get("token")
+        if origin is None:
+            allowed = _token_ok(sent, token)  # a program on this computer
+        else:
+            allowed = origin in page_origins and _token_ok(sent, ui_token)  # the chat page
+            if not allowed:
+                log.warning("Refused a WebSocket connection from origin %r", origin)
+        if not allowed:
             await ws.close(code=POLICY_VIOLATION)  # before accepting: the browser gets a 403
-            return
-        if not _token_ok(ws.query_params.get("token"), token):
-            await ws.close(code=POLICY_VIOLATION)
             return
         await ws.accept()
         await converse(runtime, ws)

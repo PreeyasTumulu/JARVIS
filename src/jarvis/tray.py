@@ -63,7 +63,9 @@ class Tray:
         stop: Callable[[], Coroutine[Any, Any, None]],
         quit: Callable[[], None],
         set_muted: Callable[[bool], Coroutine[Any, Any, None]] | None = None,
+        open_chat: Callable[[], object] | None = None,
     ) -> None:
+        self._open_chat = open_chat
         self._loop = loop
         self._stop = stop
         self._quit = quit
@@ -87,6 +89,12 @@ class Tray:
                 self._on_mic,
                 checked=lambda _item: self._state != "muted",
                 visible=lambda _item: self._set_muted is not None,
+            ),
+            pystray.MenuItem(
+                "Open Jarvis",
+                self._on_open,
+                default=True,  # a double click on the icon opens the chat window too
+                visible=lambda _item: self._open_chat is not None,
             ),
             pystray.MenuItem("Stop", self._on_stop),
             pystray.Menu.SEPARATOR,
@@ -126,6 +134,13 @@ class Tray:
         if self._set_muted is not None:
             muted = self._state != "muted"
             asyncio.run_coroutine_threadsafe(self._set_muted(muted), self._loop)
+
+    def _on_open(self, _icon: Any = None, _item: Any = None) -> None:
+        if self._open_chat is not None:
+            try:
+                self._open_chat()
+            except Exception:
+                log.warning("Could not open the chat window", exc_info=True)
 
     def _on_stop(self, _icon: Any = None, _item: Any = None) -> None:
         asyncio.run_coroutine_threadsafe(self._stop(), self._loop)

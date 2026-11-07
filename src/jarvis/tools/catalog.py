@@ -9,6 +9,7 @@ from jarvis.tools.apps.vscode import vscode_open
 from jarvis.tools.briefing import briefing
 from jarvis.tools.browser.tools import browser_click, browser_open, browser_read, browser_type
 from jarvis.tools.calendar.tools import calendar_events
+from jarvis.tools.chat_window import open_chat
 from jarvis.tools.data.crypto import crypto_price
 from jarvis.tools.data.currency import convert_currency
 from jarvis.tools.data.market import market_data
@@ -137,6 +138,7 @@ def build_registry() -> Registry:
             recall,
             forget_history,
             briefing,
+            open_chat,
             speak,
             ask_user,
         ]

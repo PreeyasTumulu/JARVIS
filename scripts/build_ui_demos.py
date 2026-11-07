@@ -12,7 +12,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-DEMOS = Path(__file__).resolve().parents[1] / "ui-demos"
+ROOT = Path(__file__).resolve().parents[1]
+DEMOS = ROOT / "ui-demos"
+# The real chat window (ADR-103) is the chat demo itself, shipped inside the package.
+SERVED = ROOT / "src" / "jarvis" / "server" / "ui" / "chat.html"
 BEGIN, END = "// kit:begin", "// kit:end"
 _BLOCK = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END), re.S)
 
@@ -40,6 +43,11 @@ def main() -> None:
         if updated != html:
             page.write_bytes(updated.encode("utf-8"))
             print(f"updated {page.name}")
+    chat = (DEMOS / "chat.html").read_bytes()
+    if not SERVED.is_file() or SERVED.read_bytes() != chat:
+        SERVED.parent.mkdir(parents=True, exist_ok=True)
+        SERVED.write_bytes(chat)
+        print("updated the served chat page")
 
 
 if __name__ == "__main__":

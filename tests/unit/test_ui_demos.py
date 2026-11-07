@@ -45,8 +45,16 @@ def test_pages_make_no_network_requests(page: Path) -> None:
     html = page.read_text(encoding="utf-8")
     assert not re.search(r"""(src|href)\s*=\s*["']?(https?:)?//""", html, re.I)
     assert "<script src" not in html
-    for call in ("fetch(", "XMLHttpRequest", "WebSocket", "sendBeacon", "@import"):
+    for call in ("fetch(", "XMLHttpRequest", "sendBeacon", "@import"):
         assert call not in html, call
+    # Only the chat opens a socket, only when jarvis serve served it, and only to this computer.
+    sockets = re.findall(r"new WebSocket\((`[^`]*`|[^)]*)\)", html)
+    if page.stem == "chat":
+        assert sockets == [
+            "`ws://127.0.0.1:${LIVE.port}/ws?token=${encodeURIComponent(LIVE.token)}`"
+        ]
+    else:
+        assert sockets == []
 
 
 @pytest.mark.parametrize("page", PAGES, ids=lambda p: p.stem)

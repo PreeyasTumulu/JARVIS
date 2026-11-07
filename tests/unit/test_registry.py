@@ -104,7 +104,7 @@ ALL_TOOLS = {
     "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "read_screen",
     "browser_open",
     "browser_read", "browser_click", "browser_type", "send_whatsapp", "call_contact",
-    "hang_up", "ring_phone", "notify_phone", "send_to_phone",
+    "hang_up", "ring_phone", "notify_phone", "send_to_phone", "open_chat",
     "media_control", "now_playing", "read_notifications", "read_mail", "read_email",
     "reply_email", "calendar_events",
     "remember", "list_memories", "forget", "recall", "briefing", "forget_history",

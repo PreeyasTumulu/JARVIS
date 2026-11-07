@@ -47,7 +47,7 @@ class Group:
 
 GROUPS: dict[str, Group] = {
     "apps": Group(
-        ("open_app", "focus_app", "close_app", "schedule_app"),
+        ("open_app", "focus_app", "close_app", "schedule_app", "open_chat"),
         re.compile(
             r"\b(open|launch|start|run|close|quit|exit|switch|focus|bring up|go to|app|apps|"
             r"application|window)\b"

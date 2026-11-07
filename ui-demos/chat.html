@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- jarvis:live -->
 <title>Jarvis chat</title>
 <style>
   /* Chat: the orb and the edge glow brought together around a conversation.
@@ -204,6 +205,9 @@
   body.working .send .stop-icon { display: block; }
   .note { max-width: 720px; margin: 6px auto 0; text-align: center; font-size: 12px; color: var(--muted); }
   #dock { padding: 4px 16px 10px; font-size: 12px; }
+  body.live #dock { display: none; }
+  body.down .note { color: #C2313A; }
+  .composer .mic:disabled { opacity: 0.35; cursor: default; }
 
   @media (prefers-reduced-motion: reduce) {
     .orb { transition: none; }
@@ -328,6 +332,8 @@ const Kit = (() => {
   let step = null;
   let analyser = null;
   let samples = null;
+  let fedLevel = 0; // a level from outside the page (the real Jarvis's microphone)
+  let fedAt = -1;
 
   function show(entry, now) {
     step = entry;
@@ -385,6 +391,19 @@ const Kit = (() => {
     run(steps, performance.now() / 1000);
   }
 
+  // Live pages: a state from a real event, held until the next one, and Jarvis's own mic level.
+  function set(state, fields = {}) {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state, ...fields }, performance.now() / 1000);
+  }
+
+  function feedLevel(value) {
+    fedLevel = Math.max(0, Math.min(1, Number(value) || 0));
+    fedAt = performance.now();
+  }
+
   function stop() {
     looping = false;
     updatePlay();
@@ -422,7 +441,9 @@ const Kit = (() => {
     const t = still ? 2.2 : now;
     const inState = still ? 1.4 : now - scene.since;
     scene.t = t;
-    const target = scene.mic && scene.state === "listening" ? micLevel() : syntheticLevel(t, inState);
+    const fed = scene.state === "listening" && ms - fedAt < 400;
+    const target = fed ? fedLevel
+      : scene.mic && scene.state === "listening" ? micLevel() : syntheticLevel(t, inState);
     scene.level = still ? target : scene.level + (target - scene.level) * 0.25;
     // The words appear as they are heard.
     const share = scene.state === "listening" && !still ? Math.min(1, inState / 1.8) : 1;
@@ -527,6 +548,7 @@ const Kit = (() => {
       button.addEventListener("click", () => answer(button.dataset.kitAnswer === "yes"));
     }
     addEventListener("keydown", (event) => {
+      if (document.body.dataset.kitKeys === "off") return; // a live page: keys are for real use
       if (event.target.closest && event.target.closest("input, textarea")) return;
       const index = Number(event.key) - 1;
       if (index >= 0 && index < STATES.length) pick(STATES[index]);
@@ -548,7 +570,10 @@ const Kit = (() => {
 
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", start);
   else start();
-  return { STATES, NAMES, EXAMPLE, scene, onFrame: (fn) => frames.push(fn), pick, answer, play, stop };
+  return {
+    STATES, NAMES, EXAMPLE, scene, onFrame: (fn) => frames.push(fn),
+    pick, answer, play, stop, set, feedLevel,
+  };
 })();
 // kit:end
 </script>
@@ -563,6 +588,15 @@ const Kit = (() => {
   const send = document.querySelector("#send");
   const mic = document.querySelector("#mic");
   const WORKING = new Set(["thinking", "confirm", "tool", "speaking"]);
+  // Served by jarvis serve, the page carries its address and token and shows real turns
+  // (ADR-103); opened from disk, it plays the demo.
+  const liveMeta = document.querySelector('meta[name="jarvis-live"]');
+  const LIVE = liveMeta ? JSON.parse(liveMeta.getAttribute("content")) : null;
+  if (LIVE) {
+    body.classList.add("live");
+    body.dataset.kitKeys = "off";
+    document.querySelector(".note").textContent = "Connecting to Jarvis on this computer...";
+  }
 
   // Greeting by the hour.
   const hour = new Date().getHours();
@@ -626,19 +660,19 @@ const Kit = (() => {
     }
     return add(el);
   }
-  function card(question) {
+  function card(question, onAnswer = (yes) => Kit.answer(yes), labels = [["Yes", true], ["No", false]]) {
     const el = document.createElement("div");
     el.className = "msg card";
     const p = document.createElement("p");
     p.textContent = question;
     const buttons = document.createElement("div");
     buttons.className = "buttons";
-    for (const [label, yes] of [["Yes", true], ["No", false]]) {
+    for (const [label, yes] of labels) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = yes ? "yes" : "no";
+      b.className = yes === true ? "yes" : "no";
       b.textContent = label;
-      b.addEventListener("click", () => Kit.answer(yes));
+      b.addEventListener("click", () => onAnswer(yes));
       buttons.append(b);
     }
     el.append(p, buttons);
@@ -722,11 +756,12 @@ const Kit = (() => {
   }
   document.querySelector("#composer").addEventListener("submit", (event) => {
     event.preventDefault();
-    if (body.classList.contains("working")) { Kit.stop(); return; }
+    if (body.classList.contains("working")) { LIVE ? live.send({ type: "stop" }) : Kit.stop(); return; }
     const words = text.value.trim();
     if (!words) return;
     text.value = "";
     grow();
+    if (LIVE) { live.typed(words); return; }
     settle("thinking");
     you(words, false);
     Kit.play(replyTo(words));
@@ -741,12 +776,13 @@ const Kit = (() => {
   }
   text.addEventListener("input", grow);
   mic.addEventListener("click", () => {
+    if (LIVE) { live.talk(); return; }
     if (Kit.scene.state === "listening") { Kit.stop(); return; }
     const heard = "set a timer for 10 minutes";
     Kit.play([{ state: "listening", ms: 2400, heard }, ...replyTo(heard)]);
   });
   document.querySelector("#new-chat").addEventListener("click", () => {
-    Kit.stop();
+    if (!LIVE) Kit.stop();
     thread.replaceChildren();
     liveYou = pending = openCard = speakingEl = null;
     setEmpty(true);
@@ -767,13 +803,13 @@ const Kit = (() => {
   }
 
   Kit.onFrame((s) => {
-    if (s.seq !== seq) { seq = s.seq; enter(s); }
+    if (s.seq !== seq) { seq = s.seq; if (!LIVE) enter(s); }
     body.classList.toggle("working", WORKING.has(s.state));
     send.setAttribute("aria-label", body.classList.contains("working") ? "Stop" : "Send");
     send.disabled = !text.value.trim() && !body.classList.contains("working");
-    mic.setAttribute("aria-pressed", String(s.state === "listening"));
+    mic.setAttribute("aria-pressed", String(s.state === "listening" || (LIVE && live.micOn)));
     if (liveYou) liveYou.textContent = s.heardShown;
-    if (speakingEl) reveal(speakingEl, s.still ? 1 : Math.min(1, (s.t - s.since) / Math.max(1.2, s.say.length / 22)));
+    if (speakingEl && !LIVE) reveal(speakingEl, s.still ? 1 : Math.min(1, (s.t - s.since) / Math.max(1.2, s.say.length / 22)));
 
     const dt = s.still ? 0 : Math.min(0.05, s.t - last);
     last = s.t;
@@ -824,6 +860,193 @@ const Kit = (() => {
     root.style.setProperty("--angle", `${(s.still ? 30 : angle).toFixed(1)}deg`);
     root.style.setProperty("--glow", s.state === "idle" ? "0" : "1");
   });
+
+  // Live: the real Jarvis, over this server's WebSocket. Events from voice and from the agent
+  // both arrive here; the state shown is worked out from both, the most pressing first.
+  const live = (() => {
+    if (!LIVE) return { micOn: false };
+    const note = document.querySelector(".note");
+    const cards = new Map(); // request or question id -> its card
+    let socket = null;
+    let voice = "off";
+    let agent = "idle";
+    let voiceOn = false;
+    let echo = null; // a typed message already shown, until its turn starts
+    let liveBubble = null;
+    let thinking = null;
+    let failedAt = -1e9;
+    let speakingUntil = 0;
+    let shown = "";
+    let askingId = null; // a question with no options: the next typed text answers it
+    let replied = false; // Jarvis already said something in this turn
+    const api = { micOn: false, send, typed, talk };
+
+    function send(message) {
+      if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+    }
+
+    function state() {
+      for (const item of cards.values()) if (!item.done) return "confirm";
+      if (voice === "listening" || voice === "transcribing") return "listening";
+      if (voice === "speaking" || performance.now() < speakingUntil) return "speaking";
+      if (agent === "running_tool") return "tool";
+      if (agent === "thinking" || agent === "awaiting_confirmation") return "thinking";
+      if (performance.now() - failedAt < 3500) return "error";
+      return "idle";
+    }
+    function refresh() {
+      const next = state();
+      if (next !== shown) { shown = next; Kit.set(next); }
+    }
+    setInterval(refresh, 250); // the reply and the error fade back to idle on their own
+
+    function stopThinking() { if (thinking) { thinking.remove(); thinking = null; } }
+    function reply(words, kind) {
+      stopThinking();
+      const el = jarvis(words, kind);
+      const all = el.querySelectorAll(".word");
+      const perWord = voice === "speaking" || voiceOn ? 290 : 45; // spoken aloud, or only shown
+      speakingUntil = performance.now() + all.length * perWord;
+      if (Kit.scene.calm) { reveal(el, 1); return; }
+      let shownWords = 0;
+      const timer = setInterval(() => {
+        shownWords += 1;
+        reveal(el, shownWords / all.length);
+        if (shownWords >= all.length) clearInterval(timer);
+      }, perWord);
+    }
+
+    function typed(words) {
+      if (askingId) {
+        send({ type: "answer", question_id: askingId, text: words });
+        you(words, false);
+        askingId = null;
+        return;
+      }
+      echo = words;
+      you(words, false);
+      send({ type: "command", text: words });
+    }
+    function talk() {
+      if (!voiceOn) return;
+      api.micOn = !api.micOn;
+      send({ type: "mic", on: api.micOn });
+    }
+
+    function confirmCard(request) {
+      if (cards.has(request.request_id)) return;
+      const ask = request.reason ? `${request.summary}? (${request.reason})` : `${request.summary}?`;
+      const el = card(ask, (yes) => send({ type: "confirm", request_id: request.request_id, approved: yes }));
+      cards.set(request.request_id, { el, done: false });
+      stopThinking();
+    }
+    function settleCard(id, said) {
+      const item = cards.get(id);
+      if (!item || item.done) return;
+      item.done = true;
+      item.el.classList.add("answered");
+      item.el.querySelector("p").textContent = said;
+    }
+    const SAID = { confirmed: "You said yes.", denied: "You said no.", timeout: "No answer in time, so I didn't.", cancelled: "Cancelled." };
+
+    function question(m) {
+      if (cards.has(m.question_id)) return;
+      const options = m.options || [];
+      const el = options.length
+        ? card(m.question, (option) => { send({ type: "answer", question_id: m.question_id, text: option }); settleCard(m.question_id, `You said ${option}.`); }, options.map((o) => [o, o]))
+        : card(m.question, () => {}, []);
+      if (!options.length) { askingId = m.question_id; text.focus(); }
+      cards.set(m.question_id, { el, done: false });
+      stopThinking();
+    }
+
+    function history(rows) {
+      for (const row of rows) {
+        if (row.text) you(row.text, false);
+        if (row.reply) reveal(jarvis(row.reply), 1);
+      }
+    }
+
+    function handle(m) {
+      switch (m.type) {
+        case "hello":
+          thread.replaceChildren();
+          cards.clear();
+          voiceOn = Boolean(m.voice && m.voice.enabled);
+          voice = voiceOn ? m.voice.state || "idle" : "off";
+          mic.disabled = !voiceOn;
+          mic.title = voiceOn ? "Talk (or hold the push-to-talk keys)" : "Voice is off in this session";
+          history(m.history || []);
+          if (!thread.children.length) setEmpty(true);
+          for (const item of m.open || []) handle(item);
+          agent = m.busy ? "thinking" : "idle";
+          break;
+        case "turn_started":
+          agent = "thinking";
+          replied = false;
+          if (echo !== null && m.text === echo) echo = null;
+          else if (liveBubble) { liveBubble.textContent = m.text; liveBubble.classList.remove("live"); liveBubble = null; }
+          else you(m.text, false);
+          stopThinking();
+          thinking = jarvis("Thinking", "thinking");
+          break;
+        case "agent_state_changed":
+          agent = m.state;
+          if (thinking && m.state === "running_tool") thinking.firstChild.textContent = "Working on it";
+          break;
+        case "voice_state_changed":
+          voice = m.state;
+          if ((m.state === "listening" || m.state === "transcribing") && !liveBubble) liveBubble = you("", true);
+          if (m.state !== "listening" && m.state !== "transcribing") api.micOn = false;
+          if (m.state === "idle" && liveBubble && !liveBubble.textContent) { liveBubble.remove(); liveBubble = null; }
+          break;
+        case "voice_level": Kit.feedLevel(m.level); break;
+        case "transcript_partial": if (liveBubble) liveBubble.textContent = m.text; break;
+        case "transcript_heard":
+          if (liveBubble) {
+            if (m.text) { liveBubble.textContent = m.text; liveBubble.classList.remove("live"); }
+            else liveBubble.remove();
+            liveBubble = null;
+          }
+          break;
+        case "confirmation_requested": confirmCard(m.request); break;
+        case "confirmation_resolved": settleCard(m.request_id, SAID[m.decision] || "Answered."); break;
+        case "question": question(m); break;
+        case "question_closed": settleCard(m.question_id, "Answered."); if (askingId === m.question_id) askingId = null; break;
+        case "assistant_message": replied = true; reply(m.text); break;
+        case "reminder_due": case "announcement": reply(m.text); break;
+        case "turn_finished":
+          agent = "idle";
+          stopThinking();
+          if (m.status === "cancelled") { if (!replied) reveal(jarvis("Stopped."), 1); }
+          else if (m.status !== "ok") failedAt = performance.now(); // a timeout, the step limit, an error
+          break;
+        case "error": reply(m.message, "bad"); failedAt = performance.now(); break;
+        default: break;
+      }
+      refresh();
+    }
+
+    function connect() {
+      socket = new WebSocket(`ws://127.0.0.1:${LIVE.port}/ws?token=${encodeURIComponent(LIVE.token)}`);
+      socket.addEventListener("open", () => {
+        body.classList.remove("down");
+        note.textContent = "Connected to Jarvis on this computer. What you type here goes to it.";
+      });
+      socket.addEventListener("message", (event) => {
+        try { handle(JSON.parse(event.data)); } catch (error) { console.warn("Jarvis sent", event.data, error); }
+      });
+      socket.addEventListener("close", () => {
+        body.classList.add("down");
+        note.textContent = "Jarvis is not running. Start it with jarvis serve; this window reconnects by itself.";
+        voice = "off"; agent = "idle"; api.micOn = false; mic.disabled = true;
+        refresh();
+        setTimeout(connect, 2000);
+      });
+    }
+    connect();
+    return api;
+  })();
 
   placeOrb(true);
 </script>

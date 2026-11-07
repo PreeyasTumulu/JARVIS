@@ -34,6 +34,7 @@ from jarvis.bridge.service import (
 from jarvis.config import Settings
 from jarvis.console import ConsoleChannel, ConsoleRenderer
 from jarvis.core.channel import FirstAnswerChannel, UserChannel
+from jarvis.server import ui
 from jarvis.server.app import create_server
 from jarvis.server.hub import WebChannel, WebHub
 from jarvis.server.mcp_server import McpGateway
@@ -170,6 +171,8 @@ async def _serve(
                 token=token,
                 bridge_token=token if runtime.bridge is not None else None,
                 mcp=McpGateway(app.agent) if app.settings.mcp_server.enabled else None,
+                ui_token=ui.ui_token(app.settings.data_dir),  # only the chat page has it (ADR-103)
+                port=port,
             ),
             host=HOST,
             port=port,
@@ -308,6 +311,7 @@ def _start_tray(
         stop=runtime.stop,
         quit=quit_jarvis,
         set_muted=session.set_muted if session is not None else None,
+        open_chat=lambda: ui.open_window(server.config.port),
     )
     try:
         icon.start()
@@ -366,7 +370,8 @@ async def _when_ready(server: uvicorn.Server, console: Console, runtime: Runtime
     faulthandler.cancel_dump_traceback_later()
     log.info("Jarvis %s is ready on port %s", __version__, server.config.port)
     lines = [
-        f"[bold]Jarvis {__version__}[/bold] is running. Type commands with `jarvis chat`.",
+        f"[bold]Jarvis {__version__}[/bold] is running. Open the chat window with `jarvis ui`, "
+        'the tray icon, or by saying "open Jarvis"; or type in a terminal with `jarvis chat`.',
         f"[dim]Local API on {HOST}:{server.config.port}; its token is in the data folder "
         "and changes every time Jarvis starts.[/dim]",
     ]

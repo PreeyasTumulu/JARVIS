@@ -141,6 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit = sub.add_parser("audit", help="show recent tool calls from the audit log")
     audit.add_argument("--last", type=int, default=20, help="how many entries (default 20)")
 
+    sub.add_parser("ui", help="open the chat window (needs jarvis serve running)")
     sub.add_parser("version", help="print the version")
     return parser
 
@@ -165,6 +166,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.command == "claude-hook":
         return claude_hook(settings, args.action, console)
+    if args.command == "ui":
+        from jarvis.server.ui import open_window, running_port
+
+        port = running_port(settings.data_dir)
+        if port is None:
+            console.print(
+                "Jarvis is not running. Start it with `uv run jarvis serve`, then try again."
+            )
+            return 1
+        console.print(f"Opened the chat window in {open_window(port)}.")
+        return 0
     if args.command == "mcp" and args.action == "serve":
         from jarvis.server.mcp_stdio import run_mcp_stdio
 

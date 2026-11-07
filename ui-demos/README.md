@@ -11,6 +11,8 @@ The pages make no network requests: no web fonts, no scripts from elsewhere. A t
 
 ## The chat (the chosen direction)
 
+Since Phase 32 this page is also the real Jarvis window: `jarvis serve` serves it, and `jarvis ui` opens it, live (ADR-103). Opened from disk, as here, it plays the demo.
+
 `chat.html` brings the orb and the edge glow together around a conversation.
 - **The orb:** waits large in the middle, then glides up into the header once you talk. New chat sends it back.
 - **The edge glow:** the window's edge glows in the orb's colour for each state.

@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "1.21.0"
+version = "1.22.0"
 description = "Local-first voice-controlled desktop assistant for Windows 11"
 readme = "README.md"
 license = "MIT"

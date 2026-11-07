@@ -137,6 +137,8 @@ const Kit = (() => {
   let step = null;
   let analyser = null;
   let samples = null;
+  let fedLevel = 0; // a level from outside the page (the real Jarvis's microphone)
+  let fedAt = -1;
 
   function show(entry, now) {
     step = entry;
@@ -194,6 +196,19 @@ const Kit = (() => {
     run(steps, performance.now() / 1000);
   }
 
+  // Live pages: a state from a real event, held until the next one, and Jarvis's own mic level.
+  function set(state, fields = {}) {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state, ...fields }, performance.now() / 1000);
+  }
+
+  function feedLevel(value) {
+    fedLevel = Math.max(0, Math.min(1, Number(value) || 0));
+    fedAt = performance.now();
+  }
+
   function stop() {
     looping = false;
     updatePlay();
@@ -231,7 +246,9 @@ const Kit = (() => {
     const t = still ? 2.2 : now;
     const inState = still ? 1.4 : now - scene.since;
     scene.t = t;
-    const target = scene.mic && scene.state === "listening" ? micLevel() : syntheticLevel(t, inState);
+    const fed = scene.state === "listening" && ms - fedAt < 400;
+    const target = fed ? fedLevel
+      : scene.mic && scene.state === "listening" ? micLevel() : syntheticLevel(t, inState);
     scene.level = still ? target : scene.level + (target - scene.level) * 0.25;
     // The words appear as they are heard.
     const share = scene.state === "listening" && !still ? Math.min(1, inState / 1.8) : 1;
@@ -336,6 +353,7 @@ const Kit = (() => {
       button.addEventListener("click", () => answer(button.dataset.kitAnswer === "yes"));
     }
     addEventListener("keydown", (event) => {
+      if (document.body.dataset.kitKeys === "off") return; // a live page: keys are for real use
       if (event.target.closest && event.target.closest("input, textarea")) return;
       const index = Number(event.key) - 1;
       if (index >= 0 && index < STATES.length) pick(STATES[index]);
@@ -357,7 +375,10 @@ const Kit = (() => {
 
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", start);
   else start();
-  return { STATES, NAMES, EXAMPLE, scene, onFrame: (fn) => frames.push(fn), pick, answer, play, stop };
+  return {
+    STATES, NAMES, EXAMPLE, scene, onFrame: (fn) => frames.push(fn),
+    pick, answer, play, stop, set, feedLevel,
+  };
 })();
 // kit:end
 </script>

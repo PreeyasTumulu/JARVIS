@@ -7,6 +7,7 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 ## [Unreleased]
 
 ### Added
+- `ui-demos/`: six standalone UI concepts (reactor, orb, edge glow, terminal, pill, constellation). Each shows the same seven states, plays a scripted run, and can follow your real microphone. They are offline, one file each, with screenshots in the READMEs (ADR-100).
 - Your phone for free: "find my phone" rings it, "send this file / the clipboard / a screenshot to my phone", notifications, and reminders that ring the phone, through KDE Connect on your Wi-Fi or an ntfy push away from home; Claude Code's waiting questions reach the phone too (ADR-098).
 - Research on calls where Jarvis speaks: cost, Indian numbers, and the law (RESEARCH.md 2.4); not built (ADR-099).
 

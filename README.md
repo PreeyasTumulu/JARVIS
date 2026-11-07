@@ -9,7 +9,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 29 (v1.18.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 30 (v1.19.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -35,11 +35,22 @@ Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools
 | GitHub (and any MCP server) | "any open issues on JARVIS", "read issue 12", "open an issue titled ..." (asks first), "find repos about wake words" |
 | Claude Code | Claude asks "Which database? one, PostgreSQL. two, SQLite." and you say "two" |
 
+## What it could look like
+
+Six concepts for the new interface, each one standalone page you can open by double-click ([ui-demos/](ui-demos/README.md)):
+
+| Reactor | Orb | Edge glow |
+|---|---|---|
+| ![Reactor](ui-demos/screenshots/reactor-listening.jpg) | ![Orb](ui-demos/screenshots/orb-listening.jpg) | ![Edge glow](ui-demos/screenshots/edge-confirm.jpg) |
+| **Terminal** | **Pill** | **Constellation** |
+| ![Terminal](ui-demos/screenshots/terminal-speaking.jpg) | ![Pill](ui-demos/screenshots/pill-confirm.jpg) | ![Constellation](ui-demos/screenshots/constellation-confirm.jpg) |
+
 ## Why it is different
 
 - **Safety in code, not in a prompt.** Every tool has a risk floor. Sending, deleting, stopping, calling, or buying waits for your explicit yes, and the approval is bound to the exact action Jarvis showed you. Config can tighten a rule, never loosen it.
 - **Private stays local.** Messages, notifications, files, the clipboard, screen text, contacts, and memories are labelled private, and the router raises an error rather than send them to a cloud model. Tests prove it with a fake cloud that records everything.
-- **The screen answers.** Say "Hey Jarvis" and the whole desktop transforms, with your words appearing as you speak, in a window that takes no clicks and no focus.
+- **Six looks to choose from.** [ui-demos/](ui-demos/README.md) has six standalone concepts for the new interface, each showing listening, thinking, speaking, waiting for your yes, running a tool, and errors. Double-click one to try it.
+- **The screen answers (until Phase 22).** Say "Hey Jarvis" and the whole desktop transforms, with your words appearing as you speak, in a window that takes no clicks and no focus.
 - **Content is data.** Text from web pages, files, notifications, and windows is wrapped as untrusted and can never approve anything. Secret-looking values are hidden before the model sees them.
 - **Everything is audited.** Every tool call, its arguments, the decision, and the result go to a local SQLite log (`jarvis audit`).
 - **Honest about Windows.** What is unreliable is written down in [RISKS.md](docs/RISKS.md), with the workaround.

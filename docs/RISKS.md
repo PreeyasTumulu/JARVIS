@@ -341,6 +341,10 @@ The phone must be paired once and on the same Wi-Fi with the KDE Connect app ope
 
 An alert by ntfy goes through ntfy.sh (or your own server) over the internet, and anyone who knows the topic name can read it: use a long random topic, or set `NTFY_TOKEN` with a protected topic. A notification asks first when the conversation holds private data; reminders send their own text, which you set. Files, the clipboard, and screenshots never go this way. Android may delay pushes in battery saver unless ntfy is allowed to run unrestricted.
 
+### R74. The UI demos
+
+The demos are simulations: their timings and levels are scripted, so a real turn may feel different, for example a longer think on a cold model. Browsers treat microphone access on pages opened from disk differently: Edge and Chrome ask, and others may refuse. Serving the folder with `python -m http.server` on 127.0.0.1 gives a page the browser trusts. The real UI cannot connect to `jarvis serve` from a browser page until the local API gets a safe way to accept one (ADR-081 refuses every Origin today). The blurs and the 240-star canvas cost some GPU while a page is open. Each page stops moving when Windows has animations turned off.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

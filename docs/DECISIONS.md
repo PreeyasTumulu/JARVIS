@@ -617,6 +617,20 @@ Yours, asked 2026-11-01, all as recommended.
 - **Why:** it costs money every month and every minute, needs a foreign number that Indian phones label "International call", and an Indian number needs a registered business.
 - **Cost:** none now. If you change your mind, the shape is ready: a disclosure first, contacts and your own number only after a confirm naming the person, emergency and short codes refused, reminders that may call you on opt-in.
 
+### ADR-100: Six UI concepts as standalone pages with one shared kit
+
+- **Decision (2026-11-07, as recommended):** `ui-demos/` holds six concepts (reactor, orb, edge glow, terminal, pill, constellation) and an index page. Each is one HTML file with inline CSS and JavaScript, opened by double-click, with no build step, dependencies, web fonts or network requests. They use fonts Windows 11 already has.
+  - **States:** every page shows the same seven states: idle, listening, thinking, speaking, and Jarvis's own waiting for your yes, running a tool, and error.
+  - **The run:** a scripted run uses real Jarvis lines from Phase 29. State buttons and keys 1 to 7 pick a state.
+  - **The microphone:** "Use my microphone" drives listening from the real microphone level, and only a loudness number is read.
+  - **The kit:** these parts live once in `ui-demos/_kit.js`. `scripts/build_ui_demos.py` copies it between markers in each page, and a test fails when a copy is out of date.
+  - **Screenshots:** `scripts/capture_ui_demos.py` captures frozen frames (`?state=...&still`) with Playwright and Edge for the READMEs.
+- **Why:** you can compare directions side by side before one is rebuilt as the real UI.
+  - **No live hookup:** the local API refuses every browser page (ADR-081), and a live hookup would have meant weakening that rule.
+  - **One file each:** each page opens anywhere, offline, with nothing to install.
+  - **The kit:** keeps the seven states the same everywhere without a build step for whoever opens them.
+- **Cost:** the pages are simulations. The real UI still has to bind these states to the `/ws` events, with a safe way for a local page to connect (R74). The real microphone was not tried, because it needs your permission in the browser.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

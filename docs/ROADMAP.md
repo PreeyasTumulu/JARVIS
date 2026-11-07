@@ -36,6 +36,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 27 | Music, developer tools, browser | Built on `phase/27-music-dev-browser` (stacked on Phase 26), git hand tested live; Spotify, Docker, SSH need your setup | v1.16.0 |
 | 28 | Screen understanding and daily news | Built on `phase/28-vision-news` (stacked on Phase 27), hand tested with real models and feeds | v1.17.0 |
 | 29 | Your phone, for free | Built on `phase/29-phone-bridge` (stacked on Phase 28), hand tested on this laptop; pairing the phone needs you | v1.18.0 |
+| 30 | UI demos | Built on `phase/30-ui-demos` (stacked on Phase 29), checked in the browser; the real microphone needs you | v1.19.0 |
 
 ## How each phase runs
 
@@ -1068,6 +1069,26 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** nothing reaches anyone but you, a file never leaves the Wi-Fi, and a phone that cannot be reached is explained, never silently skipped.
 
+## Phase 30: UI demos
+
+**Goal:** see and compare how the new interface could look before building it (ADR-100).
+
+**Scope**
+
+- Six concepts in `ui-demos/`, each one HTML file. All of them show the seven states: idle, listening, thinking, speaking, waiting for your yes, running a tool, and error.
+- One kit (`_kit.js`), copied into each page by `scripts/build_ui_demos.py`. It holds the scripted run, the state buttons and keys, the opt-in real microphone level, reduced motion, and frozen frames for screenshots.
+- `scripts/capture_ui_demos.py` makes the screenshots with Playwright and Edge. An index page and `ui-demos/README.md` show them.
+
+**Test it**
+
+1. Double-click `ui-demos/index.html`, then open each concept and watch one full run.
+2. Press `1` to `7`, answer Yes and No on the confirmation, and press Space to play the run again.
+3. Press "Use my microphone", allow it, and speak: listening should follow your voice.
+
+**Measured (2026-11-07):** all 42 states (six concepts by seven) captured and checked at 1000 by 625 and at a phone's 390 by 844. Two layout problems were found and fixed: the pill's confirmation pushed its buttons apart, and the edge glow read as a hard frame. A third fix: the terminal showed a failed tool as "ok". The 24 README screenshots come to 664 KB.
+
+**Exit criteria:** every concept shows all seven states, opens offline with no network requests, and is checked by a test.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -1095,5 +1116,5 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 | 27 | Music, developer tools, browser (done) | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
 | 28 | Screen understanding and daily news (done) | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
 | 29 | Phone calls (done: your phone for free) | Researched cost, Indian numbers, and legal limits; you chose free alerts and file sending by KDE Connect and ntfy over paid calls (ADR-098, ADR-099) |
-| 30 | UI demos | Five or six standalone concepts in `ui-demos/` with listening, thinking, and speaking states, screenshots in the README |
+| 30 | UI demos (done) | Six standalone concepts in `ui-demos/` with seven states each, screenshots in the README (ADR-100) |
 | 31 | Open-source readiness | Demo GIF, feature list, quickstart, `.env.example`, a check that no personal paths, servers, or contacts are committed |

@@ -680,7 +680,8 @@ jarvis/
     local.example.toml        template for your gitignored local.toml
     ollama/*.Modelfile        local model aliases with num_ctx (8B and 3B)
   docs/                       this documentation, plus benchmarks/
-  scripts/                    benchmark_tools.py, check_dashes.py
+  scripts/                    benchmark_tools.py, check_dashes.py, build_ui_demos.py, capture_ui_demos.py
+  ui-demos/                   six standalone UI concepts with one shared kit (_kit.js) and screenshots (ADR-100)
   src/jarvis/
     __main__.py               python -m jarvis
     cli.py                    jarvis chat, ask, voice, serve, setup-voice, index, contacts, whatsapp,

@@ -44,6 +44,21 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 30: UI demos
+
+Run on 2026-11-07 in the browser pane and with Playwright on Edge.
+
+| # | Check | Expected | Actual | Result |
+|---|---|---|---|---|
+| 30.1 | the scripted run on the reactor | idle, listening with words appearing, thinking, waiting for your yes | first try stayed in idle (a step's milliseconds were added to a clock in seconds); after the fix it ran through | **fail**, pass after fix |
+| 30.2 | frozen frames for screenshots | the page draws one fixed picture | the browser pane timed out on pages that stopped drawing; they now keep drawing the same frame | pass after fix |
+| 30.3 | all 42 states at 1000 by 625 | every state reads clearly | the pill's question stretched and pushed Yes and No to the bottom; the edge glow looked like a hard frame; the terminal said "ok" for a failed tool | three fixes, pass |
+| 30.4 | the confirmation state at 390 by 844 | fits a phone | all six fit, with nothing cut off | pass |
+| 30.5 | a state button, then Yes, then key 7 | pauses the run, Yes leads to the tool and then speaking, 7 shows the error | confirm, "Play the demo", tool `send_to_phone`, speaking, error | pass |
+| 30.6 | console errors | none | none | pass |
+
+**Needs your hands:** "Use my microphone" with your own microphone, and choosing a direction for the real UI.
+
 ## Phase 29: Your phone, for free
 
 Run on 2026-11-07 on a scratch data folder. The phone was visible to KDE Connect but not paired, so nothing reached it; the ntfy pushes went to a throwaway random topic and were read back from ntfy.sh.

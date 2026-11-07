@@ -144,3 +144,4 @@ class ToolContext:
     turn_id: str
     flags: ContextFlags = ContextFlags()
     handled_by: str = "agent"  # the router stage that produced this turn's calls (ADR-083)
+    requester: str | None = None  # another program asking (an MCP client), named in questions

@@ -254,6 +254,14 @@ enabled = true
 connect_timeout_s = 60       # the first start of a Docker image is slow
 call_timeout_s = 30
 
+[mcp_server]
+# Jarvis's own tools for other MCP clients (Claude Code, Claude Desktop): they run
+# `uv run jarvis mcp serve`, which reaches the running `jarvis serve` (ADR-085). Only public
+# tools can be offered, whatever this says; every call passes the policy gate, and a call
+# that needs a yes is asked on Jarvis's own voice and terminal, naming the client.
+enabled = true
+tools = ["weather", "calculate", "convert_currency", "market_data", "crypto_price", "web_search"]
+
 [mcp.servers.github]
 # GitHub's official server in Docker. Starts once GITHUB_PERSONAL_ACCESS_TOKEN is in .env.
 label = "GitHub"

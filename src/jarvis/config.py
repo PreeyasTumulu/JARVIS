@@ -346,6 +346,26 @@ class McpSettings(_Section):
     servers: dict[str, McpServerSettings] = Field(default_factory=dict)
 
 
+class McpServerSideSettings(_Section):
+    """Jarvis's own tools for other MCP clients, through `jarvis mcp serve` (ADR-085).
+
+    Only public tools can be offered, whatever this list says: an MCP client such as Claude
+    Code sends tool results to a cloud model. A private tool listed here is refused at start.
+    """
+
+    enabled: bool = True
+    tools: list[str] = Field(
+        default_factory=lambda: [
+            "weather",
+            "calculate",
+            "convert_currency",
+            "market_data",
+            "crypto_price",
+            "web_search",
+        ]
+    )
+
+
 class MailSettings(_Section):
     """Your mailbox over IMAP and SMTP with an app password in .env (ADR-057)."""
 
@@ -421,6 +441,7 @@ class Settings(_Section):
     mail: MailSettings = MailSettings()
     calendar: CalendarSettings = CalendarSettings()
     mcp: McpSettings = McpSettings()
+    mcp_server: McpServerSideSettings = McpServerSideSettings()
     briefing: BriefingSettings = BriefingSettings()
     history: HistorySettings = HistorySettings()
     server: ServerSettings = ServerSettings()

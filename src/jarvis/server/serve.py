@@ -36,6 +36,7 @@ from jarvis.console import ConsoleChannel, ConsoleRenderer
 from jarvis.core.channel import FirstAnswerChannel, UserChannel
 from jarvis.server.app import create_server
 from jarvis.server.hub import WebChannel, WebHub
+from jarvis.server.mcp_server import McpGateway
 from jarvis.server.runtime import Runtime
 
 if TYPE_CHECKING:
@@ -168,12 +169,13 @@ async def _serve(
                 runtime,
                 token=token,
                 bridge_token=token if runtime.bridge is not None else None,
+                mcp=McpGateway(app.agent) if app.settings.mcp_server.enabled else None,
             ),
             host=HOST,
             port=port,
             log_config=None,  # Jarvis's own logging setup stays in charge
             access_log=False,
-            lifespan="off",
+            lifespan="on",  # runs the MCP session manager for /mcp/
         )
         server = uvicorn.Server(config)
         if tray:

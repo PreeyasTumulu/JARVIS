@@ -7,8 +7,10 @@ websites out:
 2. The Host header must name this computer, which defeats DNS rebinding.
 3. Browsers always send an Origin header with a WebSocket or a cross-site request and cannot
    leave it out, so any request that carries one is refused. No website can reach the API.
-4. The WebSocket and the bridge need the per-launch token, which `jarvis serve` writes to the
-   data folder (only this Windows account can read it).
+4. The WebSocket, the bridge, and `/mcp/` need the per-launch token, which `jarvis serve`
+   writes to the data folder (only this Windows account can read it).
+
+`/mcp/` offers Jarvis's public tools to MCP clients through `jarvis mcp serve` (ADR-085).
 
 `GET /health` says only that Jarvis is up and which version, so a client can find it.
 """
@@ -16,10 +18,11 @@ websites out:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import secrets
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
@@ -29,6 +32,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from jarvis import __version__
 from jarvis.bridge.service import BridgeRequest
 from jarvis.server.hub import Client
+from jarvis.server.mcp_server import McpGateway, mcp_app
 from jarvis.server.runtime import Runtime
 
 log = logging.getLogger(__name__)
@@ -56,8 +60,19 @@ def create_server(
     token: str,
     hosts: Sequence[str] = LOCAL_HOSTS,
     bridge_token: str | None = None,
+    mcp: McpGateway | None = None,
 ) -> FastAPI:
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    mounted = mcp_app(mcp, token) if mcp is not None else None
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if mounted is None:
+            yield
+            return
+        async with mounted[1]():
+            yield
+
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(hosts))
 
     @app.middleware("http")
@@ -99,6 +114,8 @@ def create_server(
         await ws.accept()
         await converse(runtime, ws)
 
+    if mounted is not None:
+        app.mount("/mcp", mounted[0])
     return app
 
 

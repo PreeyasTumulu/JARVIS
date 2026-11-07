@@ -112,10 +112,11 @@ def build_parser() -> argparse.ArgumentParser:
     mcp.add_argument(
         "action",
         nargs="?",
-        choices=["list", "tools", "test"],
+        choices=["list", "tools", "test", "serve"],
         default="list",
         help="list servers (the default), tools: everything a server offers, test: connect "
-        "and show what Jarvis exposes",
+        "and show what Jarvis exposes, serve: offer Jarvis's own tools to an MCP client over "
+        "stdio (the client runs this)",
     )
     mcp.add_argument("server", nargs="?", help="the server name, for tools and test")
 
@@ -164,6 +165,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.command == "claude-hook":
         return claude_hook(settings, args.action, console)
+    if args.command == "mcp" and args.action == "serve":
+        from jarvis.server.mcp_stdio import run_mcp_stdio
+
+        return run_mcp_stdio(settings)  # before the console log: stdout carries the protocol
     log_file = setup_logging(settings.data_dir, verbose=args.verbose)
 
     if args.command == "audit":

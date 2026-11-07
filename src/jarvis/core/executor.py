@@ -276,7 +276,11 @@ class ToolExecutor:
         request = ConfirmationRequest(
             request_id=uuid.uuid4().hex[:12],
             tool=gated.tool.name,
-            summary=gated.prepared.summary,
+            summary=(
+                f"{ctx.requester} wants to: {gated.prepared.summary}"
+                if ctx.requester
+                else gated.prepared.summary
+            ),
             digest=gated.prepared.digest,
             reason=gated.verdict.reason,
             timeout_s=self._settings.safety.confirm_timeout_s,

@@ -30,7 +30,7 @@ from jarvis.core.prompts import system_prompt
 from jarvis.core.speech import SpeechStream
 from jarvis.core.tool_routing import ALWAYS, matched_groups, needs_meaning, select_tools
 from jarvis.llm.router import Router
-from jarvis.llm.types import ChatModel, LLMError
+from jarvis.llm.types import ChatModel, LLMError, ToolCall
 from jarvis.services import Services
 from jarvis.storage.repositories import HistoryLog
 from jarvis.tools.base import ContextFlags, Sensitivity, ToolContext
@@ -118,6 +118,11 @@ class Agent:
         return self._graph
 
     @property
+    def channel(self) -> UserChannel:
+        """Where confirmations are asked: voice, the terminal, and API clients."""
+        return self._channel
+
+    @property
     def busy(self) -> bool:
         return self._task is not None and not self._task.done()
 
@@ -172,6 +177,27 @@ class Agent:
         thread = threading.Thread(target=warm, name="jarvis-warm-up", daemon=True)
         thread.start()
         return thread
+
+    async def run_call(
+        self, call: ToolCall, channel: UserChannel, handled_by: str, requester: str
+    ) -> CallOutcome:
+        """One tool call from outside a conversation (an MCP client, ADR-085).
+
+        The same check, policy gate, confirmation, and audit as a call the model makes, and one
+        at a time with turns, so it never types into a window while a voice command runs.
+        """
+        async with self._turn_lock:
+            await self.prepare_tools()
+            ctx = ToolContext(
+                settings=self.settings,
+                channel=channel,
+                services=self.services,
+                session_id=self.session_id,
+                turn_id=f"mcp-{uuid.uuid4().hex[:8]}",
+                handled_by=handled_by,
+                requester=requester,
+            )
+            return await self.executor.run(call, ctx)
 
     async def run_turn(
         self,

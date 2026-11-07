@@ -354,5 +354,5 @@ async def test_scenario_with_the_real_model(
     allowed = scenario.get("first") or [first_scripted_tool(scenario)]
     if world.cloud is not None and world.cloud.requests:
         first = "none" if not result.outcomes else first  # the cloud model answered
+    check_safety(scenario, h, world, result)  # first: a wrong tool choice must not hide a leak
     assert first in allowed, f"first tool {first!r}, expected one of {allowed}: {result.text!r}"
-    check_safety(scenario, h, world, result)

@@ -28,9 +28,9 @@ from jarvis.tools.policy import PolicyGate
 from jarvis.tools.system.reminders import Reminders, ReminderScheduler
 from tests.conftest import FakeChannel, Harness, MakeApp
 
-PAIRED = "- OnePlus Nord2 5G: 0a1b2c3d4e5f on 192.168.68.110 via LAN (paired and reachable)"
-UNPAIRED = "- OnePlus Nord2 5G: 0a1b2c3d4e5f on 192.168.68.110 via LAN (reachable)"
-AWAY = "- OnePlus Nord2 5G: 0a1b2c3d4e5f (paired)"
+PAIRED = "- Test Phone: 0a1b2c3d4e5f on 192.168.1.50 via LAN (paired and reachable)"
+UNPAIRED = "- Test Phone: 0a1b2c3d4e5f on 192.168.1.50 via LAN (reachable)"
+AWAY = "- Test Phone: 0a1b2c3d4e5f (paired)"
 
 
 class FakeKde:
@@ -96,7 +96,7 @@ async def call(h: Harness, tool: str, flags: ContextFlags | None = None, **args:
 
 def test_devices_are_read_from_the_full_list() -> None:
     (paired,) = parse_devices(PAIRED)
-    assert (paired.name, paired.id, paired.usable) == ("OnePlus Nord2 5G", "0a1b2c3d4e5f", True)
+    assert (paired.name, paired.id, paired.usable) == ("Test Phone", "0a1b2c3d4e5f", True)
     (unpaired,) = parse_devices(UNPAIRED)  # what this laptop showed before pairing
     assert unpaired.reachable
     assert not unpaired.paired
@@ -116,7 +116,7 @@ async def test_an_unpaired_phone_says_how_to_pair_it() -> None:
 
 
 async def test_several_phones_need_a_name_and_the_name_picks_one() -> None:
-    two = PAIRED + "\n- Pixel 8: 99aa88bb77cc on 192.168.68.111 via LAN (paired and reachable)"
+    two = PAIRED + "\n- Pixel 8: 99aa88bb77cc on 192.168.1.51 via LAN (paired and reachable)"
     assert await make_phone(FakeKde(two)).device() is None
     assert "Several phones" in await make_phone(FakeKde(two)).why_not()
     chosen = await make_phone(FakeKde(two), device="pixel 8").device()
@@ -138,7 +138,7 @@ async def test_ring_rings_the_paired_phone_without_asking(setup: Any) -> None:
     outcome = await call(h, "ring_phone")
     assert outcome.result.ok, outcome.result.error
     assert kde.actions() == [["--device", "0a1b2c3d4e5f", "--ring"]]
-    assert "OnePlus" in outcome.result.speech
+    assert "Test Phone" in outcome.result.speech
     assert h.channel.requests == []
 
 
@@ -223,7 +223,7 @@ async def test_a_file_is_sent_after_a_yes_with_its_exact_path(setup: Any) -> Non
     assert outcome.result.ok, outcome.result.error
     (request,) = h.channel.requests
     assert "Budget 2026.xlsx" in request.summary
-    assert "OnePlus" in request.summary
+    assert "Test Phone" in request.summary
     assert kde.actions() == [["--device", "0a1b2c3d4e5f", "--share", str(report.resolve())]]
 
 

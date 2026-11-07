@@ -305,12 +305,12 @@ def spawned(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
 
 
 async def test_a_profile_opens_a_terminal(make_app: MakeApp, spawned: list) -> None:
-    profiles = {"pi": {"host": "192.168.1.20", "user": "preeyas", "port": 2222}}
+    profiles = {"pi": {"host": "192.168.1.20", "user": "me", "port": 2222}}
     h = make_app(overrides={"ssh": {"profiles": profiles}})
     outcome = await call(h, "ssh_connect", profile="my raspberry pi")
     assert outcome.result.speech == "Opening an SSH session to pi."
     assert spawned == [
-        ["C:/wt.exe", "new-tab", "--title", "pi", "ssh", "-p", "2222", "preeyas@192.168.1.20"]
+        ["C:/wt.exe", "new-tab", "--title", "pi", "ssh", "-p", "2222", "me@192.168.1.20"]
     ]
 
 

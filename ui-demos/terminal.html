@@ -64,7 +64,7 @@
 <div class="status" aria-hidden="true">
   <span class="now" id="now">idle</span>
   <span class="meter" id="meter"></span>
-  <span>jarvis 1.20.0</span>
+  <span>jarvis 1.21.0</span>
   <span>model jarvis-hermes3</span>
 </div>
 <p class="sr" aria-live="polite"><span data-kit="label"></span>. <span data-kit="say"></span> <span data-kit="ask"></span></p>
@@ -96,10 +96,10 @@ const Kit = (() => {
     idle: { say: "Say “Hey Jarvis”" },
     listening: { heard: "send the clipboard to my phone" },
     thinking: { heard: "send the clipboard to my phone" },
-    confirm: { ask: "Send what you copied to your OnePlus Nord2 5G?" },
-    tool: { tool: "send_to_phone", say: "Sending to your OnePlus Nord2 5G" },
-    speaking: { say: "Sent what you copied to your OnePlus Nord2 5G." },
-    error: { say: "Your OnePlus isn’t paired yet. Open KDE Connect on the PC and press Pair." },
+    confirm: { ask: "Send what you copied to your phone?" },
+    tool: { tool: "send_to_phone", say: "Sending to your phone" },
+    speaking: { say: "Sent what you copied to your phone." },
+    error: { say: "Your phone isn’t paired yet. Open KDE Connect on the PC and press Pair." },
   };
   const SCRIPT = [
     { state: "idle", ms: 1800, ...EXAMPLE.idle },
@@ -374,7 +374,7 @@ const Kit = (() => {
   };
   const CANON = {
     you: { heard: "send the clipboard to my phone" },
-    confirm: { ask: "Send what you copied to your OnePlus Nord2 5G?", answer: "y" },
+    confirm: { ask: "Send what you copied to your phone?", answer: "y" },
     tool: { tool: "send_to_phone", done: "ok" },
   };
   let history = [];

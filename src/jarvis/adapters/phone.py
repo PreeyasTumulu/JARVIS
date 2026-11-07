@@ -35,7 +35,7 @@ SHARE_TIMEOUT_S = 120.0  # a large file over Wi-Fi
 MAX_TEXT_CHARS = 1000
 KDE = "kdeconnect"
 NTFY = "ntfy"
-# "- OnePlus Nord2 5G: 0a1b2c on 192.168.68.110 via LAN (paired and reachable)"
+# "- Test Phone: 0a1b2c on 192.168.1.50 via LAN (paired and reachable)"
 _LINE = re.compile(r"^- (?P<name>.+?): (?P<id>[\w{}-]+)\b.*\((?P<state>[^()]*)\)\s*$")
 
 Runner = Callable[[list[str], float], Awaitable[str]]

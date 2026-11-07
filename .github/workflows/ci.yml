@@ -40,6 +40,9 @@ jobs:
       - name: No em or en dashes
         run: uv run python scripts/check_dashes.py
 
+      - name: No personal paths, addresses, numbers, emails, or keys
+        run: uv run python scripts/check_personal.py
+
       - name: The installer's dry run
         shell: powershell
         run: .\install.ps1 -DryRun -NonInteractive

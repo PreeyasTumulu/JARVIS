@@ -34,6 +34,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 25 | Jarvis as an MCP server | Built on `phase/25-mcp-server` (stacked on Phase 24), hand tested on scratch data | v1.14.0 |
 | 26 | Apps, files, and office | Built on `phase/26-apps-files-office` (stacked on Phase 25), hand tested on scratch data and the real desktop | v1.15.0 |
 | 27 | Music, developer tools, browser | Built on `phase/27-music-dev-browser` (stacked on Phase 26), git hand tested live; Spotify, Docker, SSH need your setup | v1.16.0 |
+| 28 | Screen understanding and daily news | Built on `phase/28-vision-news` (stacked on Phase 27), hand tested with real models and feeds | v1.17.0 |
 
 ## How each phase runs
 
@@ -1024,6 +1025,26 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** nothing reaches a remote, a server, or Docker without your yes or your own typing, and Spotify is never said to play when it does not.
 
+## Phase 28: Screen understanding and daily news
+
+**Goal:** questions about the screen answered by a local vision model, and a daily AI and tech digest you can hear and keep (ADR-080, ADR-096, ADR-097).
+
+**Scope**
+
+- `look_at_screen`: the screenshot and Windows OCR's text to gemma3:4b on Ollama, secrets hidden, the answer marked as outside content; Hermes loaded again right after.
+- `ai_news`: RSS and Atom feeds through the adapter, recent stories, the same story merged across feeds, one sentence each by a cloud model (Hermes as fallback), saved as Markdown with links; a `news` part in the briefing.
+- The adapter's `get_bytes` for feeds, with the same retry, rate limit, and redaction as JSON calls.
+
+**Test it**
+
+1. Open something with an error message, then "what's on my screen" or "what does this error mean".
+2. "What's new in AI", then open today's file in `Documents\Jarvis News`.
+3. "Good morning": the briefing ends with how many AI stories there are.
+
+**Measured (2026-11-07):** vision on a synthetic screen with real OCR and gemma3: 14.8 s cold, 22 s for a quick follow-up (the models swap), both answers right where gemma3 alone misread the year; Hermes back in memory afterwards. Digest from the four real feeds: 8 stories in 2.7 to 3.5 s with Groq, 15.7 to 16.2 s with Hermes alone. Tool choice ([benchmarks/phase28.md](benchmarks/phase28.md)): jarvis-hermes3 96 of 108 (89%) as scored; all four new cases right; two misses were expectations the new tools made out of date ("what's on my screen" now goes to look_at_screen, "latest news about OpenAI" to ai_news), now accepted. The model passed refresh=true to ai_news every time, so a digest under an hour old is read instead.
+
+**Exit criteria:** no screenshot leaves the laptop, every digest story keeps its link, and a story without text is never filled in by the model.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -1049,7 +1070,7 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 | 25 | Jarvis as an MCP server (done) | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
 | 26 | Apps, files, and office (done) | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
 | 27 | Music, developer tools, browser (done) | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
-| 28 | Screen understanding and daily news | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
+| 28 | Screen understanding and daily news (done) | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
 | 29 | Phone calls | Research cost, Indian numbers, and legal limits first and bring them to you; then calls that open with a disclosure, after a confirm |
 | 30 | UI demos | Five or six standalone concepts in `ui-demos/` with listening, thinking, and speaking states, screenshots in the README |
 | 31 | Open-source readiness | Demo GIF, feature list, quickstart, `.env.example`, a check that no personal paths, servers, or contacts are committed |

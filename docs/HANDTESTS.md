@@ -44,6 +44,22 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 28: Screen understanding and daily news
+
+Run on 2026-11-07 with real models and real feeds. The vision test captured a synthetic screen (an Excel window with a read-only error) instead of your real one, so nothing of yours reached the transcript; OCR, gemma3:4b, and the reload of Hermes were real.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 28.1 | `look_at_screen` "is anything wrong on the screen?" | the error, the right file name | 14.8 s cold: "Budget 2026.xlsx is showing as read-only ... save a copy" (gemma3 alone had read 2028) | pass |
+| 28.2 | `look_at_screen` "what is the amount for groceries?" | 450 | 22.0 s: "the amount for groceries is 450" | pass, slow |
+| 28.3 | `ollama ps` 25 s later | Hermes loaded, gemma3 gone | jarvis-hermes3 loaded, gemma3 unloaded | pass |
+| 28.4 | `ai_news` with Groq | 8 stories, links, saved | first run: 8 stories in 3.5 s, but one OpenAI story twice (two feeds) and "Libghostty ... a Go library" made up from an empty Hacker News item | **fail** |
+| 28.4 (after fix) | same | same | 2.7 s, no repeat, "Libghostty 1.0 was posted on Hacker News." | pass |
+| 28.5 | `ai_news` with Hermes only | the same digest, slower | 15.7 s; first run had invented "a tool for generating fake comments"; after the fix "no details are available" | pass after fix |
+| 28.6 | briefing line | the count | "8 AI and tech stories today; say "what's new in AI" to hear them." | pass |
+
+**Needs your hands:** "what's on my screen" on your real screen, by voice.
+
 ## Phase 27: Music, developer tools, browser
 
 Run on 2026-11-07 with `jarvis chat` and the real model through `scripts/drive_chat.py`, on a scratch data folder and config with a scratch repository `shop` (one changed file) and a local bare remote.

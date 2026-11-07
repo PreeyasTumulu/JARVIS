@@ -701,6 +701,8 @@ jarvis/
       interaction.py          speak, ask_user
       memory.py               remember, list_memories, forget
       notes.py                take_note, read_notes, open_notes (a Markdown file per day, ADR-088)
+      vision.py               look_at_screen (gemma3 with the OCR text, then Hermes reloaded, ADR-096)
+      news.py                 ai_news (feeds, a cloud model writes it, saved with links, ADR-097)
       media/                  spotify.py (play_spotify: search API, desktop app, ADR-091)
       dev/                    git.py (git_changes, git_commit, git_push, ADR-094), ssh.py (ssh_connect, ADR-093)
       office/                 sheets.py (add_sheet_row: Excel, openpyxl, CSV, ADR-089),

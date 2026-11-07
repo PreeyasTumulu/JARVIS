@@ -9,7 +9,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 27 (v1.16.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 28 (v1.17.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -28,7 +28,8 @@ Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools
 | Mail and calendar | "any new email", "read the one from Ravi", "reply that I'll send it tonight", "what's on today", "my next meeting", "am I free on Friday" |
 | Focus and clipboard | "start a focus session for 50 minutes", "end my focus session", "what did I copy earlier", "put the second last thing I copied back on the clipboard" (clipboard history is off until you turn it on) |
 | Memory | "remember that my manager is Ravi", "who is my boss", "what did I ask about Docker last week", "when did I check the weather", "forget what I asked about my doctor" |
-| Briefing | "good morning" or "brief me": weather, today's calendar and reminders, unread email and messages |
+| Briefing and news | "good morning" or "brief me": weather, today's calendar and reminders, unread email and messages, and how many AI stories there are; "what's new in AI" (saved with links) |
+| The screen | "what's on my screen", "what does this error mean" (a local vision model; the screenshot never leaves the laptop) |
 | Thinking | "think harder: why did the Roman empire fall in the west but not in the east" (a free cloud model) |
 | GitHub (and any MCP server) | "any open issues on JARVIS", "read issue 12", "open an issue titled ..." (asks first), "find repos about wake words" |
 | Claude Code | Claude asks "Which database? one, PostgreSQL. two, SQLite." and you say "two" |

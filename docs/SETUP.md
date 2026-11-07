@@ -455,6 +455,11 @@ Nothing to set up: Windows OCR and its English language data come with Windows (
 - **SSH:** `[ssh.profiles.pi]` with `host`, `user`, `port`, and `key` (for example `"~/.ssh/id_ed25519"`). "Connect to my pi" opens Windows Terminal with the session; you type in it.
 - **Git:** `[git.repos]` with `jarvis = "C:/Projects/JARVIS"`. "What changed in jarvis", "commit it", "push it": the commit and the push each ask first. `[git] remote` is the remote to push to (default origin).
 
+## 5r. The screen and the daily news (Phase 28)
+
+- **"What's on my screen"** uses `gemma3:4b` on Ollama (`ollama pull gemma3:4b`, about 3.3 GB) with Windows OCR. Nothing leaves the laptop. `[vision] model` picks another vision model; `[vision] enabled = false` turns it off. "Read my screen" still reads the text word for word with OCR alone.
+- **"What's new in AI"** reads the feeds in `[news] feeds` and saves the digest with links in `Documents\Jarvis News`. It is written by Groq when `GROQ_API_KEY` is set (the news is public) and by the local model otherwise. Add or remove feeds in `config/local.toml`; the morning briefing says how many stories there are (`[briefing] parts` includes `news`).
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

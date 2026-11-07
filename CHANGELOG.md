@@ -7,6 +7,8 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 ## [Unreleased]
 
 ### Added
+- "What's on my screen", "what does this error mean": a local vision model (gemma3:4b) looks at the screen with Windows OCR's exact text; nothing leaves the laptop (ADR-096).
+- "What's new in AI": a daily AI and tech digest from news feeds, saved as Markdown with links, and a line in the morning briefing (ADR-097).
 - "Play lofi beats on spotify": found with Spotify's search API and started in the app, saying "Playing ..." only when Spotify does (ADR-091).
 - "Start the shop project", "run redis on port 6379": compose projects and images started after a yes, then waited for until healthy or answering (ADR-092).
 - "Connect to my pi": SSH profiles from config open in Windows Terminal (ADR-093).

@@ -325,6 +325,14 @@ A published port that accepts a connection is taken as ready, but an app can acc
 
 Commit hooks run as they do from a terminal and can take time or fail. A push that needs credentials Git cannot ask for in the background fails with that reason. Pushing to main asks like any push, with the branch named; protect main on GitHub if you want a second guard.
 
+### R70. The vision model and video memory
+
+gemma3:4b and Hermes do not fit in 4 GB of video memory together, so each screen question unloads Hermes and loads gemma3, and the reload afterwards turns it back. A first question takes about 15 s and a quick follow-up about 22 s. What the screen shows can contain instructions ("ignore your rules"); the answer is marked as outside content and secrets are hidden, but the model reads everything on every screen, including other windows.
+
+### R71. The news digest
+
+Feeds change their addresses and formats; a feed that fails is left out and named in the result. A one-sentence summary can still lose or slightly bend a detail of its article (the live test caught a model calling a Zig library "a Go library" before the fix); the saved file keeps the link to check. Google News links are redirects through Google. Feeds are parsed with Python's own XML parser, whose expat protects against entity expansion attacks.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

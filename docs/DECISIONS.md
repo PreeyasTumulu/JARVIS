@@ -493,6 +493,7 @@ Yours, asked 2026-11-01, all as recommended.
 - **Decision (2026-11-05, your choice, recommended):** "what's on my screen" takes a screenshot and sends it to a small vision model on Ollama. The screenshot never leaves the laptop. Windows OCR (Phase 15) stays as the fast path for reading text.
 - **Why:** screen content is private by the project rule, and only a local model keeps that rule.
 - **Cost:** a model download of about 3 GB and a few seconds per answer on a 4 GB GPU; it competes with Hermes for video memory, so one of them is unloaded while the other runs.
+- **Done (Phase 28):** see ADR-096.
 
 ### ADR-081: The web page and the overlay are removed; the server stays as an API
 
@@ -585,6 +586,18 @@ Yours, asked 2026-11-01, all as recommended.
 - **Decision (2026-11-07):** tool arguments the tool does not declare are still ignored, except words that mean later (`at`, `in_minutes`, `time`, `when`, `delay`, ...): those make the call invalid with "use schedule_app or set_reminder".
 - **Why:** the Phase 27 benchmark had the model call `open_app(name="vs code", at="tomorrow 9")`; the ignored `at` would have opened VS Code at once.
 - **Cost:** none seen; the model retries with the right tool.
+
+### ADR-096: gemma3 with the OCR text, then Hermes loaded again
+
+- **Decision (2026-11-07, as recommended):** `look_at_screen` captures every screen, scales it to at most 1600 pixels, and sends it to `gemma3:4b` on Ollama's own API with Windows OCR's exact text of the same pixels and the question. The vision model stays loaded `[vision] keep_alive_s` (30 s), and Hermes is loaded again in the background right after, so the next command does not wait. Secret-looking values are hidden from the OCR text and from the answer, and the answer is marked as outside content. `read_screen` (OCR only) stays for reading text word for word.
+- **Why:** gemma3:4b was already installed and answered in 2 s warm, but read 2026 as 2028 on its own; with the OCR text it read the year and the amounts right in the live test. Only one of the two models fits in 4 GB, so the reload hides the swap from the next ordinary command.
+- **Cost:** 15 s for a first question with the model cold and about 22 s for an immediate follow-up, since the models swap places each time (R70).
+
+### ADR-097: The AI and tech digest from feeds, written by a cloud model
+
+- **Decision (2026-11-07, as recommended):** `ai_news` reads the RSS and Atom feeds in `[news] feeds` (Hacker News, The Verge AI, TechCrunch AI, Google News "artificial intelligence") through the web API adapter, keeps stories from the last 36 hours, merges the same story from two feeds, and keeps 8, taking turns between feeds. A cloud model writes one sentence per story (the news is public), with Hermes as the fallback; feed text is marked as data, a story with no real text is said by its title only, and a story the model skips keeps its title. The digest is made once a day and saved as Markdown with links in `[news] folder` (`Documents/Jarvis News/<date>.md`); later requests read the file. The morning briefing gains a `news` part: "8 AI and tech stories today; say what's new in AI to hear them."
+- **Why:** feeds are free, need no keys, and keep each story's link; a cloud model writes a better digest in about 3 s, while Hermes takes about 16 s.
+- **Cost:** the live test found a story repeated across two feeds and invented details for link-only Hacker News items; both are fixed with tests, but a summary can still be less exact than its article (R71).
 
 ## Open decisions
 

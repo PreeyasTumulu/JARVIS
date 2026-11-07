@@ -57,7 +57,10 @@ Run on 2026-11-07 in the browser pane and with Playwright on Edge.
 | 30.5 | a state button, then Yes, then key 7 | pauses the run, Yes leads to the tool and then speaking, 7 shows the error | confirm, "Play the demo", tool `send_to_phone`, speaking, error | pass |
 | 30.6 | console errors | none | none | pass |
 
-**Needs your hands:** "Use my microphone" with your own microphone, and choosing a direction for the real UI.
+| 30.7 | `chat.html` in all seven states, light and dark, desktop and phone | each state readable, the orb in the right place | the glow's wide second ring left a hard inner rectangle on a phone, and an answered card was an empty box; replaced by an inset bloom and a quiet line | pass after fix |
+| 30.8 | `chat.html` live: type "send the clipboard to my phone", Yes, then the mic, then New chat | confirmation, tool, reply word by word, a spoken turn, the orb back in the middle | as expected, no page errors | pass |
+
+**Needs your hands:** "Use my microphone" with your own microphone, and `/review-animations` on `ui-demos/chat.html` if you want the motion review skill's report.
 
 ## Phase 29: Your phone, for free
 

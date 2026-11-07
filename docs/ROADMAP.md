@@ -36,7 +36,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 27 | Music, developer tools, browser | Built on `phase/27-music-dev-browser` (stacked on Phase 26), git hand tested live; Spotify, Docker, SSH need your setup | v1.16.0 |
 | 28 | Screen understanding and daily news | Built on `phase/28-vision-news` (stacked on Phase 27), hand tested with real models and feeds | v1.17.0 |
 | 29 | Your phone, for free | Built on `phase/29-phone-bridge` (stacked on Phase 28), hand tested on this laptop; pairing the phone needs you | v1.18.0 |
-| 30 | UI demos | Built on `phase/30-ui-demos` (stacked on Phase 29), checked in the browser; the real microphone needs you | v1.19.0 |
+| 30 | UI demos, then the chosen chat | Built on `phase/30-ui-demos` (stacked on Phase 29), checked in the browser; the real microphone needs you | v1.20.0 |
 
 ## How each phase runs
 
@@ -1088,6 +1088,15 @@ Try it with a light window open, say a command that opens an app (it should rece
 **Measured (2026-11-07):** all 42 states (six concepts by seven) captured and checked at 1000 by 625 and at a phone's 390 by 844. Two layout problems were found and fixed: the pill's confirmation pushed its buttons apart, and the edge glow read as a hard frame. A third fix: the terminal showed a failed tool as "ok". The 24 README screenshots come to 664 KB.
 
 **Exit criteria:** every concept shows all seven states, opens offline with no network requests, and is checked by a test.
+
+**The chosen direction (2026-11-07, v1.20.0):** you picked the orb and the edge glow. `ui-demos/chat.html` combines them around a conversation (ADR-101).
+- **The orb:** glides from the middle into the header.
+- **The edge glow:** a thin turning ring plus a soft inset bloom.
+- **The conversation:** live words both ways, and confirmation cards.
+- **Typing:** type, talk, or stop.
+- **Themes:** light and dark, with a remembered switch.
+
+It was checked in all seven states, light and dark, at 1000 by 680 and 390 by 844, plus a live typed run with Yes, the mic, and New chat. That found and fixed two problems: a hard inner edge in the glow, and an answered confirmation left as an empty box. Six design and animation skills were installed for it: emil-design-eng, improve-animations, choreograph, animation-performance, impeccable, and ui-ux-pro-max. review-animations is also installed, but only you can start it (`/review-animations`).
 
 ## Beyond 1.0
 

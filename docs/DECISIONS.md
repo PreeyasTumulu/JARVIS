@@ -631,6 +631,20 @@ Yours, asked 2026-11-01, all as recommended.
   - **The kit:** keeps the seven states the same everywhere without a build step for whoever opens them.
 - **Cost:** the pages are simulations. The real UI still has to bind these states to the `/ws` events, with a safe way for a local page to connect (R74). The real microphone was not tried, because it needs your permission in the browser.
 
+### ADR-101: The chosen direction: the orb and the edge glow around a chat
+
+- **Decision (2026-11-07, your choice after seeing the six concepts):** the new interface takes its shape from the orb and the edge glow, as a chat. `ui-demos/chat.html`:
+  - **The orb:** sits large in the middle while the chat is empty, then glides up into the header once you talk (720 ms, a strong ease-in-out; New chat sends it back).
+  - **The edge glow:** the window's edge glows in the orb's colour for the current state. It is a thin turning ring plus a soft inset bloom; the demo's wider second ring left a hard inner edge.
+  - **The conversation:** your words appear in your bubble as you speak, and Jarvis's reply appears word by word while it is spoken. A confirmation is a card in the conversation with Yes and No. Once answered, it becomes a quiet line ("You said yes.").
+  - **Typing:** a message box with a mic button, and a send button that becomes Stop while Jarvis works.
+  - **Themes:** light and dark follow Windows, and a button switches them; the choice is remembered on this computer. The state colours are the same in both.
+  - **Type:** Sitka for Jarvis's words and Segoe UI Variable for yours.
+  - **Motion,** following the emil-design-eng skill: custom ease-out curves, interface motion under 300 ms, transitions rather than keyframes so changes can be interrupted, messages that enter from 98% scale with a 2 px blur and never from nothing, a press scale on every button, and reduced motion keeping fades but dropping movement.
+  - **The kit:** gains `play`, `stop`, `picked`, and `data-kit-autoplay="off"`, so the chat waits for you instead of starting the scripted run.
+- **Why:** you liked the orb's speaking animation and the edge glow, and asked for a chat-like interface built from them.
+- **Cost:** it is still a demo, simulated on the page (ADR-100). Wiring it to `jarvis serve` is the next UI step, and needs the safe local-page connection noted in R74.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

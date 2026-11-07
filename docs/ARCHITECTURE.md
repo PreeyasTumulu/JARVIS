@@ -203,7 +203,7 @@ Taken from OpenVoiceOS's intent pipeline and Home Assistant's "prefer handling c
 |---|---|---|
 | `exact_phrase` | whole short commands, and "yes" to the briefing offer | "pause the music", "hang up" |
 | `arithmetic` | a request that is only a sum (ADR-082) | "what is 18 percent of 2400" |
-| `template` | one slot filled from this laptop: an app that is in the app index, a volume level, mute | "open notepad", "volume 30" |
+| `template` | one slot filled from this laptop: an app that is in the app index, a volume level, mute, a note | "open notepad", "volume 30", "note that the plumber comes on Tuesday" |
 | `agent` | everything else: the model | "message Mom that I'll be late" |
 
 A match is only a proposed call. It enters the graph at `guard` and passes the policy gate like any call the model makes, so a stage can never run a tool by itself. Every turn records which stage handled it as `handled_by` (`exact_phrase`, `arithmetic`, `template`, `agent`, or `cloud`) in `command_history` and in the audit log. "open my report" falls through to the model, because only exact app index names and aliases match the template ("open youtube" opens the YouTube app only if one is installed). On a fresh data folder the first Start menu scan takes longer than the stage limit, so that one request goes to the model while the index builds.
@@ -594,7 +594,7 @@ SQLite at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with `PRAGMA use
 | `file_index` | path, name, normalized name, folder flag, size, modified time (only used when Everything is not installed) |
 | `index_meta` | when each index was last built and how many items it has |
 | `notifications` | Windows id, app id, app name, title, body, created_at, seen_at, read_at (allowed apps only; deleted after `keep_days`) |
-| `reminders` | kind (timer or reminder), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at |
+| `reminders` | kind (timer, reminder, or app: a scheduled open or close), message, due_at, created_at, status (pending, done, cancelled, missed), fired_at, action_json (the tool, its arguments, and the yes it was given, ADR-087) |
 | `memories` | text, kind (`user` or `context`), created_at (facts you asked Jarvis to remember) |
 | `cloud_usage` | day, provider, requests, prompt and completion tokens (free-tier daily caps) |
 
@@ -700,6 +700,9 @@ jarvis/
       catalog.py              the list of tools exposed to the model
       interaction.py          speak, ask_user
       memory.py               remember, list_memories, forget
+      notes.py                take_note, read_notes, open_notes (a Markdown file per day, ADR-088)
+      office/                 sheets.py (add_sheet_row: Excel, openpyxl, CSV, ADR-089),
+                              calculator.py (calculator_show, ADR-090)
       secrets.py              hides secret-looking values in text tools read
       apps/                   app index (SQLite), open/focus/close, window matching, vscode, docker
       ui/                     type_text, click, press_keys, read_window_text; key parsing; risk rules

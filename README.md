@@ -9,14 +9,15 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 25 (v1.14.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 26 (v1.15.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
 | | Examples |
 |---|---|
-| Apps and windows | "open VS Code", "switch to WhatsApp", "close the calculator", "type hello world in Notepad", "click Save in Paint", "what does Notepad say", "what's on my screen" (OCR where apps show no text) |
-| Files and projects | "find my resume", "read the README in Downloads", "open this file in VS Code", "show the logs of the postgres container" |
+| Apps and windows | "open VS Code" (and how long it took), "close Spotify in 20 minutes", "switch to WhatsApp", "close the calculator", "type hello world in Notepad", "click Save in Paint", "what does Notepad say", "what's on my screen" (OCR where apps show no text) |
+| Files and projects | "open my resume", "read the README in Downloads", "open this file in VS Code", "show the logs of the postgres container" |
+| Notes and sheets | "note that the plumber comes on Tuesday", "what did I note yesterday", "open my notes", "add groceries and 450 to my budget sheet" (asks first), "show 18 percent of 2400 in the calculator" |
 | Web | "search YouTube for lofi music", "look up Alan Turing on Wikipedia", "search the web for the latest Python release", "summarize https://..." |
 | Data | "what's the weather tomorrow in Bangalore", "price of Reliance shares", "bitcoin in rupees", "convert 100 dollars to rupees" |
 | Media | "pause the music", "next song", "resume", "what's playing" (instant, no model needed), in Spotify, YouTube, or any player |

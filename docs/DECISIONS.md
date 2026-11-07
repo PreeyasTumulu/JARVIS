@@ -531,6 +531,31 @@ Yours, asked 2026-11-01, all as recommended.
 - **Why:** Llama's misses are worse in kind: twice it answered with tool syntax as text ("open wikipedia and browser_type ..."), which would be read aloud, and once it made up a reply from a contact that does not exist ("Zork said hi back."). Hermes's misses were reasonable alternatives (opening Notepad for a vague request).
 - **Cost:** about three times slower replies than Llama. Revisit when the guard refuses replies that contain tool names or "call X with", which would remove Llama's worst failure.
 
+### ADR-087: Apps opened with timing, and opened or closed later
+
+- **Decision (2026-11-07, as recommended: both):** `open_app` waits up to `[apps] open_wait_s` (10 s) for a new window and says how long it took ("Notepad is open, in 1.1 seconds"), or that the app was already running. `schedule_app` opens or closes an app later ("close Spotify in 20 minutes", "open VS Code at 9"). It is a reminder of kind `app` (migration 10 adds `action_json`), so it survives a restart and is listed and cancelled with the timers. When you schedule it, the action is rated as if it ran now, and a yes is asked then if it needs one. When it falls due, the scheduler runs it through `Agent.run_call` and the policy gate rates it again; the earlier yes answers the gate's question only for the same arguments (`ApprovedChannel`, bound to the digest), and anything else is asked as usual. An action is never run late: one that fell due while Jarvis was off is reported as missed.
+- **Why:** asking again in 20 minutes would usually find you away, and a no by timeout would make "close Spotify in 20 minutes" fail exactly when it is useful; asking now, when you said it, is the meaningful yes. The gate still runs at the time, so a blocked app stays blocked.
+- **Cost:** a scheduled close runs while you may be away. Apps still ask about unsaved work, and you can cancel it ("cancel the spotify one").
+
+### ADR-088: Notes as one Markdown file per day
+
+- **Decision (2026-11-07, as recommended):** "note that ...", "jot down ...", "write down ...", and "make a note: ..." save a timestamped line in `{documents}/Jarvis Notes/<date>.md` (`[notes] folder`), answered by the router's template stage without a model. "Read my notes", "what did I note yesterday", and "open today's notes" (Notepad) read and open them. Notes read back are marked as data, because anything can edit a file in Documents. "Add a note to ..." without "that" or a colon is left to the model, since it can mean another app.
+- **Why:** plain files you own, readable without Jarvis, one per day so "yesterday's notes" is one file; the template stage makes the most common note instant and removed a wrong argument the live model passed.
+- **Cost:** notes are not searched by meaning yet, and a note can only be added, not edited, by voice.
+
+### ADR-089: Adding a row to a spreadsheet
+
+- **Decision (2026-11-07, as recommended, with one correction):** `add_sheet_row` always asks first (risk confirm) with the row shown, and reads the row back. A workbook open in Excel is written through Excel itself (pywin32), found in the running object table or, when Excel has not registered there yet, through its workbook window (`WM_GETOBJECT`). Jarvis never saves it: the file on disk changes when you save. A closed `.xlsx` or `.xlsm` is written with openpyxl after a copy is kept in `backups\sheets` in the data folder. A `.csv` gets one line in its own delimiter. A workbook locked by another program is refused. A spreadsheet made after the file index was built triggers one rebuild before giving up.
+- **Correction:** the question said "Ctrl+Z works" for the Excel route. It does not: Excel clears its undo history for changes made by another program. What holds instead: nothing is saved, so closing without saving drops the row.
+- **Why:** writing into the open workbook keeps what you typed there and avoids a locked file; the backup covers what openpyxl may drop (images, some charts) when it saves.
+- **Cost:** a new dependency (openpyxl). Excel converts what it is given as if you typed it ("2026-11-07" becomes a date), while openpyxl keeps text as text.
+
+### ADR-090: Sums shown in the Calculator app
+
+- **Decision (2026-11-07, as recommended):** `calculator_show` is offered only when you ask for the Calculator app. Jarvis works the sum out first, opens Calculator, switches it to Scientific (Alt+2, so 2 + 3 * 4 is 14), clears it, types the sum, presses Enter, and reads the display through UI Automation. Its answer is Jarvis's own; when the display differs it says both. Only + - * / and brackets are typed.
+- **Why:** you see the sum in the app you asked for, and the two answers check each other.
+- **Cost:** it depends on Calculator's keyboard shortcuts and its English "Display is" text (R65), and it takes the focus for about a second.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

@@ -301,6 +301,18 @@ A streamed reply is spoken before the model has finished, so text the model writ
 
 `jarvis mcp serve` lets another program, often driven by a cloud model, call Jarvis's tools. Only public tools can be offered, every call meets the policy gate and is audited with the client's name, and a call that needs a yes is asked on Jarvis's own channels. What remains: a public tool can still act on this laptop (adding `type_text`, `click`, or `press_keys` to `[mcp_server] tools` lets the client type into your windows within the gate's rules), and the client sees the results of what it may call. The default list only reads public data and does sums. The client's name comes from its own handshake and is not proof of who it is; anything that can run `jarvis mcp serve` as you can call the listed tools.
 
+### R64. Writing to spreadsheets
+
+Excel joins the running object table only after its window first loses focus, so a workbook you just opened is found through its window instead (seen in the live test). Rows written through Excel cannot be undone with Ctrl+Z (Excel clears its undo history for automation); they are not saved until you save. openpyxl rewrites a closed workbook and can drop parts it does not understand, so a copy is kept first in `backups\sheets` (not deleted automatically yet). Excel turns typed-looking values into dates and numbers, as it does for you. A workbook open in Excel under another Windows account cannot be reached and is refused.
+
+### R65. The Calculator app
+
+`calculator_show` presses Alt+2 for Scientific mode and reads the display by its accessible text, "Display is ...". A Calculator update that changes the shortcut, or Windows in another language, would break reading the answer; Jarvis then still says its own answer and that it could not read the display. Typing goes through SendInput and stops if Calculator loses the focus.
+
+### R66. Actions that run later
+
+A scheduled open or close runs while you may be away, with the yes you gave when you scheduled it, for exactly that app and action. It is never run late after Jarvis was off, the gate rates it again when it runs, and apps still ask about unsaved work. Cancel it with "cancel the ... one".
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

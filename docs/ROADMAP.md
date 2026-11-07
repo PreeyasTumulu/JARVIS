@@ -32,6 +32,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 23 | Research: other assistants | On `phase/23-research` (stacked on Phase 22), docs only | v1.12.0 |
 | 24 | Core on LangGraph and ChromaDB | Built on `phase/24-core` (stacked on Phase 23), hand tested on scratch data | v1.13.0 |
 | 25 | Jarvis as an MCP server | Built on `phase/25-mcp-server` (stacked on Phase 24), hand tested on scratch data | v1.14.0 |
+| 26 | Apps, files, and office | Built on `phase/26-apps-files-office` (stacked on Phase 25), hand tested on scratch data and the real desktop | v1.15.0 |
 
 ## How each phase runs
 
@@ -974,6 +975,31 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** no private tool can be offered, every call is audited with the client's name, and nothing that needs a yes runs without one from you.
 
+## Phase 26: Apps, files, and office
+
+**Goal:** the everyday desk jobs from the brief: apps opened with timing or later, a file opened by name, notes, a row in a sheet, and the Calculator app (ADR-087 to ADR-090).
+
+**Scope**
+
+- `open_app` waits for the window and says how long it took; `schedule_app` opens or closes later, with the yes asked once when you say it (`ApprovedChannel`), the gate again when it runs, and never late.
+- `open_file` takes the name as you said it ("open my resume") in one call.
+- `take_note`, `read_notes`, `open_notes`; "note that ..." in the router's template stage.
+- `add_sheet_row`: Excel through pywin32 (found by the running object table or the workbook window), openpyxl with a backup, CSV; always asks first and reads back.
+- `calculator_show`: Scientific mode, the sum typed, the display read and checked.
+- Router pipeline tests; the benchmark gained seven cases for these tools.
+
+**Test it**
+
+1. "open notepad": it says how long it took.
+2. "close spotify in 1 minute", say yes, wait: Spotify closes and Jarvis says so.
+3. "note that the plumber comes on tuesday", then "what did I note today".
+4. With a budget workbook in Documents open in Excel: "add tea and 40 to my budget sheet", yes: the row appears, unsaved.
+5. "show 18 percent of 2400 in the calculator".
+
+**Measured (2026-11-07):** Calculator opened in 1.1 s and read back 432 and 4875 correctly; a scheduled open fired and ran through the gate; a note took 6 ms without the model; a row through a running Excel and through openpyxl each took 0.1 to 1.1 s. Tool choice: [benchmarks/phase26.md](benchmarks/phase26.md).
+
+**Exit criteria:** nothing is written to a file without a yes, a scheduled action never runs late or without the gate, and every answer from Calculator is checked against Jarvis's own.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -997,7 +1023,7 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 | 23 | Research (done) | Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, strong "JARVIS" repos: architecture, plugins, UI, what users like, what is weak; "what we take, what we do better" in RESEARCH.md |
 | 24 | Core on LangGraph and ChromaDB (done) | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; from Phase 23: a tiered router pipeline with `handled_by` on every turn, a guard node (schema check, one repair, no duplicate calls, a step cap), named graph states mapped to UI states, tool options `cancel_on_interruption` and `timeout_secs`, sentence-streamed Piper, a per-stage latency breakdown, a test that every tool entry point meets the gate; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
 | 25 | Jarvis as an MCP server (done) | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
-| 26 | Apps, files, and office | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
+| 26 | Apps, files, and office (done) | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
 | 27 | Music, developer tools, browser | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
 | 28 | Screen understanding and daily news | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
 | 29 | Phone calls | Research cost, Indian numbers, and legal limits first and bring them to you; then calls that open with a disclosure, after a confirm |

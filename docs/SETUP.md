@@ -441,6 +441,13 @@ Then: "good morning" or "brief me" (weather, today's calendar and reminders, unr
 
 Nothing to set up: Windows OCR and its English language data come with Windows (check with `uv run python -c "from winrt.windows.media.ocr import OcrEngine; print([l.language_tag for l in OcrEngine.available_recognizer_languages])"`). Then: "what does this game window say" (read with OCR when the app shows no text to Windows), "click Save draft in ..." (asks first when it can only be found by reading the screen), "what's on my screen". Turn the fallbacks off with `[ui] ocr_fallback = false`.
 
+## 5p. Notes, spreadsheets, Calculator, and apps later (Phase 26)
+
+- **Notes** go to `Documents\Jarvis Notes`, one Markdown file per day. Change it with `[notes] folder = "D:/Notes"` in `config/local.toml`.
+- **Spreadsheets:** "add groceries and 450 to my budget sheet" finds the `.xlsx`, `.xlsm`, or `.csv` in your allowed folders and asks first. If the workbook is open in Excel the row goes into it, unsaved (save it to keep it; Ctrl+Z cannot undo it); otherwise the file is written and a copy of the old one is kept in the data folder's `backups\sheets`.
+- **Calculator:** "show 18 percent of 2400 in the calculator" types the sum into Windows Calculator and reads its answer.
+- **Apps later:** "close Spotify in 20 minutes" or "open VS Code at 9". Keep Jarvis running; "what's scheduled" and "cancel the spotify one" work like reminders. `[apps] open_wait_s` sets how long opening waits for a window.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

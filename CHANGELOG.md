@@ -7,6 +7,12 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 ## [Unreleased]
 
 ### Added
+- "Close Spotify in 20 minutes", "open VS Code at 9": apps opened or closed later, asked once when you say it and checked by the gate again when it runs (ADR-087).
+- Opening an app waits for its window and says how long it took.
+- Notes: "note that ...", "what did I note yesterday", "open my notes", in a Markdown file per day in Documents (ADR-088).
+- "Add groceries and 450 to my budget sheet": a row added to an Excel or CSV file after a yes, through Excel when the workbook is open (ADR-089).
+- "Show 18 percent of 2400 in the calculator": the sum typed into Windows Calculator and its answer checked (ADR-090).
+- Tests of their own for the router pipeline.
 - Jarvis as an MCP server: `jarvis mcp serve` offers the public tools in `[mcp_server] tools` to Claude Code, Claude Desktop, and other clients, through the running Jarvis's policy gate and audit log; a call that needs a yes is asked on Jarvis's own voice and terminal, naming the client (ADR-085).
 - `config/ollama/llama3.2-3b.Modelfile`: Llama 3.2 3B as a faster local model option (ADR-086).
 

@@ -44,6 +44,28 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 26: Apps, files, and office
+
+Run on 2026-11-07 on the real desktop with a scratch data folder, config, and work folder (the only allowed folder), with Excel and Calculator closed beforehand: first tool calls without a model, then `jarvis chat` with the real model through `scripts/drive_chat.py`.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 26.1 | `open_app calculator` | opens, says how long | "Calculator is open, in 1.1 seconds." | pass |
+| 26.2 | `calculator_show 18/100*2400`, `(1250+375)*3` | typed, read back, the same | "It's 432, and Calculator shows the same."; 4875, the same | pass |
+| 26.3 | `schedule_app open calculator in 3 s` with the scheduler running | runs through the gate when due | "As you asked: Calculator is open, in 0.8 seconds." | pass |
+| 26.4 | `take_note`, `read_notes` | saved and read back | "Noted."; "One note from today: the live test ran" | pass |
+| 26.5 | add a row to a closed `.xlsx` | asked, written, backup kept | asked with the row shown; row 2 written; copy in `backups\sheets` | pass |
+| 26.6 | add a row to a `.csv` made after the index was built | found and appended | first run: "No spreadsheet ... matches 'log'" | **fail** |
+| 26.6 (after fix) | same | same | one rebuild, then `10:00;"tea; biscuits"` appended | pass |
+| 26.7 | add a row to the workbook open in Excel | written in Excel, unsaved | first run: comtypes could not set `Cells(row, column)` (AttributeError, nothing written); second: Excel not yet in the running object table, so the locked file was refused | **fail** |
+| 26.7 (after fix) | same | same | pywin32, found also through the workbook window; row 3 in Excel, workbook unsaved, file on disk unchanged; closed without saving | pass |
+| 26.8 | chat: "note that the plumber comes on tuesday" | saved | first run: the model called take_note with `{"day": "tuesday"}`; now the template stage saves it in 6 ms without the model | pass after fix |
+| 26.9 | chat: "add tea and 40 to my budget live sheet" | the row, after a yes | first run: the model passed `sheet = "live"`; a sheet name that is part of the file name is now ignored; row 2 written | pass after fix |
+| 26.10 | chat: "close spotify in 20 minutes", "what's scheduled", "cancel the spotify one" | scheduled after a yes, listed, cancelled | first run: `at = "in 20 minutes"` refused, and the other two found no tools; after the fixes: "I'll close Spotify at 10:55 AM.", "One scheduled action: Close Spotify, 10:55 AM.", "Cancelled." | pass after fix |
+| 26.11 | chat: "work out 12 times 7 in the calculator" | Calculator, 84 | `calculator_show 12*7`: "It's 84, and Calculator shows the same." | pass |
+
+**Also found:** the new note phrases caught "add a note to call mom" in an MCP test; "make, take or add a note" now needs "that" or a colon. Read-back dates from Excel ("2026-11-07 00:00:00+00:00") are now said as dates. Not run: open_notes live (it would show your own Notepad tabs), a scheduled close that falls due while you are away, a real workbook of yours.
+
 ## Phase 25: Jarvis as an MCP server
 
 Run on 2026-11-07 with `jarvis serve --no-voice --port 8799` on a scratch data folder and config (with `open_app`, `send_whatsapp`, and `read_file` added to `[mcp_server] tools` on purpose, and `confirm_timeout_s = 6`), driven by the MCP SDK's own stdio client starting `uv run jarvis mcp serve`, and a WebSocket client standing in for a UI.

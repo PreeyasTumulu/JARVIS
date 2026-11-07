@@ -7,6 +7,11 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 ## [Unreleased]
 
 ### Added
+- Your phone for free: "find my phone" rings it, "send this file / the clipboard / a screenshot to my phone", notifications, and reminders that ring the phone, through KDE Connect on your Wi-Fi or an ntfy push away from home; Claude Code's waiting questions reach the phone too (ADR-098).
+- Research on calls where Jarvis speaks: cost, Indian numbers, and the law (RESEARCH.md 2.4); not built (ADR-099).
+
+### Fixed
+- An optional argument the model writes as `{"null": true}` now counts as left out (seen with set_reminder's `at`).
 - "What's on my screen", "what does this error mean": a local vision model (gemma3:4b) looks at the screen with Windows OCR's exact text; nothing leaves the laptop (ADR-096).
 - "What's new in AI": a daily AI and tech digest from news feeds, saved as Markdown with links, and a line in the morning briefing (ADR-097).
 - "Play lofi beats on spotify": found with Spotify's search API and started in the app, saying "Playing ..." only when Spotify does (ADR-091).

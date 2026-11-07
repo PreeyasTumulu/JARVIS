@@ -376,6 +376,9 @@ Text read from the clipboard, a window, a file, or a container log has values th
 | `send_whatsapp(contact, message)` | 6 | confirm (floor, cannot be lowered); asks which contact when a name fits several | private |
 | `call_contact(contact)` | 9, 17 | confirm (floor); calls a saved contact by the WhatsApp app, or Phone Link if set | private |
 | `hang_up()` | 17 | safe; presses WhatsApp's end call button | private |
+| `ring_phone()` | 29 | safe; your own phone by KDE Connect, an urgent ntfy push when it is away | public |
+| `notify_phone(message, title?)` | 29 | safe, egress; the way is pinned when prepared; confirm when the push would go over the internet with private data in the conversation | public |
+| `send_to_phone(item?, text?)` | 29 | confirm (floor); a file through the file guard, a link, the clipboard, a screenshot, or text, over the Wi-Fi only | private |
 | `read_notifications(person?)` | 7 | safe; only apps on `notifications.apps` | private, untrusted |
 | `read_mail(sender?, unread_only?)`, `read_email(message)` | 11 | safe; the folder is opened read-only and nothing is marked read | private, untrusted |
 | `reply_email(message, text, reply_all?)` | 11 | confirm (floor); only to the people on that email, addresses read out | private |
@@ -688,7 +691,8 @@ jarvis/
     services.py               shared helpers tools use (TTS, app index, search backend)
     config.py
     adapters/                 the outside world: http.py (ApiClient: keys, retries, rate limits, breakers,
-                              cache, redacted logs); the package docstring maps the other adapters
+                              cache, redacted logs), phone.py (KDE Connect and ntfy, ADR-098); the package
+                              docstring maps the other adapters
     core/                     agent.py (turns), graph.py (the LangGraph graph), pipeline.py (router stages),
                               guard.py, executor (gate + confirm + audit), speech.py (sentence stream),
                               meaning.py (vectors in ChromaDB or SQLite), tool and semantic routing,
@@ -702,6 +706,7 @@ jarvis/
       memory.py               remember, list_memories, forget
       notes.py                take_note, read_notes, open_notes (a Markdown file per day, ADR-088)
       vision.py               look_at_screen (gemma3 with the OCR text, then Hermes reloaded, ADR-096)
+      phone.py                ring_phone, notify_phone, send_to_phone (your own phone, ADR-098)
       news.py                 ai_news (feeds, a cloud model writes it, saved with links, ADR-097)
       media/                  spotify.py (play_spotify: search API, desktop app, ADR-091)
       dev/                    git.py (git_changes, git_commit, git_push, ADR-094), ssh.py (ssh_connect, ADR-093)

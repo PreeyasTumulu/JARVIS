@@ -44,6 +44,21 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 29: Your phone, for free
+
+Run on 2026-11-07 on a scratch data folder. The phone was visible to KDE Connect but not paired, so nothing reached it; the ntfy pushes went to a throwaway random topic and were read back from ntfy.sh.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 29.1 | real `kdeconnect-cli --list-devices` through the adapter | the OnePlus, its state | "OnePlus Nord2 5G", reachable, not paired, in 2.1 s (`--list-available` printed none) | pass |
+| 29.2 | `ring_phone`, `notify_phone` with the phone unpaired | nothing sent; how to pair | "on the Wi-Fi but not paired: open KDE Connect on the PC, choose it, press Pair, and accept on the phone" | pass |
+| 29.3 | `Phone.alert(ring=True)` by ntfy to a random topic | priority 5, read back | 0.75 s; read back with title "Jarvis", priority 5 | pass |
+| 29.4 | "find my phone" | exact phrase, no model | handled_by exact_phrase, `ring_phone` | pass |
+| 29.5 | "remind me on my phone in 30 minutes to stretch" (Hermes) | set_reminder with on_phone | first run: `"at": {"null": true}` was refused and Hermes asked for a time | **fail** |
+| 29.5 (after fix) | same | same | 8.9 s, `on_phone: true`, "Your phone will also ring at that time" | pass |
+
+**Needs your hands:** pair the phone in KDE Connect, then "find my phone", "send the clipboard to my phone", a file, and a phone reminder; optionally an ntfy topic for away from home.
+
 ## Phase 28: Screen understanding and daily news
 
 Run on 2026-11-07 with real models and real feeds. The vision test captured a synthetic screen (an Excel window with a read-only error) instead of your real one, so nothing of yours reached the transcript; OCR, gemma3:4b, and the reload of Hermes were real.

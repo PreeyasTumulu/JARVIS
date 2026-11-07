@@ -599,11 +599,29 @@ Yours, asked 2026-11-01, all as recommended.
 - **Why:** feeds are free, need no keys, and keep each story's link; a cloud model writes a better digest in about 3 s, while Hermes takes about 16 s.
 - **Cost:** the live test found a story repeated across two feeds and invented details for link-only Hacker News items; both are fixed with tests, but a summary can still be less exact than its article (R71).
 
+### ADR-098: Your phone for free: KDE Connect on the Wi-Fi, ntfy away from it
+
+- **Decision (2026-11-07, your choice after the call research in RESEARCH.md section 2.4):** no paid calls. Jarvis reaches your own phone through `jarvis.adapters.phone`: KDE Connect (`kdeconnect-cli`, already installed and seeing your OnePlus Nord2 5G) when the phone is on the same Wi-Fi, and an ntfy push to `[phone] ntfy_topic` when it is not. Three tools:
+  - `ring_phone` (safe, public): rings loudly, even on silent; away from the Wi-Fi it sends an urgent push instead. "Find my phone" and "where's my phone" are exact phrases, with no model.
+  - `notify_phone(message, title)` (safe, public, egress): a notification. The way is picked when the call is prepared and pinned into its arguments, so what runs is exactly what was decided; a pinned KDE Connect send that fails is an error, never a silent push over the internet. When the push would go over the internet and the conversation holds private data, it asks first.
+  - `send_to_phone(item, text)` (confirm floor, private): a file (through the file guard: inside the allowed folders, never a secret file, up to 200 MB), a web link, the clipboard, a screenshot (taken only after the yes), or text. Wi-Fi only; nothing of this goes through ntfy.
+  - `set_reminder(..., on_phone=true)` ("remind me on my phone at 7"): the reminder also notifies the phone and rings it; the phone failing never stops the spoken reminder.
+  - The Claude Code bridge's phone step defaults to `kdeconnect`: after `escalate_after_s` with no answer, the phone shows what Claude asks ("Answer at the PC"), then the ntfy push with answer buttons follows when a topic is set.
+  - `ring_phone` and `notify_phone` are offered to MCP clients by default, so Claude Code can tell you on your phone that it finished. Both only ever reach your own phone.
+- **Why:** you did not want to spend money, and "call me" really means "get my attention". KDE Connect is free and open source, keeps everything on your own network with TLS, and was already paired-ready on this laptop; ntfy is free and covers the phone away from home.
+- **Cost:** KDE Connect needs the phone paired once and on the same Wi-Fi, and its command line took about 2 s to list devices here (R72). ntfy topics are readable by anyone who knows the name (R73). Jarvis cannot speak in a call to anyone; "tell mom I'll be late" stays a WhatsApp message (your choice), and calls stay WhatsApp or Phone Link calls where you talk.
+
+### ADR-099: No calls where Jarvis speaks, for now
+
+- **Decision (2026-11-07):** the Twilio route researched for Phase 29 (a disclosure, your message, a recorded reply transcribed on the laptop) is not built. The research and its sources stay in RESEARCH.md section 2.4.
+- **Why:** it costs money every month and every minute, needs a foreign number that Indian phones label "International call", and an Indian number needs a registered business.
+- **Cost:** none now. If you change your mind, the shape is ready: a disclosure first, contacts and your own number only after a confirm naming the person, emergency and short codes refused, reminders that may call you on opt-in.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.
 
-1. **Phone escalation:** off, ntfy (free; install the ntfy app and pick a long random topic), or Twilio (paid; needs an account, a number, and the Studio flow). Recommended: ntfy for questions first.
+1. **Phone escalation:** decided in ADR-098: KDE Connect by default, ntfy buttons once you set a topic. Twilio stays available but off.
 
 The Claude Code hooks (once open decision 1) were installed on 2026-10-20 after `jarvis claude-hook test` passed.
 The Ollama speed settings (once open decision 2) were found already set on this laptop on 2026-10-20 (`OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, confirmed in Ollama's log); every Phase 13 measurement includes them.

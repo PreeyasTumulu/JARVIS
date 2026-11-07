@@ -34,7 +34,7 @@ There are three different things here, with different answers.
 |---|---|---|
 | **Phone Link** (`tel:` link, your Android phone dials over Bluetooth, you talk through the PC) | free | built: `call_contact`, asks first, needs your test (ADR-053) |
 | WhatsApp desktop call | free | built, the default since Phase 17 (ADR-069) |
-| Twilio "click to call" (Twilio rings you, then connects your mom) | about 1 to 3 US cents a minute to Indian mobiles ([Twilio India pricing](https://www.twilio.com/en-us/voice/pricing/in)) | not built; Phone Link covers it for free |
+| Twilio "click to call" (Twilio rings you, then connects your mom) | about 5 US cents a minute to Indian mobiles (2026-11-07, [Twilio India pricing](https://www.twilio.com/en-us/voice/pricing/in)) | not built; Phone Link covers it for free (section 2.4) |
 
 ### "Jarvis, call me" (Jarvis reaches you when you are away from the laptop)
 
@@ -51,6 +51,37 @@ Both ntfy and Twilio are built into the bridge (ADR-052) and off until you choos
 Built (ADR-051). Claude Code's hooks hand Jarvis every multiple-choice question (`AskUserQuestion`) and every permission prompt. Jarvis says it aloud with numbered options and shows it on the page, you answer "two" (or click), and the answer goes back to Claude as if you had picked it in the terminal. The hook format is from the official docs ([code.claude.com/docs/en/hooks](https://code.claude.com/docs/en/hooks)): `permissionDecision: "allow"` plus `updatedInput.answers` answers a question, and `decision.behavior` allows or denies a permission. If you are not at the PC, the question can follow you to your phone (ntfy or Twilio) after `escalate_after_s`.
 
 The flow in one line: Claude asks, the hook posts to Jarvis on 127.0.0.1, Jarvis asks you by voice, page, or phone, your answer is matched to an option without any model, and the hook prints Claude's answer.
+
+### 2.4 Phase 29: calls where Jarvis speaks, and the free alternative (2026-11-07)
+
+Asked before building anything: what a call that Jarvis speaks in would cost from India, what number it would come from, and what the law allows.
+
+**Cost (Twilio's own India page).** $0.0496 a minute to an Indian mobile and $0.0699 to a landline (about Rs 4 to 5 and Rs 6); a US number from $1.15 a month (about Rs 100). A trial account only calls up to 5 verified numbers, plays a trial notice first, and ends after 30 days.
+
+**Numbers.** Twilio says calls into India can only come from non-Indian numbers, and Indian carriers must label calls from abroad "International call". Showing your own Indian number as the caller ID would not help: since 22 October 2024 DoT blocks calls from abroad that carry an Indian number as spoofed. Plivo (Rs 0.38 a minute, Rs 200 a month) and Exotel sell Indian numbers only to businesses registered in India (GST, incorporation, or Udyam papers).
+
+**Law.**
+
+| Rule | What it means here |
+|---|---|
+| TRAI TCCCPR 2018, amended February 2025 (promotional calls from the 140 series, service calls from 1600, fines Rs 2 to 10 lakh) | covers commercial calls; personal calls to people who expect them are outside it |
+| Twilio's India guidance | consent needed or the calls count as unsolicited and can be blocked; many short calls trip carrier blocks; no voice OTPs; no emergency numbers |
+| DPDP Act 2023, section 3 | does not apply to an individual's personal or domestic use |
+| Recording a call you are part of | no Indian statute found; a spoken notice before recording is the safe course |
+| AI disclosure | not required for personal calls; TRAI has only a draft for commercial AI calls |
+
+**Free ways to reach your phone instead.**
+
+| Way | Where | What it can do | Privacy |
+|---|---|---|---|
+| **KDE Connect** (installed, phone visible) | same Wi-Fi | ring loudly even on silent, notify, send files, links, text, the clipboard, SMS from your SIM | never leaves your network |
+| **ntfy** (built into the bridge since Phase 9) | anywhere | urgent push, up to three answer buttons; the app can keep alerting and override Do Not Disturb if you allow it | through ntfy.sh unless self-hosted |
+| Telegram bot | anywhere | messages, files up to 50 MB, buttons, commands from the phone | through Telegram's servers |
+| Phone Link | Bluetooth | dials from your SIM for free | Jarvis cannot speak into the call without a virtual audio cable |
+
+You chose KDE Connect with ntfy, and WhatsApp for messages to people (ADR-098, ADR-099).
+
+Sources: [Twilio India voice pricing](https://www.twilio.com/en-us/voice/pricing/in), [Twilio India voice guidelines](https://www.twilio.com/en-us/guidelines/in/voice), [Twilio trials](https://www.twilio.com/docs/usage/trials), [Plivo India pricing](https://www.plivo.com/voice/pricing/in/), [Plivo India numbers](https://docs.plivo.com/docs/numbers/rent-india-numbers), [TRAI press release 11 of 2025](https://cms.trai.gov.in/sites/default/files/2025-02/PR_No.11of2025.pdf), [JSA on the 2025 amendments](https://www.jsalaw.com/wp-content/uploads/2025/02/JSA-Prism-Telecommunications_February-2025_TCCCPR-amendments.Final_.pdf), [ThePrint on the spoofed-call system](https://theprint.in/india/dot-tsps-deploy-new-system-to-block-spoofed-international-calls/2298121), [DPDP Act section 3](https://dpdpa.com/dpdpa2023/chapter-1/section3.html), [Exotel on call recording](https://exotel.com/glossary/call-recording-compliance-in-india/), [ntfy keep alerting](https://github.com/binwiederhier/ntfy/issues/417). This is research, not legal advice.
 
 ## 3. Small but smart
 

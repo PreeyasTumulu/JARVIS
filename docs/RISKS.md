@@ -333,6 +333,14 @@ gemma3:4b and Hermes do not fit in 4 GB of video memory together, so each screen
 
 Feeds change their addresses and formats; a feed that fails is left out and named in the result. A one-sentence summary can still lose or slightly bend a detail of its article (the live test caught a model calling a Zig library "a Go library" before the fix); the saved file keeps the link to check. Google News links are redirects through Google. Feeds are parsed with Python's own XML parser, whose expat protects against entity expansion attacks.
 
+### R72. KDE Connect on Windows
+
+The phone must be paired once and on the same Wi-Fi with the KDE Connect app open in the background; Android may stop it to save battery. On this laptop `kdeconnect-cli --list-available` printed no device while `--list-devices` showed the phone reachable, so Jarvis reads the full list and checks "paired" and "reachable" itself. Listing took about 2 s, so ringing or notifying takes 2 to 4 s. A ring keeps ringing until you stop it on the phone. Sending files over `--share` was not tried live, because the phone was not paired during the test. When several phones are paired, `[phone] device` must name one.
+
+### R73. ntfy alerts
+
+An alert by ntfy goes through ntfy.sh (or your own server) over the internet, and anyone who knows the topic name can read it: use a long random topic, or set `NTFY_TOKEN` with a protected topic. A notification asks first when the conversation holds private data; reminders send their own text, which you set. Files, the clipboard, and screenshots never go this way. Android may delay pushes in battery saver unless ntfy is allowed to run unrestricted.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

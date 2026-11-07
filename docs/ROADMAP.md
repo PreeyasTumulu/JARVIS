@@ -35,6 +35,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 26 | Apps, files, and office | Built on `phase/26-apps-files-office` (stacked on Phase 25), hand tested on scratch data and the real desktop | v1.15.0 |
 | 27 | Music, developer tools, browser | Built on `phase/27-music-dev-browser` (stacked on Phase 26), git hand tested live; Spotify, Docker, SSH need your setup | v1.16.0 |
 | 28 | Screen understanding and daily news | Built on `phase/28-vision-news` (stacked on Phase 27), hand tested with real models and feeds | v1.17.0 |
+| 29 | Your phone, for free | Built on `phase/29-phone-bridge` (stacked on Phase 28), hand tested on this laptop; pairing the phone needs you | v1.18.0 |
 
 ## How each phase runs
 
@@ -1045,6 +1046,28 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** no screenshot leaves the laptop, every digest story keeps its link, and a story without text is never filled in by the model.
 
+## Phase 29: Your phone, for free
+
+**Goal:** Jarvis and Claude Code can get your attention on your phone and hand it things, at no cost (ADR-098). Calls where Jarvis speaks were researched first and not built (ADR-099, RESEARCH.md 2.4).
+
+**Scope**
+
+- `jarvis.adapters.phone`: KDE Connect (`kdeconnect-cli`) over the Wi-Fi, ntfy pushes when the phone is away, timeouts, and errors that say how to fix them.
+- `ring_phone`, `notify_phone`, `send_to_phone`; "find my phone" without the model; a `phone` routing group.
+- `set_reminder(on_phone=true)` rings the phone when the reminder is due.
+- The Claude Code bridge's phone step defaults to `kdeconnect`; `ring_phone` and `notify_phone` are offered to MCP clients.
+
+**Test it**
+
+1. Pair the phone (SETUP.md 5s), then "find my phone".
+2. "Send the clipboard to my phone" (answer yes), then a file: "send my resume to my phone".
+3. "Remind me on my phone in 2 minutes to stretch", and wait.
+4. Leave a Claude Code question unanswered for 45 s: the phone shows it.
+
+**Measured (2026-11-07):** KDE Connect's device list in about 2.1 s; an ntfy push in 0.75 to 0.87 s, read back from ntfy.sh with priority 5; "find my phone" handled by the exact phrase stage; Hermes set a phone reminder with `on_phone` in 8.9 s once `{"null": true}` was accepted. Tool choice: Hermes 104 of 113 (92%), all five phone commands right, and the nine misses are the same as before Phase 29 ([phase29.md](benchmarks/phase29.md)).
+
+**Exit criteria:** nothing reaches anyone but you, a file never leaves the Wi-Fi, and a phone that cannot be reached is explained, never silently skipped.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -1071,6 +1094,6 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 | 26 | Apps, files, and office (done) | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
 | 27 | Music, developer tools, browser (done) | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
 | 28 | Screen understanding and daily news (done) | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
-| 29 | Phone calls | Research cost, Indian numbers, and legal limits first and bring them to you; then calls that open with a disclosure, after a confirm |
+| 29 | Phone calls (done: your phone for free) | Researched cost, Indian numbers, and legal limits; you chose free alerts and file sending by KDE Connect and ntfy over paid calls (ADR-098, ADR-099) |
 | 30 | UI demos | Five or six standalone concepts in `ui-demos/` with listening, thinking, and speaking states, screenshots in the README |
 | 31 | Open-source readiness | Demo GIF, feature list, quickstart, `.env.example`, a check that no personal paths, servers, or contacts are committed |

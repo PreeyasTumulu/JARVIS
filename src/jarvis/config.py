@@ -400,6 +400,34 @@ class GitSettings(_Section):
     remote: str = Field(default="origin", pattern=r"^[A-Za-z0-9._-]{1,100}$")
 
 
+class VisionSettings(_Section):
+    """Screen understanding with a local vision model (ADR-080, ADR-096)."""
+
+    enabled: bool = True
+    model: str = "gemma3:4b"
+    keep_alive_s: float = Field(default=30, ge=0, le=3600)  # then the main model loads again
+    max_side: int = Field(default=1600, ge=320, le=4096)  # the screenshot is scaled to this
+    timeout_s: float = Field(default=120, gt=0)
+
+
+class NewsSettings(_Section):
+    """The daily AI and tech digest from news feeds (ADR-097)."""
+
+    feeds: list[str] = Field(
+        default_factory=lambda: [
+            "https://hnrss.org/frontpage?points=150",
+            "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+            "https://techcrunch.com/category/artificial-intelligence/feed/",
+            "https://news.google.com/rss/search?q=artificial+intelligence+when:1d"
+            "&hl=en-IN&gl=IN&ceid=IN:en",
+        ]
+    )
+    max_stories: int = Field(default=8, ge=1, le=30)
+    max_age_hours: float = Field(default=36, gt=0)
+    cache_minutes: float = Field(default=30, ge=0)
+    folder: str = "{documents}/Jarvis News"
+
+
 class NotesSettings(_Section):
     folder: str = "{documents}/Jarvis Notes"  # one Markdown file per day (ADR-088)
 
@@ -431,12 +459,13 @@ class CalendarSettings(_Section):
 class BriefingSettings(_Section):
     """The morning briefing (ADR-066)."""
 
-    parts: list[Literal["weather", "calendar", "reminders", "mail", "messages"]] = [
+    parts: list[Literal["weather", "calendar", "reminders", "mail", "messages", "news"]] = [
         "weather",
         "calendar",
         "reminders",
         "mail",
         "messages",
+        "news",
     ]
     offer: bool = True  # offer it once a day, the first time you use Jarvis in the morning
     offer_from_hour: int = Field(default=6, ge=0, le=23)
@@ -481,6 +510,8 @@ class Settings(_Section):
     mcp: McpSettings = McpSettings()
     mcp_server: McpServerSideSettings = McpServerSideSettings()
     notes: NotesSettings = NotesSettings()
+    vision: VisionSettings = VisionSettings()
+    news: NewsSettings = NewsSettings()
     spotify: SpotifySettings = SpotifySettings()
     docker: DockerSettings = DockerSettings()
     ssh: SshSettings = SshSettings()

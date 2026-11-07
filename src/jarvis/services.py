@@ -5,6 +5,7 @@ servers)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from jarvis.config import Settings
 from jarvis.core.meaning import Embedder, MeaningIndex
@@ -28,6 +29,10 @@ from jarvis.tools.system.reminders import Reminders
 from jarvis.tools.web.search import DuckDuckGoSearch, SearchBackend
 from jarvis.voice.tts.base import TTSEngine
 from jarvis.voice.tts.factory import build_tts
+
+if TYPE_CHECKING:
+    from jarvis.llm.router import Router
+    from jarvis.llm.types import ChatModel
 
 
 @dataclass
@@ -53,6 +58,8 @@ class Services:
     clipboard: ClipboardHistory | None = None  # only with [clipboard] history = true
     focus: Focus | None = None  # set by build_app
     quiet_speech: bool = False  # the PC is locked: nothing private is said aloud (ADR-076)
+    cloud: Router | None = None  # cloud models for public work, such as the news digest
+    local_model: ChatModel | None = None  # the local model, for tools that write text
 
     async def aclose(self) -> None:
         await self.mcp.aclose()

@@ -88,12 +88,19 @@ async def _messages(ctx: ToolContext) -> str | None:
     return f"{len(new)} new {noun}, from {_names([n.title or n.app for n in new])}."
 
 
+async def _news(ctx: ToolContext) -> str | None:
+    from jarvis.tools.news import briefing_line
+
+    return await briefing_line(ctx)
+
+
 SOURCES: dict[str, Callable[[ToolContext], Awaitable[str | None]]] = {
     "weather": _weather,
     "calendar": _calendar,
     "reminders": _reminders,
     "mail": _mail,
     "messages": _messages,
+    "news": _news,
 }
 
 

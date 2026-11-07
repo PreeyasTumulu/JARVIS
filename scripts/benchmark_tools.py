@@ -158,6 +158,11 @@ CASES = [
     case("add groceries and 450 to my budget sheet", "add_sheet_row", arg=("file", "budget")),
     case("show 18 percent of 2400 in the calculator", "calculator_show"),
     case("open my resume", "open_file", "find_file", arg=("path", "resume")),
+    # Phase 28: the screen by a local vision model, and the AI news digest
+    case("what's on my screen", "look_at_screen", "read_screen"),
+    case("what does this error on my screen mean", "look_at_screen"),
+    case("what's new in AI today", "ai_news"),
+    case("any tech news", "ai_news"),
     case("when did I last ask you about the weather", "recall"),
     case("give me a rundown of my day", "briefing"),
     # Phase 13: paraphrases with none of the keywords (semantic routing's job)

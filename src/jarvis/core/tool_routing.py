@@ -146,11 +146,18 @@ GROUPS: dict[str, Group] = {
             r"|\bat \d{1,2}(:\d{2})? ?(am|pm)?\b"
         ),
     ),
+    "news": Group(
+        ("ai_news", "web_search"),
+        re.compile(
+            r"\b(news|headlines|what's new in (ai|tech)|whats new in (ai|tech)|tech (news|stories)"
+            r"|ai (news|stories)|digest)\b"
+        ),
+    ),
     "screen": Group(
-        ("read_screen", "read_window_text"),
+        ("look_at_screen", "read_screen", "read_window_text"),
         re.compile(
             r"\b(on (my|the) screen|read (the|my) screen|what('s| is) on (my |the )?screen|"
-            r"screen says|my screen)\b"
+            r"screen says|my screen|looking at|this error|this window|this page|screenshot)\b"
         ),
     ),
     "ui": Group(

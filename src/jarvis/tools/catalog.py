@@ -22,6 +22,7 @@ from jarvis.tools.media.spotify import play_spotify
 from jarvis.tools.memory import forget, list_memories, remember
 from jarvis.tools.messaging.calls import call_contact, hang_up
 from jarvis.tools.messaging.tools import send_whatsapp
+from jarvis.tools.news import ai_news
 from jarvis.tools.notes import open_notes, read_notes, take_note
 from jarvis.tools.notifications.tools import read_notifications
 from jarvis.tools.office.calculator import calculator_show
@@ -46,6 +47,7 @@ from jarvis.tools.system.reminders import (
     set_timer,
 )
 from jarvis.tools.ui.tools import click, press_keys, read_screen, read_window_text, type_text
+from jarvis.tools.vision import look_at_screen
 from jarvis.tools.web.browser import open_url
 from jarvis.tools.web.fetch import fetch_page
 from jarvis.tools.web.search import web_search
@@ -79,6 +81,8 @@ def build_registry() -> Registry:
             git_push,
             ssh_connect,
             play_spotify,
+            look_at_screen,
+            ai_news,
             web_search,
             search_site,
             open_url,

@@ -125,6 +125,8 @@ def build_app(
         services.focus = Focus(services.reminders, services.notifications, services.prefs)
     llm = llm or LLMClient(settings.llm.active())
     router = router or Router(settings, db)
+    services.cloud = services.cloud or router
+    services.local_model = services.local_model or llm
     executor = ToolExecutor(
         settings=settings,
         registry=registry,

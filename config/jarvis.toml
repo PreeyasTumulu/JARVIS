@@ -293,7 +293,7 @@ add_issue_comment = ["owner", "repo", "issue_number", "body"]
 
 [briefing]
 # "Good morning" or "brief me" (ADR-066). Email and messages are counts and senders only.
-parts = ["weather", "calendar", "reminders", "mail", "messages"]
+parts = ["weather", "calendar", "reminders", "mail", "messages", "news"]
 offer = true                 # offer it once a day, the first time you use Jarvis in the morning
 offer_from_hour = 6
 offer_until_hour = 12

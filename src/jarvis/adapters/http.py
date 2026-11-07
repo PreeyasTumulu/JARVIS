@@ -227,6 +227,40 @@ class ApiClient:
         self._record(provider, breaker, ok=True)
         return result
 
+    async def _get(
+        self,
+        provider: str,
+        url: str,
+        params: Mapping[str, Any] | None,
+        headers: Mapping[str, str] | None,
+    ) -> httpx.Response:
+        """One GET with the retry rule and the error mapping (used inside `call`)."""
+        log.info("GET %s %s", provider, redact_url(url))
+        for attempt in range(RETRIES + 1):
+            last = attempt == RETRIES
+            try:
+                response = await self.http.get(url, params=params, headers=headers)
+            except _OFFLINE as exc:
+                raise ProviderError(provider, "could not connect", offline=True) from exc
+            except httpx.TimeoutException as exc:
+                if last:
+                    raise ProviderError(provider, "timed out") from exc
+            except httpx.HTTPError as exc:
+                raise ProviderError(provider, f"request failed ({type(exc).__name__})") from exc
+            else:
+                if response.status_code not in _TRANSIENT or last:
+                    break
+            log.info("%s did not answer in time or was briefly down; trying again", provider)
+            await asyncio.sleep(RETRY_DELAY_S)
+        status = response.status_code
+        if status == 429:
+            raise ProviderError(provider, "rate limited by the provider")
+        if status in (400, 404, 422):
+            raise ProviderError(provider, f"no data (HTTP {status})", miss=True)
+        if status >= 400:
+            raise ProviderError(provider, f"HTTP {status}")
+        return response
+
     async def get_json(
         self,
         provider: str,
@@ -238,34 +272,30 @@ class ApiClient:
         """GET a JSON document. Query parameters are never logged, since some carry API keys."""
 
         async def request() -> Any:
-            log.info("GET %s %s", provider, redact_url(url))
-            for attempt in range(RETRIES + 1):
-                last = attempt == RETRIES
-                try:
-                    response = await self.http.get(url, params=params, headers=headers)
-                except _OFFLINE as exc:
-                    raise ProviderError(provider, "could not connect", offline=True) from exc
-                except httpx.TimeoutException as exc:
-                    if last:
-                        raise ProviderError(provider, "timed out") from exc
-                except httpx.HTTPError as exc:
-                    raise ProviderError(provider, f"request failed ({type(exc).__name__})") from exc
-                else:
-                    if response.status_code not in _TRANSIENT or last:
-                        break
-                log.info("%s did not answer in time or was briefly down; trying again", provider)
-                await asyncio.sleep(RETRY_DELAY_S)
-            status = response.status_code
-            if status == 429:
-                raise ProviderError(provider, "rate limited by the provider")
-            if status in (400, 404, 422):
-                raise ProviderError(provider, f"no data (HTTP {status})", miss=True)
-            if status >= 400:
-                raise ProviderError(provider, f"HTTP {status}")
+            response = await self._get(provider, url, params, headers)
             try:
                 return response.json()
             except ValueError as exc:
                 raise ProviderError(provider, "answered with something that is not JSON") from exc
+
+        return await self.call(provider, request)
+
+    async def get_bytes(
+        self,
+        provider: str,
+        url: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+        max_bytes: int = 5_000_000,
+    ) -> bytes:
+        """GET a document as bytes (a feed, a page), up to `max_bytes`."""
+
+        async def request() -> bytes:
+            response = await self._get(provider, url, params, headers)
+            if len(response.content) > max_bytes:
+                raise ProviderError(provider, f"answered with more than {max_bytes} bytes")
+            return response.content
 
         return await self.call(provider, request)
 

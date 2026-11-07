@@ -15,7 +15,7 @@ import asyncio
 import logging
 import statistics
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -30,12 +30,13 @@ from jarvis.core.events import (
     VoiceLevel,
     VoiceStateChanged,
 )
+from jarvis.core.speech import SpeechStream
 from jarvis.voice.audio import FRAME_MS, Audio
 from jarvis.voice.dictation import DictationError
 from jarvis.voice.endpoint import Endpoint, Endpointer
 from jarvis.voice.phrases import is_stop_command
 from jarvis.voice.stt import Transcript
-from jarvis.voice.tts.base import TTSEngine
+from jarvis.voice.tts.base import TTSEngine, speak_stream
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +138,7 @@ class VoiceSession:
         self._agent = agent
         self._bus = bus
         self._cfg = settings.voice
+        self._stream_replies = settings.tts.stream
         self._mic = mic
         self._stt = stt
         self._tts = tts
@@ -620,14 +622,53 @@ class VoiceSession:
             "stt_ms": transcript.stt_ms,
             "pre_turn_ms": pre_turn_ms,
         }
-        result = await self._agent.run_turn(text, source="voice", timings=timings)
+        speech = SpeechStream() if self._stream_replies and not self._locked else None
+        speaker = None if speech is None else asyncio.create_task(self._speak_stream(speech))
+        try:
+            result = await self._agent.run_turn(
+                text, source="voice", timings=timings, speech=speech
+            )
+            first_audio = None if speaker is None else await speaker
+        finally:
+            if speaker is not None and not speaker.done():
+                speaker.cancel()
         if result.status is not TurnStatus.CANCELLED:
             first_action = result.timings.get("first_tool_ms", result.timings.get("turn_ms", 0))
             self.heard_to_action_ms.append(pre_turn_ms + first_action)
-            if result.text and not self._locked:  # the answer is still on the page
+            if result.text and not self._locked and not result.spoken:
+                first_audio = time.perf_counter()  # about when a whole reply starts playing
                 await self._speak(result.text)
+            if first_audio is not None:
+                # From the end of what you said to the first sound of the answer.
+                ms = int((first_audio - self._speech_end) * 1000)
+                self._agent.add_timings(result.turn_id, {"first_audio_ms": ms})
         if self._state in (VoiceState.THINKING, VoiceState.SPEAKING):
             await self._set_state(self._rest_state)
+
+    async def _speak_stream(self, speech: SpeechStream) -> float | None:
+        """Speak a reply as the model writes it. Waits quietly if it never writes one."""
+        sentences = speech.sentences()
+        first = await anext(sentences, None)
+        if first is None:
+            return None  # a tool call, a fast path answer, or an empty reply
+
+        async def from_the_first() -> AsyncIterator[str]:
+            yield first
+            async for sentence in sentences:
+                yield sentence
+
+        previous = self._state
+        await self._set_state(VoiceState.SPEAKING)
+        try:
+            return await speak_stream(self._tts, from_the_first())
+        except asyncio.CancelledError:
+            await self._tts.stop()
+            raise
+        except Exception:
+            log.exception("Speech output failed")
+            return None
+        finally:
+            await self._spoke(previous)
 
     async def _finish_previous_turn(self) -> None:
         task = self._turn_task
@@ -658,11 +699,15 @@ class VoiceSession:
         except Exception:
             log.exception("Speech output failed")
         finally:
-            self._wake_quiet_until = max(self._wake_quiet_until, time.monotonic() + ECHO_TAIL_S)
-            if self._wake is not None:
-                self._wake.reset()
-            if self._state is VoiceState.SPEAKING and previous is not VoiceState.SPEAKING:
-                await self._set_state(previous)
+            await self._spoke(previous)
+
+    async def _spoke(self, previous: VoiceState) -> None:
+        """After speaking: ignore our own echo for a moment and go back to the state before."""
+        self._wake_quiet_until = max(self._wake_quiet_until, time.monotonic() + ECHO_TAIL_S)
+        if self._wake is not None:
+            self._wake.reset()
+        if self._state is VoiceState.SPEAKING and previous is not VoiceState.SPEAKING:
+            await self._set_state(previous)
 
     @property
     def _rest_state(self) -> VoiceState:

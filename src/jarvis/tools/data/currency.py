@@ -9,8 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from jarvis.adapters.http import ApiClient, ProviderError, explain_failure
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolError, ToolResult
-from jarvis.tools.data.http import ApiClient, ProviderError, explain_failure
 from jarvis.tools.data.spoken import CURRENCY_WORDS, money
 from jarvis.tools.registry import tool
 

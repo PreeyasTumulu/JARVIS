@@ -7,8 +7,8 @@ from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from typing import Any
 
+from jarvis.adapters.http import ApiClient, ProviderError, explain_failure
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolError, ToolResult
-from jarvis.tools.data.http import ApiClient, ProviderError, explain_failure
 from jarvis.tools.registry import tool
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
@@ -235,6 +235,11 @@ async def weather(ctx: ToolContext, place: str | None = None, day: str = "today"
         place: A city, for example "Hyderabad" or "London, UK". Leave it out for the user's home.
         day: "today", "tomorrow", a weekday such as "friday", or a date like "2026-10-20".
     """
+    return await weather_report(ctx, place, day)
+
+
+async def weather_report(ctx: ToolContext, place: str | None, day: str) -> ToolResult:
+    """The weather tool's work, for the briefing to reuse without calling a tool directly."""
     wanted = (place or "").strip()
     if wanted.casefold() in _HERE_WORDS:
         wanted = ""

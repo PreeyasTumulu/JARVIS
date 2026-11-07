@@ -74,7 +74,7 @@ async def call(h: Any, tool: str, **args: Any) -> Any:
         session_id="s",
         turn_id="t",
     )
-    outcome = await h.app.agent._executor.run(ToolCall("c1", tool, json.dumps(args)), ctx)
+    outcome = await h.app.agent.executor.run(ToolCall("c1", tool, json.dumps(args)), ctx)
     return outcome.result
 
 

@@ -1,4 +1,9 @@
-"""Runs one tool call through validation, preparation, the policy gate, confirmation, and audit."""
+"""Runs one tool call through validation, preparation, the policy gate, confirmation, and audit.
+
+No tool runs without a clearance from the gate (see tools/base.py), so this is the only way in.
+The agent graph runs the steps as separate nodes; `ToolExecutor.run` chains them for any other
+caller.
+"""
 
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ from jarvis.core.prompts import truncate, wrap_untrusted
 from jarvis.llm.types import ToolCall
 from jarvis.storage.repositories import AuditEntry, AuditLog
 from jarvis.tools.base import (
+    Clearance,
     ContextFlags,
     Prepared,
     Risk,
@@ -34,7 +40,7 @@ from jarvis.tools.base import (
     ToolError,
     ToolResult,
 )
-from jarvis.tools.policy import PolicyGate
+from jarvis.tools.policy import PolicyDecision, PolicyGate
 from jarvis.tools.registry import Registry, Tool
 
 log = logging.getLogger(__name__)
@@ -63,6 +69,7 @@ class Decision(StrEnum):
     BLOCKED = "blocked"  # policy refused
     INVALID = "invalid"  # unknown tool or bad arguments, never reached the policy
     CANCELLED = "cancelled"  # the turn was stopped while this call was in progress
+    DUPLICATE = "duplicate"  # the same call already ran this turn, so it was not run again
 
 
 @dataclass(frozen=True)
@@ -127,6 +134,31 @@ class CallOutcome:
         return truncate(json.dumps(self.result.data, ensure_ascii=False, default=str), 160)
 
 
+@dataclass(frozen=True)
+class Checked:
+    """A call whose tool exists and whose arguments fit its schema."""
+
+    call: ToolCall
+    tool: Tool
+    args: dict[str, Any]
+    started: float
+
+
+@dataclass(frozen=True)
+class Gated:
+    """A call the policy gate has rated. It runs only through `ToolExecutor.execute`."""
+
+    call: ToolCall
+    tool: Tool
+    prepared: Prepared
+    verdict: PolicyDecision
+    started: float
+
+    @property
+    def needs_confirmation(self) -> bool:
+        return self.verdict.risk is Risk.CONFIRM
+
+
 class ToolExecutor:
     def __init__(
         self,
@@ -142,39 +174,44 @@ class ToolExecutor:
         self._policy = policy
         self._audit = audit
         self._bus = bus
+        self._detached: set[asyncio.Future[ToolResult]] = set()  # left running after a stop
+
+    def tool_names(self) -> list[str]:
+        return self._registry.names()
 
     async def run(self, call: ToolCall, ctx: ToolContext) -> CallOutcome:
+        """Every step for one call, for callers outside the agent graph."""
         started = time.perf_counter()
-        tool = self._registry.get(call.name)
         try:
-            outcome = await self._run(call, ctx, tool, started)
+            outcome = await self._run(call, ctx, started)
         except asyncio.CancelledError:
-            outcome = CallOutcome(
-                call=call,
-                decision=Decision.CANCELLED,
-                result=ToolResult.failure("Stopped by the user."),
-                duration_ms=_elapsed_ms(started),
-                tool=tool,
-            )
-            self._record(outcome, ctx)
+            self.record_cancelled(call, started, ctx)
             raise
-        self._record(outcome, ctx)
-        await self._bus.publish(
-            ToolCallFinished(
-                turn_id=ctx.turn_id,
-                call_id=call.id,
-                tool=call.name,
-                decision=outcome.decision,
-                ok=outcome.result.ok,
-                summary=outcome.summary(),
-                duration_ms=outcome.duration_ms,
-            )
-        )
+        await self.finish(outcome, ctx)
         return outcome
 
-    async def _run(
-        self, call: ToolCall, ctx: ToolContext, tool: Tool | None, started: float
-    ) -> CallOutcome:
+    async def _run(self, call: ToolCall, ctx: ToolContext, started: float) -> CallOutcome:
+        checked = self.check(call, started)
+        if isinstance(checked, CallOutcome):
+            return checked
+        gated = await self.gate(checked, ctx)
+        if isinstance(gated, CallOutcome):
+            return gated
+        confirmed = False
+        if gated.needs_confirmation:
+            decision = await self.confirm(gated, ctx)
+            if decision is not Decision.CONFIRMED:
+                return self.refusal(gated, decision)
+            confirmed = True
+        return await self.execute(gated, ctx, confirmed=confirmed)
+
+    # The steps
+
+    def check(self, call: ToolCall, started: float | None = None) -> Checked | CallOutcome:
+        """The tool exists and the arguments are a JSON object that fits its schema."""
+        started = time.perf_counter() if started is None else started
+        tool = self._registry.get(call.name)
+
         def invalid(message: str, args: dict[str, Any] | None = None) -> CallOutcome:
             return CallOutcome(
                 call=call,
@@ -188,14 +225,12 @@ class ToolExecutor:
         if tool is None:
             available = ", ".join(self._registry.names())
             return invalid(f"Unknown tool '{call.name}'. Available tools: {available}.")
-
         try:
             raw = json.loads(call.arguments or "{}")
         except json.JSONDecodeError:
             return invalid("The arguments were not valid JSON.")
         if not isinstance(raw, dict):
             return invalid("The arguments must be a JSON object.")
-
         try:
             args = tool.validate(raw)
         except ValidationError as exc:
@@ -204,9 +239,13 @@ class ToolExecutor:
                 for err in exc.errors()
             )
             return invalid(f"Invalid arguments for {tool.name}: {problems}", raw)
+        return Checked(call, tool, args, started)
 
+    async def gate(self, checked: Checked, ctx: ToolContext) -> Gated | CallOutcome:
+        """Resolve the arguments (no side effects) and let the policy rate the call."""
+        call, tool, started = checked.call, checked.tool, checked.started
         try:
-            prepared = await tool.prepare(ctx, args)
+            prepared = await tool.prepare(ctx, checked.args)
         except ToolError as exc:
             return CallOutcome(
                 call=call,
@@ -214,9 +253,8 @@ class ToolExecutor:
                 result=ToolResult.failure(str(exc)),
                 duration_ms=_elapsed_ms(started),
                 tool=tool,
-                args=args,
+                args=checked.args,
             )
-
         verdict = self._policy.evaluate(tool, prepared, ctx.flags)
         await self._bus.publish(
             ToolCallStarted(
@@ -227,53 +265,20 @@ class ToolExecutor:
                 risk=verdict.risk,
             )
         )
-
-        def finish(decision: Decision, result: ToolResult) -> CallOutcome:
-            return CallOutcome(
-                call=call,
-                decision=decision,
-                result=result,
-                duration_ms=_elapsed_ms(started),
-                tool=tool,
-                args=prepared.args,
-                risk=verdict.risk,
-            )
-
+        gated = Gated(call, tool, prepared, verdict, started)
         if verdict.risk is Risk.BLOCKED:
             reason = verdict.reason or "this action is not allowed"
-            return finish(Decision.BLOCKED, ToolResult.failure(f"Blocked: {reason}."))
+            return self._outcome(gated, Decision.BLOCKED, ToolResult.failure(f"Blocked: {reason}."))
+        return gated
 
-        decision = Decision.AUTO
-        if verdict.risk is Risk.CONFIRM:
-            decision = await self._confirm(tool, prepared, verdict.reason, ctx)
-            if decision is Decision.DENIED:
-                return finish(
-                    decision,
-                    ToolResult.failure(
-                        f"The person talking to you said no to '{prepared.summary}', so it was "
-                        "not done. Do not retry, and reply with exactly: Okay, I won't."
-                    ),
-                )
-            if decision is Decision.TIMEOUT:
-                return finish(
-                    decision,
-                    ToolResult.failure(
-                        f"No confirmation was given in time for '{prepared.summary}', so it "
-                        "was not done. Tell the user briefly."
-                    ),
-                )
-
-        return finish(decision, await self._execute(tool, prepared, ctx))
-
-    async def _confirm(
-        self, tool: Tool, prepared: Prepared, reason: str | None, ctx: ToolContext
-    ) -> Decision:
+    async def confirm(self, gated: Gated, ctx: ToolContext) -> Decision:
+        """Ask on the channel that started the turn. No answer in time counts as no."""
         request = ConfirmationRequest(
             request_id=uuid.uuid4().hex[:12],
-            tool=tool.name,
-            summary=prepared.summary,
-            digest=prepared.digest,
-            reason=reason,
+            tool=gated.tool.name,
+            summary=gated.prepared.summary,
+            digest=gated.prepared.digest,
+            reason=gated.verdict.reason,
             timeout_s=self._settings.safety.confirm_timeout_s,
         )
         await self._bus.publish(ConfirmationRequested(turn_id=ctx.turn_id, request=request))
@@ -285,7 +290,7 @@ class ToolExecutor:
         except TimeoutError:
             decision = Decision.TIMEOUT
         finally:
-            # Every channel (the web UI especially) needs to know the question is closed.
+            # Every channel needs to know the question is closed.
             answered = decision in (Decision.CONFIRMED, Decision.DENIED)
             await self._bus.publish(
                 ConfirmationResolved(
@@ -297,11 +302,88 @@ class ToolExecutor:
             )
         return decision
 
-    async def _execute(self, tool: Tool, prepared: Prepared, ctx: ToolContext) -> ToolResult:
+    def refusal(self, gated: Gated, decision: Decision) -> CallOutcome:
+        """The outcome of a no, or of no answer in time."""
+        summary = gated.prepared.summary
+        if decision is Decision.DENIED:
+            message = (
+                f"The person talking to you said no to '{summary}', so it was not done. "
+                "Do not retry, and reply with exactly: Okay, I won't."
+            )
+        else:
+            message = (
+                f"No confirmation was given in time for '{summary}', so it was not done. "
+                "Tell the user briefly."
+            )
+        return self._outcome(gated, decision, ToolResult.failure(message))
+
+    async def execute(self, gated: Gated, ctx: ToolContext, *, confirmed: bool) -> CallOutcome:
+        """Run the call with a clearance from the gate, within the tool's time limit."""
+        clearance = self._policy.clear(gated.tool, gated.prepared, ctx.flags, confirmed=confirmed)
+        decision = Decision.CONFIRMED if clearance.decision == "confirmed" else Decision.AUTO
+        task = asyncio.ensure_future(self._invoke(gated, ctx, clearance))
+        if gated.tool.cancel_on_interruption:
+            result = await task
+        else:
+            try:
+                result = await asyncio.shield(task)
+            except asyncio.CancelledError:
+                self._detach(task, gated, decision, ctx)
+                raise
+        return self._outcome(gated, decision, result)
+
+    async def finish(self, outcome: CallOutcome, ctx: ToolContext) -> None:
+        """Audit the call and tell every channel how it ended."""
+        self._record(outcome, ctx)
+        await self._bus.publish(
+            ToolCallFinished(
+                turn_id=ctx.turn_id,
+                call_id=outcome.call.id,
+                tool=outcome.call.name,
+                decision=outcome.decision,
+                ok=outcome.result.ok,
+                summary=outcome.summary(),
+                duration_ms=outcome.duration_ms,
+            )
+        )
+
+    def record_cancelled(self, call: ToolCall, started: float, ctx: ToolContext) -> CallOutcome:
+        """Audit a call that was in progress when the turn was stopped."""
+        outcome = CallOutcome(
+            call=call,
+            decision=Decision.CANCELLED,
+            result=ToolResult.failure("Stopped by the user."),
+            duration_ms=_elapsed_ms(started),
+            tool=self._registry.get(call.name),
+        )
+        self._record(outcome, ctx)
+        return outcome
+
+    async def drain(self) -> None:
+        """Wait for calls left running after a stop (at shutdown, and in tests)."""
+        while self._detached:
+            await asyncio.gather(*list(self._detached), return_exceptions=True)
+            await asyncio.sleep(0)
+
+    # Helpers
+
+    def _outcome(self, gated: Gated, decision: Decision, result: ToolResult) -> CallOutcome:
+        return CallOutcome(
+            call=gated.call,
+            decision=decision,
+            result=result,
+            duration_ms=_elapsed_ms(gated.started),
+            tool=gated.tool,
+            args=gated.prepared.args,
+            risk=gated.verdict.risk,
+        )
+
+    async def _invoke(self, gated: Gated, ctx: ToolContext, clearance: Clearance) -> ToolResult:
+        tool = gated.tool
         timeout = tool.timeout_s or self._settings.agent.tool_timeout_s
         try:
             async with asyncio.timeout(timeout):
-                return await tool(ctx, **prepared.args)
+                return await tool(ctx, clearance, **gated.prepared.args)
         except TimeoutError:
             return ToolResult.failure(f"{tool.name} timed out after {timeout:.0f} seconds.")
         except ToolError as exc:
@@ -309,6 +391,25 @@ class ToolExecutor:
         except Exception as exc:
             log.exception("Tool %s crashed", tool.name)
             return ToolResult.failure(f"{tool.name} failed unexpectedly ({type(exc).__name__}).")
+
+    def _detach(
+        self, task: asyncio.Future[ToolResult], gated: Gated, decision: Decision, ctx: ToolContext
+    ) -> None:
+        """The turn was stopped, but this tool finishes its work; audit it when it does."""
+        log.info("Turn stopped; %s keeps running until it finishes", gated.tool.name)
+        self._detached.add(task)
+
+        def done(finished: asyncio.Future[ToolResult]) -> None:
+            self._detached.discard(finished)
+            if finished.cancelled():
+                result = ToolResult.failure("Stopped by the user.")
+            elif (error := finished.exception()) is not None:
+                result = ToolResult.failure(f"{gated.tool.name} failed ({type(error).__name__}).")
+            else:
+                result = finished.result()
+            self._record(self._outcome(gated, decision, result), ctx)
+
+        task.add_done_callback(done)
 
     def _record(self, outcome: CallOutcome, ctx: ToolContext) -> None:
         confirmed_via = ctx.channel.name if outcome.decision is Decision.CONFIRMED else None
@@ -327,6 +428,7 @@ class ToolExecutor:
                     result=outcome.result.data if outcome.result.ok else None,
                     error=outcome.result.error,
                     duration_ms=outcome.duration_ms,
+                    handled_by=ctx.handled_by,
                 )
             )
         except Exception:

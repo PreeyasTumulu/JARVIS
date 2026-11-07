@@ -7,9 +7,9 @@ from collections.abc import Mapping
 
 import httpx
 
+from jarvis.adapters.http import ApiClient
 from jarvis.config import Settings
 from jarvis.storage.db import Database
-from jarvis.tools.data.http import ApiClient
 from jarvis.tools.data.market import MarketData, SearchingProvider
 
 
@@ -24,12 +24,12 @@ class DataHub:
         env: Mapping[str, str] | None = None,
     ) -> None:
         self._env = os.environ if env is None else env
-        self.api = ApiClient(db, http=http)
+        self.api = ApiClient(db, http=http, env=self._env)
         self.market = MarketData(self.api, settings.market, yahoo=yahoo, env=self._env)
 
     def key(self, name: str) -> str:
         """An API key from .env, or "" when it is not set."""
-        return self._env.get(name, "").strip()
+        return self.api.key(name)
 
     async def aclose(self) -> None:
         await self.api.aclose()

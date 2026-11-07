@@ -105,7 +105,7 @@ def test_hello_then_a_typed_command(make_app: MakeApp, launched: list) -> None:
         hello = ws.receive_json()
         assert hello["type"] == "hello"
         assert hello["voice"]["enabled"] is False
-        ws.send_json({"type": "command", "text": "open notepad"})
+        ws.send_json({"type": "command", "text": "could you get notepad up"})
         messages = until(ws, "turn_finished")
     kinds = [m["type"] for m in messages]
     assert kinds[0] == "turn_started"

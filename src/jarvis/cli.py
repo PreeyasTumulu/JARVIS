@@ -248,6 +248,7 @@ def run_chat(
     with asyncio.Runner() as runner:
         app = build_app(settings, ConsoleChannel(console))
         app.bus.subscribe(ConsoleRenderer(console, verbose=verbose))
+        app.agent.warm_up_in_background()
         try:
             warning = runner.run(app.llm.check())
             if warning:

@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 import pytest
 
+from jarvis.adapters.http import ApiClient, ProviderError
 from jarvis.app import App, build_app
 from jarvis.config import Settings, load_settings
 from jarvis.core.channel import ConfirmationRequest
@@ -28,7 +29,6 @@ from jarvis.storage.db import Database
 from jarvis.tools.apps.index import AppEntry, AppIndex
 from jarvis.tools.browser.session import PageElement, PageSnapshot
 from jarvis.tools.calendar.feed import Calendar
-from jarvis.tools.data.http import ApiClient, ProviderError
 from jarvis.tools.data.hub import DataHub
 from jarvis.tools.data.market import Listing, Price
 from jarvis.tools.files.guard import FileGuard

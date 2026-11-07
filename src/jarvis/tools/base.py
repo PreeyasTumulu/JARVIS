@@ -83,8 +83,48 @@ class Prepared:
 
     @property
     def digest(self) -> str:
-        payload = json.dumps(self.args, sort_keys=True, default=str)
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+        return args_digest(self.args)
+
+
+def args_digest(args: dict[str, Any]) -> str:
+    payload = json.dumps(args, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+_SEAL = object()  # only `issue_clearance` holds it; tools/policy.py is its only caller
+
+
+class Clearance:
+    """Permission from the policy gate to run one tool once, with exactly the approved arguments.
+
+    A tool refuses to run without one (Tool.__call__), so no code path can skip the gate:
+    the fast path, the model, the cloud, and later the MCP server all reach tools the same way.
+    """
+
+    __slots__ = ("_seal", "decision", "digest", "risk", "spent", "tool")
+
+    def __init__(self, tool: str, digest: str, risk: Risk, decision: str, seal: object) -> None:
+        self.tool = tool
+        self.digest = digest
+        self.risk = risk
+        self.decision = decision
+        self.spent = False
+        self._seal = seal
+
+    def spend(self, tool: str, args: dict[str, Any]) -> None:
+        """Use the clearance up. Raises PermissionError if it does not cover this call."""
+        if self._seal is not _SEAL:
+            raise PermissionError(f"{tool} was not cleared by the policy gate")
+        if self.spent:
+            raise PermissionError(f"The clearance for {tool} was already used")
+        if self.tool != tool or self.digest != args_digest(args):
+            raise PermissionError(f"The clearance does not cover this call of {tool}")
+        self.spent = True
+
+
+def issue_clearance(tool: str, args: dict[str, Any], risk: Risk, decision: str) -> Clearance:
+    """Called only by PolicyGate.clear (a test checks no other module calls it)."""
+    return Clearance(tool, args_digest(args), risk, decision, _SEAL)
 
 
 @dataclass(frozen=True)
@@ -103,3 +143,4 @@ class ToolContext:
     session_id: str
     turn_id: str
     flags: ContextFlags = ContextFlags()
+    handled_by: str = "agent"  # the router stage that produced this turn's calls (ADR-083)

@@ -101,6 +101,7 @@ def run_serve(
         channels.append(ConsoleChannel(console))  # started from a terminal: y or n there too
     app = build_app(settings, FirstAnswerChannel(*channels))
     app.bus.subscribe(ConsoleRenderer(console, verbose=verbose))
+    app.agent.warm_up_in_background()
     runtime = Runtime(app, hub)
     hang_report = _arm_hang_report(settings)
     with contextlib.suppress(KeyboardInterrupt):

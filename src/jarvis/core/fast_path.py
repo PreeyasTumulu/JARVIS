@@ -93,6 +93,17 @@ def _phrase(text: str) -> str:
 
 
 def fast_call(text: str) -> tuple[str, str] | None:
+    """An exact short command or a plain sum (the router's first two stages together)."""
+    found = exact_call(text)
+    if found is not None:
+        return found
+    expression = spoken_math(text)  # the raw text: normalizing would drop + and *
+    if expression is not None:
+        return "calculate", json.dumps({"expression": expression})
+    return None
+
+
+def exact_call(text: str) -> tuple[str, str] | None:
     """The tool name and JSON arguments for an exact short command, or None."""
     phrase = _phrase(text)
     if phrase in MEDIA:
@@ -107,7 +118,4 @@ def fast_call(text: str) -> tuple[str, str] | None:
         return "focus_start", "{}"
     if phrase in FOCUS_END:
         return "focus_end", "{}"
-    expression = spoken_math(text)  # the raw text: normalizing would drop + and *
-    if expression is not None:
-        return "calculate", json.dumps({"expression": expression})
     return None

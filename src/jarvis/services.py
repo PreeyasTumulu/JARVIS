@@ -92,7 +92,9 @@ def build_services(settings: Settings, db: Database) -> Services:
         if settings.agent.semantic_routing and "local" in settings.llm.providers
         else None,
         meaning=MeaningIndex(
-            db, Embedder(settings.llm.providers["local"].base_url, settings.agent.semantic_model)
+            db,
+            Embedder(settings.llm.providers["local"].base_url, settings.agent.semantic_model),
+            settings.data_dir / "chroma",
         )
         if "local" in settings.llm.providers
         else None,

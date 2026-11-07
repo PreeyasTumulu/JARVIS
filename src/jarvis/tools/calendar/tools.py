@@ -65,6 +65,11 @@ async def calendar_events(ctx: ToolContext, day: str = "today") -> ToolResult:
         day: today, tomorrow, a weekday such as friday, this week, next week, a date as
             YYYY-MM-DD, or next for the next upcoming event.
     """
+    return await events_report(ctx, day)
+
+
+async def events_report(ctx: ToolContext, day: str) -> ToolResult:
+    """The calendar tool's work, for the briefing to reuse without calling a tool directly."""
     now = datetime.now().astimezone()
     try:
         start, end, label = day_range(day, now)

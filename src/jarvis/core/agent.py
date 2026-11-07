@@ -1,14 +1,16 @@
-"""The agent loop: ask the model, run the tools it calls, repeat until it answers or limits hit.
+"""The agent: one conversation, whose turns run through the LangGraph graph in core/graph.py.
 
 Each turn runs inside one asyncio task, so stopping a command is task cancellation: `cancel()`
-works from any thread (stop hotkey, voice "stop", UI button) and Ctrl+C in the CLI does the same.
-The steps map one to one onto LangGraph nodes if the loop moves there later (see ARCHITECTURE.md).
+works from any thread (stop hotkey, voice "stop", the API) and Ctrl+C in the CLI does the same.
+The agent keeps what lasts between turns (the conversation, what is private in it, the
+briefing offer); the graph decides what happens within one.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -19,37 +21,28 @@ from typing import Any
 
 from jarvis.config import Settings
 from jarvis.core.channel import UserChannel
-from jarvis.core.events import (
-    AssistantMessage,
-    EventBus,
-    ModelReplied,
-    TurnFinished,
-    TurnStarted,
-)
+from jarvis.core.events import AssistantMessage, EventBus, TurnFinished, TurnStarted
 from jarvis.core.executor import CallOutcome, ToolExecutor
-from jarvis.core.fast_path import fast_call
+from jarvis.core.graph import AgentGraph, TurnRuntime
+from jarvis.core.guard import Guard
+from jarvis.core.pipeline import AGENT, FAST_STAGES
 from jarvis.core.prompts import system_prompt
+from jarvis.core.speech import SpeechStream
 from jarvis.core.tool_routing import ALWAYS, matched_groups, needs_meaning, select_tools
-from jarvis.llm.router import CLOUD_TOOLS, Router
-from jarvis.llm.types import ChatModel, LLMError, ToolCall
+from jarvis.llm.router import Router
+from jarvis.llm.types import ChatModel, LLMError
 from jarvis.services import Services
 from jarvis.storage.repositories import HistoryLog
 from jarvis.tools.base import ContextFlags, Sensitivity, ToolContext
 from jarvis.tools.mcp.tools import register_all
-from jarvis.tools.recall import FORGET_HISTORY, relevant_memories
+from jarvis.tools.recall import FORGET_HISTORY, after_turn, relevant_memories
 from jarvis.tools.registry import Registry
-from jarvis.voice.phrases import parse_yes
 
 log = logging.getLogger(__name__)
 
-EMPTY_REPLY_NUDGE = (
-    "(Your last reply was empty. Call the right tool, or answer in one short sentence.)"
-)
-DONE = "Done."
 FAST_PATH = "fast path"  # the model name recorded for a turn no model answered
 BRIEFING_OFFER = "By the way, would you like your morning briefing?"
 OFFERED_KEY = "briefing.offered_on"  # the day the briefing was last offered
-NOT_UNDERSTOOD = "Sorry, I didn't get that. Could you say it another way?"
 
 
 class TurnStatus(StrEnum):
@@ -70,6 +63,8 @@ class TurnResult:
     outcomes: list[CallOutcome] = field(default_factory=list)
     timings: dict[str, int] = field(default_factory=dict)
     model: str = ""  # the model that wrote the final answer
+    handled_by: str = AGENT  # the router stage that answered (ADR-083)
+    spoken: bool = False  # the reply was already spoken sentence by sentence as it was written
 
     @property
     def sensitivity(self) -> Sensitivity:
@@ -92,33 +87,42 @@ class Agent:
         clock: Callable[[], datetime] | None = None,
         router: Router | None = None,
     ) -> None:
-        self._settings = settings
-        self._llm = llm
-        self._registry = registry
-        self._executor = executor
+        self.settings = settings
+        self.llm = llm
+        self.registry = registry
+        self.executor = executor
+        self.bus = bus
+        self.services = services
+        self.router = router
         self._history = history
-        self._bus = bus
         self._channel = channel
-        self._services = services
         self._clock = clock
-        self._router = router
         self.session_id = session_id or uuid.uuid4().hex[:12]
-        self._messages: list[dict[str, Any]] = []
-        self._call_flags: dict[str, ContextFlags] = {}  # tool_call_id to what its result added
+        self.conversation: list[dict[str, Any]] = []  # what the local model sees, minus prompt
+        self.call_flags: dict[str, ContextFlags] = {}  # tool_call_id to what its result added
+        self._graph = AgentGraph(self)
         self._task: asyncio.Task[Any] | None = None
         self._task_loop: asyncio.AbstractEventLoop | None = None
         self._turn_lock = asyncio.Lock()  # one turn at a time, whichever channel started it
         self._relevant: list[str] = []  # memories that fit the current request (ADR-065)
         self._offer_pending = False  # the last reply offered the briefing (ADR-066)
         self._mcp_ready = False
+        self._background: set[asyncio.Task[None]] = set()
 
     @property
     def messages(self) -> list[dict[str, Any]]:
-        return list(self._messages)
+        return list(self.conversation)
+
+    @property
+    def graph(self) -> AgentGraph:
+        return self._graph
 
     @property
     def busy(self) -> bool:
         return self._task is not None and not self._task.done()
+
+    def now(self) -> datetime | None:
+        return self._clock() if self._clock else None
 
     def cancel(self) -> bool:
         """Stop the current turn. Safe to call from any thread. Returns False if idle."""
@@ -137,7 +141,7 @@ class Agent:
         if self._mcp_ready:
             return []
         self._mcp_ready = True
-        hub = self._services.mcp
+        hub = self.services.mcp
         if not hub.configured():
             return []
         try:
@@ -145,57 +149,96 @@ class Agent:
         except Exception:
             log.exception("MCP servers could not start")
             return []
-        return register_all(self._registry, hub, remotes, hub.configured())
+        return register_all(self.registry, hub, remotes, hub.configured())
+
+    def warm_up(self) -> None:
+        """Build the graph and open the vector store now (LangGraph takes about 2.5 s to
+        import and ChromaDB about 1 s), so the first request does not wait for them."""
+        started = time.perf_counter()
+        self._graph.compiled()
+        if self.services.meaning is not None:
+            self.services.meaning.open()
+        log.info("Warmed up in %d ms", (time.perf_counter() - started) * 1000)
+
+    def warm_up_in_background(self) -> threading.Thread:
+        """Warm up in a thread, so the prompt or the server is ready at once."""
+
+        def warm() -> None:
+            try:
+                self.warm_up()
+            except Exception:
+                log.exception("Warm-up failed; the first request builds what it needs")
+
+        thread = threading.Thread(target=warm, name="jarvis-warm-up", daemon=True)
+        thread.start()
+        return thread
 
     async def run_turn(
-        self, text: str, source: str = "cli", timings: dict[str, int] | None = None
+        self,
+        text: str,
+        source: str = "cli",
+        timings: dict[str, int] | None = None,
+        speech: SpeechStream | None = None,
     ) -> TurnResult:
         """Run one command. `timings` carries stage times measured before the turn (e.g. STT).
 
-        Voice, the web UI, and the CLI share one agent, so turns are serialized: a turn that
-        arrives while another runs waits for it (callers cancel the old one first if they want).
+        With `speech`, a reply the model writes is fed to it sentence by sentence as it is
+        written, and the stream is closed when the turn ends (`TurnResult.spoken` says whether
+        anything went out). Voice, the API, and the CLI share one agent, so turns are
+        serialized: a turn that arrives while another runs waits for it.
         """
         async with self._turn_lock:
             await self.prepare_tools()
-            self._relevant = await relevant_memories(self._services, text)
-            return await self._run_turn(text, source, timings)
+            self._relevant = await relevant_memories(self.services, text)
+            try:
+                return await self._run_turn(text, source, timings, speech)
+            finally:
+                if speech is not None:
+                    speech.abandon()  # closes it if the turn did not
 
-    async def _run_turn(self, text: str, source: str, timings: dict[str, int] | None) -> TurnResult:
+    async def _run_turn(
+        self,
+        text: str,
+        source: str,
+        timings: dict[str, int] | None,
+        speech: SpeechStream | None,
+    ) -> TurnResult:
         turn_id = uuid.uuid4().hex[:12]
         started = time.perf_counter()
         self._task = asyncio.current_task()
         self._task_loop = asyncio.get_running_loop()
-        await self._bus.publish(TurnStarted(turn_id=turn_id, text=text, source=source))
+        await self.bus.publish(TurnStarted(turn_id=turn_id, text=text, source=source))
 
-        mark = len(self._messages)
-        self._messages.append({"role": "user", "content": text})
-        outcomes: list[CallOutcome] = []
-        stage_times = dict(timings or {})
+        mark = len(self.conversation)
+        self.conversation.append({"role": "user", "content": text})
+        offer_pending, self._offer_pending = self._offer_pending, False
+        ctx = ToolContext(
+            settings=self.settings,
+            channel=self._channel,
+            services=self.services,
+            session_id=self.session_id,
+            turn_id=turn_id,
+        )
+        rt = TurnRuntime(
+            turn_id=turn_id,
+            text=text,
+            ctx=ctx,
+            guard=Guard(self.executor, self.settings.agent.max_tool_calls_per_turn),
+            started=started,
+            times=dict(timings or {}),
+            speech=speech,
+            offer_pending=offer_pending,
+            model=self.llm.model,
+        )
         iterations = 0
-        model = self._llm.model
+        handled_by = AGENT
         try:
-            async with asyncio.timeout(self._settings.agent.turn_timeout_s):
-                cloud = None
-                fast = fast_call(text)
-                if self._offer_pending:
-                    self._offer_pending = False
-                    if parse_yes(text):  # "yes" to "would you like your briefing?"
-                        fast = ("briefing", "{}")
-                if fast is not None and self._registry.get(fast[0]) is None:
-                    fast = None
-                if fast is None and self._router is not None and self._router.wants_cloud(text):
-                    cloud = await self._cloud_turn(turn_id, text, outcomes, stage_times)
-                if fast is not None:
-                    reply = await self._fast_turn(turn_id, *fast, outcomes, stage_times, started)
-                    status, iterations, model = TurnStatus.OK, 0, FAST_PATH
-                elif cloud is not None:
-                    reply, iterations, model = cloud
-                    status = TurnStatus.OK
-                    self._messages.append({"role": "assistant", "content": reply})
-                else:
-                    reply, status, iterations = await self._loop(
-                        turn_id, outcomes, stage_times, started
-                    )
+            async with asyncio.timeout(self.settings.agent.turn_timeout_s):
+                state = await self._graph.run(rt)
+            reply = state.get("reply") or ""
+            status = TurnStatus(state.get("status", "ok"))
+            handled_by = state.get("handled_by", AGENT)
+            iterations = state.get("step", 0)
         except TimeoutError:
             reply, status = "That took too long, so I stopped.", TurnStatus.TIMEOUT
         except asyncio.CancelledError:
@@ -212,109 +255,74 @@ class Agent:
         finally:
             self._task = None
 
+        fast = handled_by in FAST_STAGES
         if status not in (TurnStatus.OK, TurnStatus.LIMIT):
             # Drop half-finished tool exchanges so the next request is well formed.
-            del self._messages[mark:]
-            self._messages.append({"role": "user", "content": text})
-            self._messages.append({"role": "assistant", "content": reply})
-        if status is TurnStatus.OK and self._should_offer(outcomes):
+            del self.conversation[mark:]
+            self.conversation.append({"role": "user", "content": text})
+            self.conversation.append({"role": "assistant", "content": reply})
+        if status is TurnStatus.OK and self._should_offer(rt.outcomes):
             reply = f"{reply} {BRIEFING_OFFER}"
             self._offer_pending = True
-        forgot = any(o.call.name == FORGET_HISTORY and o.result.ok for o in outcomes)
+            if speech is not None and speech.started and not speech.closed:
+                speech.add(BRIEFING_OFFER)
+        spoken = False
+        streaming = speech is not None and speech.started and not speech.closed
+        if speech is not None and streaming and status is TurnStatus.OK and not fast:
+            speech.finish()
+            spoken = True
+        forgot = any(o.call.name == FORGET_HISTORY and o.result.ok for o in rt.outcomes)
         if forgot:
-            del self._messages[:mark]  # what was deleted must not stay in the conversation
+            del self.conversation[:mark]  # what was deleted must not stay in the conversation
         self._trim_history()
 
         latency_ms = int((time.perf_counter() - started) * 1000)
-        stage_times["turn_ms"] = latency_ms
+        rt.times["turn_ms"] = latency_ms
         result = TurnResult(
             turn_id,
             reply,
             status,
-            iterations,
+            0 if fast else iterations,
             latency_ms,
-            outcomes,
-            timings=stage_times,
-            model=model,
+            rt.outcomes,
+            timings=rt.times,
+            model=FAST_PATH if fast else rt.model or self.llm.model,
+            handled_by=handled_by,
+            spoken=spoken,
         )
         if not forgot:  # "forget what I asked about my doctor" would keep the word "doctor"
             self._record_history(result, text, source)
-        await self._bus.publish(AssistantMessage(turn_id=turn_id, text=reply))
-        await self._bus.publish(
-            TurnFinished(turn_id=turn_id, status=status, latency_ms=latency_ms, timings=stage_times)
+        await self.bus.publish(AssistantMessage(turn_id=turn_id, text=reply))
+        await self.bus.publish(
+            TurnFinished(turn_id=turn_id, status=status, latency_ms=latency_ms, timings=rt.times)
         )
+        # Memory work comes after the answer is out, never on the reply path (ADR-084).
+        self._spawn(after_turn(self.services))
         return result
 
-    async def _loop(
-        self,
-        turn_id: str,
-        outcomes: list[CallOutcome],
-        stage_times: dict[str, int],
-        started: float,
-    ) -> tuple[str, TurnStatus, int]:
-        agent_cfg = self._settings.agent
-        ctx = ToolContext(
-            settings=self._settings,
-            channel=self._channel,
-            services=self._services,
-            session_id=self.session_id,
-            turn_id=turn_id,
-        )
-        schemas = await self._tool_schemas()
-        for iteration in range(1, agent_cfg.max_iterations + 1):
-            reply = await self._llm.complete(self._model_messages(), schemas)
-            stage_times["llm_ms"] = stage_times.get("llm_ms", 0) + reply.latency_ms
-            if not reply.tool_calls and not reply.text.strip():
-                # Hermes sometimes answers with nothing at all (Ollama drops a tool call it could
-                # not parse). One nudge recovers it; the nudge never enters the history.
-                log.info("Empty model reply in turn %s; asking once more", turn_id)
-                nudge = {"role": "user", "content": EMPTY_REPLY_NUDGE}
-                reply = await self._llm.complete([*self._model_messages(), nudge], schemas)
-                stage_times["llm_ms"] += reply.latency_ms
-            calls = reply.tool_calls[: agent_cfg.max_tool_calls_per_step]
-            await self._bus.publish(
-                ModelReplied(
-                    turn_id=turn_id,
-                    model=reply.model,
-                    latency_ms=reply.latency_ms,
-                    tool_calls=len(calls),
-                )
-            )
-            if not calls:
-                text = reply.text.strip() or (DONE if outcomes else NOT_UNDERSTOOD)
-                self._messages.append({"role": "assistant", "content": text})
-                return text, TurnStatus.OK, iteration
+    def add_timings(self, turn_id: str, extra: dict[str, int]) -> None:
+        """Stage times measured after the turn (first audio), added to its history row."""
+        try:
+            self._history.add_timings(turn_id, extra)
+        except Exception:
+            log.exception("Failed to add timings to turn %s", turn_id)
 
-            self._messages.append(
-                {
-                    "role": "assistant",
-                    "content": reply.text,
-                    "tool_calls": [call.as_message_part() for call in calls],
-                }
-            )
-            for call in calls:
-                stage_times.setdefault("first_tool_ms", int((time.perf_counter() - started) * 1000))
-                ctx.flags = self._context_flags()
-                outcome = await self._executor.run(call, ctx)
-                outcomes.append(outcome)
-                self._call_flags[call.id] = outcome.flags
-                self._messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "content": outcome.model_content(agent_cfg.max_tool_result_chars),
-                    }
-                )
+    async def drain(self) -> None:
+        """Wait for background memory work and tools left running after a stop."""
+        while self._background:
+            await asyncio.gather(*list(self._background), return_exceptions=True)
+        await self.executor.drain()
 
-        text = f"I couldn't finish that within {agent_cfg.max_iterations} steps, so I stopped."
-        self._messages.append({"role": "assistant", "content": text})
-        return text, TurnStatus.LIMIT, agent_cfg.max_iterations
+    def _spawn(self, coro: Any) -> None:
+        task: asyncio.Task[None] = asyncio.ensure_future(coro)
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
 
     def _should_offer(self, outcomes: list[CallOutcome]) -> bool:
         """Offer the briefing once a day, on the first command of the morning (ADR-066)."""
-        cfg = self._settings.briefing
-        prefs = self._services.prefs
-        if not cfg.offer or prefs is None or self._registry.get("briefing") is None:
+        cfg = self.settings.briefing
+        prefs = self.services.prefs
+        if not cfg.offer or prefs is None or self.registry.get("briefing") is None:
             return False
         now = self._clock() if self._clock else datetime.now().astimezone()
         if any(o.call.name == "briefing" for o in outcomes):
@@ -328,159 +336,44 @@ class Agent:
         prefs.set(OFFERED_KEY, today)
         return True
 
-    async def _fast_turn(
-        self,
-        turn_id: str,
-        name: str,
-        arguments: str,
-        outcomes: list[CallOutcome],
-        stage_times: dict[str, int],
-        started: float,
-    ) -> str:
-        """Run an exact short command's tool without the model (core/fast_path.py, ADR-056).
-
-        The exchange is kept in the history like a model's own call, so the next turn sees it
-        and the context flags still count a private result.
-        """
-        call = ToolCall(id=f"fast_{turn_id}", name=name, arguments=arguments)
-        ctx = ToolContext(
-            settings=self._settings,
-            channel=self._channel,
-            services=self._services,
-            session_id=self.session_id,
-            turn_id=turn_id,
-            flags=self._context_flags(),
-        )
-        stage_times["first_tool_ms"] = int((time.perf_counter() - started) * 1000)
-        outcome = await self._executor.run(call, ctx)
-        outcomes.append(outcome)
-        self._call_flags[call.id] = outcome.flags
-        content = outcome.model_content(self._settings.agent.max_tool_result_chars)
-        reply = outcome.result.speech or outcome.result.error or DONE
-        self._messages += [
-            {"role": "assistant", "content": "", "tool_calls": [call.as_message_part()]},
-            {"role": "tool", "tool_call_id": call.id, "content": content},
-            {"role": "assistant", "content": reply},
-        ]
-        return reply
-
-    async def _cloud_turn(
-        self,
-        turn_id: str,
-        text: str,
-        outcomes: list[CallOutcome],
-        stage_times: dict[str, int],
-    ) -> tuple[str, int, str] | None:
-        """Answer with a cloud model, or None to answer locally (ADR-045).
-
-        The cloud sees a fresh context (the system prompt and this request only: no history, no
-        memories) and public read-only tools. A provider that fails hands over to the next one;
-        a model that asks for anything else hands the whole turn back to the local model.
-        """
-        assert self._router is not None
-        agent_cfg = self._settings.agent
-        tools = [tool for name in CLOUD_TOOLS if (tool := self._registry.get(name)) is not None]
-        schemas = [tool.schema() for tool in tools]
-        now = self._clock() if self._clock else None
-        for model in self._router.available():
-            messages: list[dict[str, Any]] = [
-                {"role": "system", "content": system_prompt(now)},
-                {"role": "user", "content": text},
-            ]
-            flags = ContextFlags()
-            ctx = ToolContext(
-                settings=self._settings,
-                channel=self._channel,
-                services=self._services,
-                session_id=self.session_id,
-                turn_id=turn_id,
-            )
-            try:
-                for iteration in range(1, agent_cfg.max_iterations + 1):
-                    reply = await model.complete(messages, schemas, private=flags.private)
-                    self._router.succeeded(model, reply)
-                    stage_times["llm_ms"] = stage_times.get("llm_ms", 0) + reply.latency_ms
-                    calls = reply.tool_calls[: agent_cfg.max_tool_calls_per_step]
-                    await self._bus.publish(
-                        ModelReplied(
-                            turn_id=turn_id,
-                            model=reply.model,
-                            latency_ms=reply.latency_ms,
-                            tool_calls=len(calls),
-                        )
-                    )
-                    if not calls:
-                        if not reply.text.strip():
-                            raise LLMError("an empty reply")
-                        return reply.text.strip(), iteration, reply.model
-                    if any(call.name not in CLOUD_TOOLS for call in calls):
-                        log.info("The cloud model wanted a local tool; answering locally")
-                        return None
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "content": reply.text,
-                            "tool_calls": [call.as_message_part() for call in calls],
-                        }
-                    )
-                    for call in calls:
-                        ctx.flags = flags
-                        outcome = await self._executor.run(call, ctx)
-                        outcomes.append(outcome)
-                        flags = ContextFlags(
-                            private=flags.private or outcome.flags.private,
-                            untrusted=flags.untrusted or outcome.flags.untrusted,
-                        )
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": call.id,
-                                "content": outcome.model_content(agent_cfg.max_tool_result_chars),
-                            }
-                        )
-                return None  # out of steps: let the local model try
-            except LLMError as exc:
-                self._router.failed(model, str(exc))
-        return None
-
-    async def _tool_schemas(self) -> list[dict[str, Any]]:
+    async def tool_schemas(self) -> list[dict[str, Any]]:
         """Tools for this turn, chosen from the request text (see core/tool_routing.py)."""
-        if self._settings.agent.tool_routing == "all":
-            return self._registry.schemas()
-        request = next(m["content"] for m in reversed(self._messages) if m["role"] == "user")
+        if self.settings.agent.tool_routing == "all":
+            return self.registry.schemas()
+        request = next(m["content"] for m in reversed(self.conversation) if m["role"] == "user")
         if self._relevant and set(matched_groups(request)) <= {"questions"}:
             # "Who is my manager" when Jarvis remembers it: offer memory, not web search, which
             # an 8B model otherwise picks over the answer it already has. Only reading: given
             # remember, the model saved the fact a second time instead of answering.
             wanted = {"list_memories", *ALWAYS}
-            return [tool.schema() for tool in self._registry if tool.name in wanted]
+            return [tool.schema() for tool in self.registry if tool.name in wanted]
         meant: list[str] = []
-        semantic = self._services.semantic
-        if semantic is not None and needs_meaning(request, self._registry):
+        semantic = self.services.semantic
+        if semantic is not None and needs_meaning(request, self.registry):
             meant = await semantic.groups(request)
             if meant:
                 log.info("Routed by meaning to %s", ", ".join(meant))
-        return [tool.schema() for tool in select_tools(request, self._registry, meant)]
+        return [tool.schema() for tool in select_tools(request, self.registry, meant)]
 
-    def _context_flags(self) -> ContextFlags:
+    def context_flags(self) -> ContextFlags:
         """Whether private or outside content is in the context the model is working from.
 
         Computed from the messages themselves, so trimmed history and rolled-back turns drop out.
         """
         # Memories are in every local prompt, so a page could try to have them sent out too.
-        private = bool(self._services.memory.texts())
+        private = bool(self.services.memory.texts())
         untrusted = False
-        for message in self._messages:
+        for message in self.conversation:
             if message["role"] == "tool":
-                flags = self._call_flags.get(message["tool_call_id"], ContextFlags())
+                flags = self.call_flags.get(message["tool_call_id"], ContextFlags())
                 private = private or flags.private
                 untrusted = untrusted or flags.untrusted
         return ContextFlags(private=private, untrusted=untrusted)
 
-    def _model_messages(self) -> list[dict[str, Any]]:
-        now = self._clock() if self._clock else None
-        memories = self._services.memory.texts()
-        messages = [{"role": "system", "content": system_prompt(now, memories)}, *self._messages]
+    def model_messages(self) -> list[dict[str, Any]]:
+        memories = self.services.memory.prompt_texts(self.settings.memory)
+        messages = [{"role": "system", "content": system_prompt(self.now(), memories)}]
+        messages += self.conversation
         # An 8B model overlooks facts at the end of a long system prompt, so the ones that share
         # words with the request are repeated inside it (only in what the model sees).
         last_user = max(i for i, m in enumerate(messages) if m["role"] == "user")
@@ -496,12 +389,12 @@ class Agent:
 
     def _trim_history(self) -> None:
         """Keep the last N user turns. Cuts only at user messages so tool exchanges stay whole."""
-        keep = self._settings.agent.history_turns + 1  # past turns plus the current one
-        user_indexes = [i for i, m in enumerate(self._messages) if m["role"] == "user"]
+        keep = self.settings.agent.history_turns + 1  # past turns plus the current one
+        user_indexes = [i for i, m in enumerate(self.conversation) if m["role"] == "user"]
         if len(user_indexes) > keep:
-            del self._messages[: user_indexes[-keep]]
-        live = {m["tool_call_id"] for m in self._messages if m["role"] == "tool"}
-        self._call_flags = {k: v for k, v in self._call_flags.items() if k in live}
+            del self.conversation[: user_indexes[-keep]]
+        live = {m["tool_call_id"] for m in self.conversation if m["role"] == "tool"}
+        self.call_flags = {k: v for k, v in self.call_flags.items() if k in live}
 
     def _record_history(self, result: TurnResult, text: str, source: str) -> None:
         try:
@@ -512,10 +405,11 @@ class Agent:
                 input_text=text,
                 response_text=result.text,
                 status=result.status,
-                model=result.model or self._llm.model,
+                model=result.model or self.llm.model,
                 iterations=result.iterations,
                 latency_ms=result.latency_ms,
                 timings=result.timings,
+                handled_by=result.handled_by,
             )
         except Exception:
             log.exception("Failed to record command history")

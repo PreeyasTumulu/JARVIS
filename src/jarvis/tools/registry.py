@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from jarvis.tools.base import Prepared, Risk, Sensitivity, ToolContext, ToolResult
+from jarvis.tools.base import Clearance, Prepared, Risk, Sensitivity, ToolContext, ToolResult
 
 ToolFn = Callable[..., Awaitable[ToolResult]]
 PrepareFn = Callable[[ToolContext, dict[str, Any]], Awaitable[Prepared]]
@@ -25,8 +25,10 @@ _SECTION_HEADERS = {"returns", "raises", "example", "examples", "note", "notes",
 _ARG_LINE = re.compile(r"^(\s*)(\w+)(?:\s*\([^)]*\))?:\s*(.*)$")
 
 
-@dataclass
+@dataclass(frozen=True, eq=False)
 class Tool:
+    """A registered tool. Frozen: nothing can lower a risk floor or swap a function at runtime."""
+
     name: str
     description: str
     risk: Risk
@@ -39,10 +41,15 @@ class Tool:
     egress: bool = False  # sends a request to an address the model chooses (see policy.py)
     parameters: dict[str, Any] | None = None  # a JSON schema given as is (MCP tools)
     route: re.Pattern[str] | None = None  # words that offer this tool (MCP servers' keywords)
+    # "Stop" ends the turn either way; False lets a call that already started finish (and be
+    # audited) in the background, for work that must not be cut in half (Pipecat's option).
+    cancel_on_interruption: bool = True
 
     def preparer(self, fn: PrepareFn) -> PrepareFn:
-        """Register a side-effect-free step that resolves and risk-rates arguments."""
-        self.prepare_fn = fn
+        """Register a side-effect-free step that resolves and risk-rates arguments (once)."""
+        if self.prepare_fn is not None:
+            raise ValueError(f"Tool {self.name} already has a preparer")
+        object.__setattr__(self, "prepare_fn", fn)
         return fn
 
     def schema(self) -> dict[str, Any]:
@@ -92,7 +99,9 @@ class Tool:
             return await self.prepare_fn(ctx, args)
         return Prepared(args=args, summary=describe_call(self.name, args), risk=self.risk)
 
-    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+    async def __call__(self, ctx: ToolContext, clearance: Clearance, **kwargs: Any) -> ToolResult:
+        """Run the tool. Only with a clearance from the policy gate for exactly these args."""
+        clearance.spend(self.name, kwargs)
         return await self.fn(ctx, **kwargs)
 
 
@@ -104,6 +113,7 @@ def tool(
     timeout_s: float | None = None,
     name: str | None = None,
     egress: bool = False,
+    cancel_on_interruption: bool = True,
 ) -> Callable[[ToolFn], Tool]:
     """Turn an async function into a Tool. Sensitivity defaults to private (fail closed)."""
 
@@ -123,6 +133,7 @@ def tool(
             args_model=_build_args_model(fn, arg_docs),
             fn=fn,
             egress=egress,
+            cancel_on_interruption=cancel_on_interruption,
         )
 
     return wrap

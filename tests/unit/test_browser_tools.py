@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from jarvis.tools.base import ToolContext, ToolError
+from jarvis.tools.base import Prepared, Risk, ToolContext, ToolError
 from jarvis.tools.browser.session import PageElement
 from jarvis.tools.browser.tools import NEXT_STEP_HINT, browser_click, page_data
-from jarvis.tools.policy import EXFILTRATION_REASON
+from jarvis.tools.policy import EXFILTRATION_REASON, PolicyGate
 from tests.conftest import FakeBrowser, FakeChannel, FakeWeb, Harness, MakeApp, reply
 
 SEARCH = PageElement(1, "field", "Search Amazon", search=True, in_form=True)
@@ -145,8 +145,13 @@ async def test_click_refuses_when_the_page_changed_after_the_confirmation(
 ) -> None:
     shop(fake_browser, PageElement(3, "link", "Something else"))
     h = make_app()
+    args = {"target": "#3 Today's Deals"}  # what was confirmed, before the page changed
+    prepared = Prepared(args=args, summary="Click Today's Deals", risk=Risk.CONFIRM)
+    clearance = PolicyGate(h.app.settings.safety).clear(
+        browser_click, prepared, None, confirmed=True
+    )
     with pytest.raises(ToolError, match="page changed"):
-        await browser_click(context(h), target="#3 Today's Deals")
+        await browser_click(context(h), clearance, **args)
 
 
 async def test_typing_a_search_and_pressing_enter_runs_directly(

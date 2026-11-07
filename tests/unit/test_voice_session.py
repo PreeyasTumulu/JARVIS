@@ -163,7 +163,7 @@ async def push_to_talk(session: VoiceSession, mic: FakeMic, frames: int = 8) -> 
 
 async def test_push_to_talk_runs_a_command_and_speaks(make_app: MakeApp, launched: list) -> None:
     h = make_app([reply("", ("open_app", {"name": "notepad"})), reply("Notepad is open.")])
-    session, mic, cues, tts = make_session(h, FakeSTT("open notepad"))
+    session, mic, cues, tts = make_session(h, FakeSTT("could you get notepad up"))
 
     await push_to_talk(session, mic)
     await until(lambda: tts.spoken == ["Notepad is open."])
@@ -205,7 +205,7 @@ async def test_voice_confirmation(
         [reply("", ("open_app", {"name": "spotify"})), reply("Done.")],
         channel=channel,  # type: ignore[arg-type]
     )
-    session, mic, _, tts = make_session(h, FakeSTT("open spotify", answer))
+    session, mic, _, tts = make_session(h, FakeSTT("could you put spotify on", answer))
     channel.attach(session)
 
     await push_to_talk(session, mic)
@@ -252,7 +252,9 @@ async def test_wake_word_then_endpointing(make_app: MakeApp, launched: list) -> 
     h = make_app([reply("", ("open_app", {"name": "notepad"})), reply("Opened.")])
     wake = Scripted([0.1, 0.95])
     vad = Scripted([0.9] * 4 + [0.1] * 12)
-    session, mic, _cues, tts = make_session(h, FakeSTT("open notepad"), wake=wake, vad=vad)
+    session, mic, _cues, tts = make_session(
+        h, FakeSTT("could you get notepad up"), wake=wake, vad=vad
+    )
     runner = asyncio.create_task(session.run())
     try:
         await until(lambda: mic.active)

@@ -308,3 +308,4 @@ remove_fillers = true        # drop "um" and "uh"
 [tts]
 engine = "piper"            # "piper", or "sapi" (built-in Windows voice); falls back to sapi if Piper is not installed
 rate = 0                     # -10 (slow) to 10 (fast)
+stream = true                # speak each sentence as the model writes it (false: wait for the whole reply)

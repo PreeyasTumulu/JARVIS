@@ -171,6 +171,12 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (kind, ref_id, model)
     );
     """,
+    # 9: which router stage answered each turn and made each call (Phase 24, ADR-083)
+    """
+    ALTER TABLE command_history ADD COLUMN handled_by TEXT;
+    ALTER TABLE audit_log ADD COLUMN handled_by TEXT;
+    ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'user';
+    """,
 ]
 
 

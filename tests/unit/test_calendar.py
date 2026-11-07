@@ -126,7 +126,7 @@ async def call(h: Any, **args: Any) -> Any:
         turn_id="t",
     )
     tool_call = ToolCall("c1", "calendar_events", json.dumps(args))
-    return await h.app.agent._executor.run(tool_call, ctx)
+    return await h.app.agent.executor.run(tool_call, ctx)
 
 
 async def test_todays_events(make_app: MakeApp, web: FakeWeb) -> None:

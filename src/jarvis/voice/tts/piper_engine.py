@@ -11,6 +11,8 @@ import contextlib
 import logging
 import re
 import threading
+import time
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +102,46 @@ class PiperTTS:
                 pending.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await pending
+
+    async def speak_stream(self, sentences: AsyncIterator[str]) -> float | None:
+        """Speak sentences as the model writes them; the time the first audio started.
+
+        One task makes audio from each sentence as it arrives while this one plays the audio
+        already made, so the next sentence is usually ready when the current one ends.
+        """
+        generation = self._generation
+        made: asyncio.Queue[tuple[Audio, int] | None] = asyncio.Queue()
+
+        async def make() -> None:
+            try:
+                async for sentence in sentences:
+                    for piece in split_sentences(sentence):
+                        if generation != self._generation:
+                            return
+                        made.put_nowait(await asyncio.to_thread(self.synthesize, piece))
+            finally:
+                made.put_nowait(None)
+
+        maker = asyncio.ensure_future(make())
+        first: float | None = None
+        try:
+            while (item := await made.get()) is not None:
+                if generation != self._generation:
+                    break
+                if first is None:
+                    first = time.perf_counter()
+                finished = await asyncio.to_thread(self._player.play, *item)
+                if not finished or generation != self._generation:
+                    break
+        except asyncio.CancelledError:
+            self._player.stop()
+            raise
+        finally:
+            if not maker.done():
+                maker.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await maker
+        return first
 
     async def stop(self) -> None:
         self._generation += 1

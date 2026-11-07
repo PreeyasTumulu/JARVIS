@@ -37,6 +37,7 @@ class AuditEntry:
     result: Any = None
     error: str | None = None
     duration_ms: int | None = None
+    handled_by: str | None = None  # the router stage of the turn (ADR-083)
     ts: str = field(default_factory=utc_now)
 
 
@@ -50,8 +51,9 @@ class AuditLog:
         self._db.execute(
             """
             INSERT INTO audit_log (ts, session_id, turn_id, call_id, tool, args_json, risk,
-                                   decision, confirmed_via, ok, result_json, error, duration_ms)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   decision, confirmed_via, ok, result_json, error, duration_ms,
+                                   handled_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry.ts,
@@ -67,6 +69,7 @@ class AuditLog:
                 None if entry.result is None else to_json(entry.result, RESULT_JSON_LIMIT),
                 entry.error,
                 entry.duration_ms,
+                entry.handled_by,
             ),
         )
 
@@ -125,13 +128,14 @@ class HistoryLog:
         iterations: int,
         latency_ms: int,
         timings: dict[str, int] | None = None,
+        handled_by: str | None = None,
     ) -> None:
         self._db.execute(
             """
             INSERT INTO command_history (ts, session_id, turn_id, source, input_text,
                                          response_text, status, model, iterations, latency_ms,
-                                         timings_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                         timings_json, handled_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 utc_now(),
@@ -145,8 +149,28 @@ class HistoryLog:
                 iterations,
                 latency_ms,
                 None if timings is None else to_json(timings),
+                handled_by,
             ),
         )
+
+    def add_timings(self, turn_id: str, extra: dict[str, int]) -> None:
+        """Add stage times measured after the turn ended (first audio, speech) to its row."""
+        rows = self._db.execute(
+            "SELECT id, timings_json FROM command_history WHERE turn_id = ? ORDER BY id DESC "
+            "LIMIT 1",
+            (turn_id,),
+        )
+        if not rows:
+            return
+        timings = json.loads(rows[0]["timings_json"] or "{}")
+        timings.update(extra)
+        self._db.execute(
+            "UPDATE command_history SET timings_json = ? WHERE id = ?",
+            (to_json(timings), rows[0]["id"]),
+        )
+
+    def ids(self) -> list[int]:
+        return [int(row[0]) for row in self._db.execute("SELECT id FROM command_history")]
 
     def recent(self, limit: int = 20) -> list[dict[str, Any]]:
         rows = self._db.execute("SELECT * FROM command_history ORDER BY id DESC LIMIT ?", (limit,))

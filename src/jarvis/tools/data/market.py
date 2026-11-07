@@ -18,9 +18,9 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
+from jarvis.adapters.http import ApiClient, ProviderError
 from jarvis.config import MarketSettings
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolError, ToolResult
-from jarvis.tools.data.http import ApiClient, ProviderError
 from jarvis.tools.data.spoken import money, number, percent_change
 from jarvis.tools.registry import tool
 

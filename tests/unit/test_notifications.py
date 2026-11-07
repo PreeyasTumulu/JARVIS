@@ -133,9 +133,11 @@ async def test_nothing_new_from_a_person_repeats_their_last_message(
 ) -> None:
     notification_center.add("WhatsApp", "Ravi", "Meeting moved to 5", minutes_ago=20)
     by_ravi = ("read_notifications", {"person": "Ravi"})
-    h = make_app([reply("", by_ravi), reply("", by_ravi), reply("Done.")])
-    result = await h.app.agent.run_turn("did ravi say anything")
-    assert result.outcomes[1].result.speech == (
+    h = make_app([reply("", by_ravi), reply("Done."), reply("", by_ravi), reply("Done.")])
+    await h.app.agent.run_turn("did ravi say anything")
+    # A second turn: within one turn the guard drops the same call made twice.
+    result = await h.app.agent.run_turn("did ravi say anything else")
+    assert result.outcomes[0].result.speech == (
         "Nothing new from Ravi. The last one, 20 minutes ago: Ravi on WhatsApp: Meeting moved to 5"
     )
 

@@ -1,4 +1,8 @@
-"""Shared plumbing for the data APIs: one HTTP client, a SQLite cache, rate limits, breakers.
+"""The web API adapter: one HTTP client, keys from .env, a SQLite cache, rate limits, breakers.
+
+Every web API Jarvis calls goes through `ApiClient` (see jarvis/adapters/__init__.py). A call
+has a timeout, is tried once more after a timeout or a 502, 503, or 504, and is logged without
+its query string, where some providers want the API key.
 
 Each provider gets a token bucket (requests per minute) and a circuit breaker. A provider over its
 limit, or one that failed three times in a row, is skipped for a while instead of slowing every
@@ -9,8 +13,10 @@ connection is back.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, TypeVar
@@ -43,6 +49,18 @@ FAILURES_TO_OPEN = 3
 BREAKER_COOLDOWN_S = 300.0
 
 _OFFLINE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.ProxyError)
+RETRIES = 1  # one more try after a timeout or a server that is briefly down
+RETRY_DELAY_S = 0.5
+_TRANSIENT = (502, 503, 504)
+
+
+def redact_url(url: str | httpx.URL) -> str:
+    """The URL without its query values, which can hold API keys, for logs and errors."""
+    parsed = httpx.URL(str(url))
+    if not parsed.query:
+        return str(parsed)
+    names = sorted({name for name, _ in parsed.params.multi_items()})
+    return str(parsed.copy_with(query=None)) + "?" + "&".join(f"{n}=***" for n in names)
 
 
 class ProviderError(Exception):
@@ -159,12 +177,18 @@ class ApiClient:
         *,
         http: httpx.AsyncClient | None = None,
         clock: Callable[[], float] = time.monotonic,
+        env: Mapping[str, str] | None = None,
     ) -> None:
+        self._env = os.environ if env is None else env
         self.cache = ApiCache(db)
         self._http = http
         self._clock = clock
         self._buckets: dict[str, TokenBucket] = {}
         self._breakers: dict[str, CircuitBreaker] = {}
+
+    def key(self, name: str) -> str:
+        """An API key from .env (loaded into the environment at start), or "" when not set."""
+        return self._env.get(name, "").strip()
 
     @property
     def http(self) -> httpx.AsyncClient:
@@ -214,13 +238,23 @@ class ApiClient:
         """GET a JSON document. Query parameters are never logged, since some carry API keys."""
 
         async def request() -> Any:
-            log.info("GET %s %s", provider, url)
-            try:
-                response = await self.http.get(url, params=params, headers=headers)
-            except _OFFLINE as exc:
-                raise ProviderError(provider, "could not connect", offline=True) from exc
-            except httpx.HTTPError as exc:
-                raise ProviderError(provider, f"request failed ({type(exc).__name__})") from exc
+            log.info("GET %s %s", provider, redact_url(url))
+            for attempt in range(RETRIES + 1):
+                last = attempt == RETRIES
+                try:
+                    response = await self.http.get(url, params=params, headers=headers)
+                except _OFFLINE as exc:
+                    raise ProviderError(provider, "could not connect", offline=True) from exc
+                except httpx.TimeoutException as exc:
+                    if last:
+                        raise ProviderError(provider, "timed out") from exc
+                except httpx.HTTPError as exc:
+                    raise ProviderError(provider, f"request failed ({type(exc).__name__})") from exc
+                else:
+                    if response.status_code not in _TRANSIENT or last:
+                        break
+                log.info("%s did not answer in time or was briefly down; trying again", provider)
+                await asyncio.sleep(RETRY_DELAY_S)
             status = response.status_code
             if status == 429:
                 raise ProviderError(provider, "rate limited by the provider")

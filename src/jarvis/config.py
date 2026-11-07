@@ -34,6 +34,7 @@ class AgentSettings(_Section):
     turn_timeout_s: float = Field(default=180, gt=0)
     tool_timeout_s: float = Field(default=20, gt=0)
     max_tool_calls_per_step: int = Field(default=4, ge=1)
+    max_tool_calls_per_turn: int = Field(default=8, ge=1, le=40)  # the guard's step cap
     history_turns: int = Field(default=8, ge=0)
     max_tool_result_chars: int = Field(default=4000, ge=200)
     tool_routing: Literal["keywords", "all"] = "keywords"
@@ -85,6 +86,32 @@ class RouterSettings(_Section):
     escalate: Literal["auto", "explicit", "never"] = "auto"
     daily_requests: dict[str, int] = {}  # per provider, to stay inside a free tier's daily limit
     cooldown_s: float = Field(default=300, gt=0)  # a provider that failed is skipped this long
+    # The stages a request passes through, in order, until one handles it (ADR-083). Every
+    # stage but "agent" answers without a model; "agent" must come last.
+    pipeline: list[Literal["exact_phrase", "arithmetic", "template", "agent"]] = [
+        "exact_phrase",
+        "arithmetic",
+        "template",
+        "agent",
+    ]
+    stage_timeout_ms: int = Field(default=150, ge=10, le=5000)  # a slow stage counts as no match
+
+    @model_validator(mode="after")
+    def _agent_last(self) -> RouterSettings:
+        if not self.pipeline or self.pipeline[-1] != "agent" or self.pipeline.count("agent") != 1:
+            raise ValueError('router.pipeline must end with "agent", and name it once')
+        if len(set(self.pipeline)) != len(self.pipeline):
+            raise ValueError("router.pipeline names a stage twice")
+        return self
+
+
+class MemorySettings(_Section):
+    """What the local model is shown of your memories each turn (ADR-084)."""
+
+    # Facts about you ("my manager is Ravi") and about what you are working on ("the report
+    # is due Friday"), each within its own character budget sized for an 8B model's context.
+    user_chars: int = Field(default=1200, ge=0, le=8000)
+    context_chars: int = Field(default=600, ge=0, le=8000)
 
 
 class SafetySettings(_Section):
@@ -252,6 +279,7 @@ class TTSSettings(_Section):
     piper_voice: str = "en_GB-alan-medium"
     piper_speed: float = Field(default=1.0, gt=0.25, le=3.0)
     rate: int = Field(default=0, ge=-10, le=10)  # SAPI only
+    stream: bool = True  # speak the reply sentence by sentence while the model writes it
 
 
 class VoiceSettings(_Section):
@@ -376,6 +404,7 @@ class Settings(_Section):
     agent: AgentSettings = AgentSettings()
     llm: LLMSettings
     router: RouterSettings = RouterSettings()
+    memory: MemorySettings = MemorySettings()
     safety: SafetySettings = SafetySettings()
     apps: AppsSettings = AppsSettings()
     files: FilesSettings = FilesSettings()

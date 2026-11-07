@@ -35,27 +35,49 @@ WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", 
 
 
 async def relevant_memories(services: Services, request: str, limit: int = 3) -> list[str]:
-    """Memories that fit the request, by meaning when possible, else by shared words."""
+    """Memories that fit the request, by meaning when possible, else by shared words.
+
+    Only searches: vectors are written after a turn (`after_turn`), never on the reply path.
+    """
     memories = services.memory.all()
+    if not memories:
+        return []
     index = services.meaning
     if index is not None:
         try:
-            # Even with none left: forgetting the last memory must drop its vector too.
-            await index.sync("memory", [(m.id, m.text) for m in memories])
-            if not memories:
-                return []
-            found = await index.search("memory", request, limit=limit)
+            found = await index.search("memory", request, limit=limit + 2)
         except MeaningUnavailable as exc:
             log.info("Memory search by meaning unavailable (%s); using words", exc)
         else:
             texts = {m.id: m.text for m in memories}
-            best = found[0][1] if found else 0.0
-            return [
-                texts[i]
-                for i, score in found
-                if score >= MEMORY_MATCH and best - score <= MEMORY_MARGIN and i in texts
-            ]
+            found = [(i, score) for i, score in found if i in texts][:limit]  # not yet pruned
+            if found:
+                best = found[0][1]
+                return [
+                    texts[i]
+                    for i, score in found
+                    if score >= MEMORY_MATCH and best - score <= MEMORY_MARGIN
+                ]
     return related_memories(request, [m.text for m in memories])[:limit]
+
+
+async def after_turn(services: Services, history_rows: int = 50) -> None:
+    """Bring the vectors up to date once the answer is out (ADR-084): new and forgotten
+    memories, and the latest commands, so recall finds them without waiting."""
+    index = services.meaning
+    if index is None:
+        return
+    try:
+        await index.sync("memory", [(m.id, m.text) for m in services.memory.all()])
+        history = services.history
+        if history is not None:
+            await index.prune("history", history.ids())
+            rows = history.recent(history_rows)
+            await index.add("history", [(row["id"], row["input_text"]) for row in rows])
+    except MeaningUnavailable as exc:
+        log.info("Vectors not updated after the turn (%s)", exc)
+    except Exception:
+        log.exception("Vectors not updated after the turn")
 
 
 def past_range(when: str, now: datetime) -> tuple[datetime, datetime, str]:
@@ -137,7 +159,7 @@ async def recall(ctx: ToolContext, about: str, when: str | None = None) -> ToolR
     picked: list[int] = []
     if index is not None:
         try:
-            await index.sync("history", [(row["id"], row["input_text"]) for row in rows])
+            await index.add("history", [(row["id"], row["input_text"]) for row in rows])
             hits = await index.search("history", about, among=list(by_id), limit=5)
             picked = [i for i, score in hits if score >= HISTORY_MATCH]
         except MeaningUnavailable as exc:

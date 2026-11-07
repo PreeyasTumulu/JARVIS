@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from jarvis.core.meaning import Embedder, MeaningIndex
-from jarvis.tools.recall import past_range, relevant_memories
+from jarvis.tools.recall import after_turn, past_range, relevant_memories
 from tests.conftest import (
     CALENDAR_URL,
     FakeMailServer,
@@ -75,7 +75,7 @@ async def call(h: Any, tool: str, **args: Any) -> Any:
         session_id="s",
         turn_id="now",
     )
-    return await h.app.agent._executor.run(ToolCall("c1", tool, json.dumps(args)), ctx)
+    return await h.app.agent.executor.run(ToolCall("c1", tool, json.dumps(args)), ctx)
 
 
 def remember_commands(h: Any, *pairs: tuple[str, str]) -> None:
@@ -179,6 +179,8 @@ async def test_relevant_memories_by_meaning(make_app: MakeApp, embeddings: FakeE
     with_meaning(h, embeddings)
     h.app.services.memory.add("The user's manager is Ravi")
     h.app.services.memory.add("The user's car is a Swift")
+    assert await relevant_memories(h.app.services, "who is my boss") == []  # no vectors yet
+    await after_turn(h.app.services)  # vectors are written after a turn, never on the reply path
     assert await relevant_memories(h.app.services, "who is my boss") == [
         "The user's manager is Ravi"
     ]
@@ -261,12 +263,10 @@ def morning(h: Any, hour: int = 8) -> None:
 
 
 async def test_the_briefing_is_offered_once_and_yes_plays_it(make_app: MakeApp) -> None:
-    h = make_app(
-        [reply("Notepad is open."), reply("Done.")], overrides={"briefing": {"offer": True}}
-    )
+    h = make_app([reply("Hello."), reply("Done.")], overrides={"briefing": {"offer": True}})
     morning(h)
-    first = await h.app.agent.run_turn("open notepad")
-    assert first.text == "Notepad is open. By the way, would you like your morning briefing?"
+    first = await h.app.agent.run_turn("hi")
+    assert first.text == "Hello. By the way, would you like your morning briefing?"
     second = await h.app.agent.run_turn("yes please")
     assert second.outcomes[0].call.name == "briefing"
     assert len(h.llm.requests) == 1  # the yes never reached the model
@@ -275,11 +275,9 @@ async def test_the_briefing_is_offered_once_and_yes_plays_it(make_app: MakeApp) 
 
 
 async def test_no_to_the_offer_is_just_a_command(make_app: MakeApp) -> None:
-    h = make_app(
-        [reply("Notepad is open."), reply("Okay.")], overrides={"briefing": {"offer": True}}
-    )
+    h = make_app([reply("Hello."), reply("Okay.")], overrides={"briefing": {"offer": True}})
     morning(h)
-    await h.app.agent.run_turn("open notepad")
+    await h.app.agent.run_turn("hi")
     second = await h.app.agent.run_turn("no thanks")
     assert second.outcomes == []
     assert len(h.llm.requests) == 2

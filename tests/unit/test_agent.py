@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 
-from jarvis.core.agent import EMPTY_REPLY_NUDGE, NOT_UNDERSTOOD, TurnStatus
+from jarvis.core.agent import TurnStatus
 from jarvis.core.events import AssistantMessage, ToolCallFinished, ToolCallStarted
+from jarvis.core.graph import EMPTY_REPLY_NUDGE, GAVE_UP, NOT_UNDERSTOOD
 from jarvis.llm.types import LLMError
 from jarvis.tools.base import Risk, Sensitivity, ToolContext, ToolResult
 from jarvis.tools.registry import Registry, tool
@@ -26,7 +27,7 @@ async def test_plain_answer_needs_no_tools(make_app: MakeApp) -> None:
 
 async def test_tool_call_then_answer_is_audited(make_app: MakeApp, launched: list) -> None:
     h = make_app([reply("", ("open_app", {"name": "notepad"})), reply("Notepad is open.")])
-    result = await h.app.agent.run_turn("open notepad")
+    result = await h.app.agent.run_turn("could you get notepad up for me")
 
     assert result.status is TurnStatus.OK
     assert result.iterations == 2
@@ -73,7 +74,7 @@ async def test_unlisted_app_declined_does_nothing(make_app: MakeApp, launched: l
         [reply("", ("open_app", {"name": "spotify"})), reply("Okay, I won't.")],
         channel=FakeChannel(confirm=False),
     )
-    result = await h.app.agent.run_turn("open spotify")
+    result = await h.app.agent.run_turn("could you put spotify on")
 
     assert launched == []
     assert result.text == "Okay, I won't."
@@ -138,12 +139,22 @@ async def test_unknown_tool_and_bad_arguments_are_invalid(make_app: MakeApp) -> 
 
 
 async def test_iteration_limit_stops_the_loop(make_app: MakeApp) -> None:
-    looping = [reply("", ("web_search", {"query": "x"})) for _ in range(10)]
+    looping = [reply("", ("web_search", {"query": f"x{n}"})) for n in range(10)]
     h = make_app(looping, overrides={"agent": {"max_iterations": 3}})
     result = await h.app.agent.run_turn("search forever")
     assert result.status is TurnStatus.LIMIT
     assert result.iterations == 3
     assert len(h.llm.requests) == 3
+
+
+async def test_the_same_call_again_is_dropped_and_the_turn_stops(make_app: MakeApp) -> None:
+    looping = [reply("", ("web_search", {"query": "x"})) for _ in range(10)]
+    h = make_app(looping)
+    result = await h.app.agent.run_turn("search forever")
+    assert result.status is TurnStatus.LIMIT
+    assert result.text == GAVE_UP
+    assert len(h.llm.requests) == 3  # ran once, then two repeats were dropped
+    assert [row["decision"] for row in h.audit()] == ["auto", "duplicate", "duplicate"]
 
 
 async def test_cancel_stops_turn_and_session_continues(make_app: MakeApp) -> None:
@@ -241,7 +252,9 @@ async def test_nothing_twice_is_not_reported_as_done(make_app: MakeApp) -> None:
 async def test_turns_from_different_channels_wait_for_each_other(make_app: MakeApp) -> None:
     h = make_app([Hang(), reply("Second.")])
     first = asyncio.create_task(h.app.agent.run_turn("slow one", source="web"))
-    await asyncio.sleep(0.01)
+    async with asyncio.timeout(10):  # the first graph build imports LangGraph
+        while not h.llm.requests:  # noqa: ASYNC110
+            await asyncio.sleep(0.01)
     second = asyncio.create_task(h.app.agent.run_turn("quick one", source="voice"))
     await asyncio.sleep(0.01)
     assert len(h.llm.requests) == 1  # the voice turn waits instead of sharing the history
@@ -255,7 +268,7 @@ async def test_turns_from_different_channels_wait_for_each_other(make_app: MakeA
 async def test_a_result_with_a_summary_asks_for_a_short_reply(make_app: MakeApp) -> None:
     # Weather was read out field by field ("the weather code is 3") in 14 seconds.
     h = make_app([reply("", ("set_volume", {"level": 30})), reply("Volume is at 30.")])
-    await h.app.agent.run_turn("set the volume to 30")
+    await h.app.agent.run_turn("make it a bit quieter, around 30")
     tool_message = next(m for m in h.llm.requests[1] if m["role"] == "tool")
     assert "The summary is the answer" in tool_message["content"]
 
@@ -272,3 +285,14 @@ async def test_a_result_with_a_long_list_asks_for_a_short_reply(
     await h.app.agent.run_turn("what does notepad say")
     tool_message = next(m for m in h.llm.requests[1] if m["role"] == "tool")
     assert "two or three short spoken sentences" in tool_message["content"]
+
+
+async def test_warm_up_in_a_thread_builds_the_graph_once(make_app: MakeApp) -> None:
+    h = make_app([reply("Hello.")])
+    graph = h.app.agent._graph
+    thread = h.app.agent.warm_up_in_background()
+    result = await h.app.agent.run_turn("hi")  # may race the warm-up: one build either way
+    await asyncio.to_thread(thread.join, 10)
+    assert result.text == "Hello."
+    assert graph._compiled is not None
+    assert graph.compiled() is graph._compiled

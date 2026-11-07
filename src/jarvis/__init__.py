@@ -2,7 +2,7 @@
 
 import sys
 
-__version__ = "1.12.0"
+__version__ = "1.13.0"
 
 
 def _load_the_system_cpp_runtime() -> None:

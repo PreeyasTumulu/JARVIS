@@ -42,18 +42,18 @@ def _names(names: list[str], limit: int = 3) -> str:
 
 
 async def _weather(ctx: ToolContext) -> str | None:
-    from jarvis.tools.data.weather import weather
+    from jarvis.tools.data.weather import weather_report
 
     if not ctx.settings.weather.home.strip():
         return None  # no home city set: nothing to say without asking
-    result = await weather.fn(ctx, place=None, day="today")
+    result = await weather_report(ctx, None, "today")
     return result.speech
 
 
 async def _calendar(ctx: ToolContext) -> str | None:
-    from jarvis.tools.calendar.tools import calendar_events
+    from jarvis.tools.calendar.tools import events_report
 
-    result = await calendar_events.fn(ctx, day="today")
+    result = await events_report(ctx, "today")
     return result.speech
 
 

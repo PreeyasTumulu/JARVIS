@@ -129,6 +129,7 @@ class AppsSettings(_Section):
     match_threshold: float = Field(default=75, ge=0, le=100)
     aliases: dict[str, str] = {}
     process_names: dict[str, str] = {}  # app name to executable, for matching open windows
+    open_wait_s: float = Field(default=10, ge=0, le=60)  # how long "open" waits for a window
 
 
 class FilesSettings(_Section):
@@ -366,6 +367,10 @@ class McpServerSideSettings(_Section):
     )
 
 
+class NotesSettings(_Section):
+    folder: str = "{documents}/Jarvis Notes"  # one Markdown file per day (ADR-088)
+
+
 class MailSettings(_Section):
     """Your mailbox over IMAP and SMTP with an app password in .env (ADR-057)."""
 
@@ -442,6 +447,7 @@ class Settings(_Section):
     calendar: CalendarSettings = CalendarSettings()
     mcp: McpSettings = McpSettings()
     mcp_server: McpServerSideSettings = McpServerSideSettings()
+    notes: NotesSettings = NotesSettings()
     briefing: BriefingSettings = BriefingSettings()
     history: HistorySettings = HistorySettings()
     server: ServerSettings = ServerSettings()

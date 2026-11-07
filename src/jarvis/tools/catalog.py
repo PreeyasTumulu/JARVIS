@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from jarvis.tools.apps.docker import docker_list, docker_logs, docker_start, docker_stop
-from jarvis.tools.apps.tools import close_app, focus_app, open_app
+from jarvis.tools.apps.tools import close_app, focus_app, open_app, schedule_app
 from jarvis.tools.apps.vscode import vscode_open
 from jarvis.tools.briefing import briefing
 from jarvis.tools.browser.tools import browser_click, browser_open, browser_read, browser_type
@@ -18,7 +18,10 @@ from jarvis.tools.mail.tools import read_email, read_mail, reply_email
 from jarvis.tools.memory import forget, list_memories, remember
 from jarvis.tools.messaging.calls import call_contact, hang_up
 from jarvis.tools.messaging.tools import send_whatsapp
+from jarvis.tools.notes import open_notes, read_notes, take_note
 from jarvis.tools.notifications.tools import read_notifications
+from jarvis.tools.office.calculator import calculator_show
+from jarvis.tools.office.sheets import add_sheet_row
 from jarvis.tools.recall import forget_history, recall
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.arithmetic import calculate
@@ -51,6 +54,12 @@ def build_registry() -> Registry:
             open_app,
             focus_app,
             close_app,
+            schedule_app,
+            take_note,
+            read_notes,
+            open_notes,
+            add_sheet_row,
+            calculator_show,
             find_file,
             open_file,
             read_file,

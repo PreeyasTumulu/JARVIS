@@ -179,9 +179,10 @@ class Agent:
         return thread
 
     async def run_call(
-        self, call: ToolCall, channel: UserChannel, handled_by: str, requester: str
+        self, call: ToolCall, channel: UserChannel, handled_by: str, requester: str | None = None
     ) -> CallOutcome:
-        """One tool call from outside a conversation (an MCP client, ADR-085).
+        """One tool call from outside a conversation (an MCP client, ADR-085, or a scheduled
+        action, ADR-087).
 
         The same check, policy gate, confirmation, and audit as a call the model makes, and one
         at a time with turns, so it never types into a window while a voice command runs.

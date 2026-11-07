@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from jarvis.config import Settings
 from jarvis.core.agent import Agent
-from jarvis.core.channel import UserChannel
+from jarvis.core.channel import ApprovedChannel, UserChannel
 from jarvis.core.events import Announcement, EventBus
 from jarvis.core.executor import ToolExecutor
 from jarvis.llm.client import LLMClient
 from jarvis.llm.router import Router
-from jarvis.llm.types import ChatModel
+from jarvis.llm.types import ChatModel, ToolCall
 from jarvis.services import Services, build_services
 from jarvis.storage.db import Database
 from jarvis.storage.repositories import AuditLog, HistoryLog, Preferences
@@ -24,7 +25,7 @@ from jarvis.tools.policy import PolicyGate
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.clipboard import ClipboardHistory
 from jarvis.tools.system.focus import Focus
-from jarvis.tools.system.reminders import ReminderScheduler
+from jarvis.tools.system.reminders import Reminder, ReminderScheduler, lowered
 
 
 @dataclass
@@ -40,6 +41,21 @@ class App:
     agent: Agent
     router: Router
     background: list[asyncio.Task[None]] = field(default_factory=list)
+
+    async def run_scheduled(self, item: Reminder) -> str:
+        """Run a scheduled action through the policy gate; what to say about it (ADR-087)."""
+        plan = item.action or {}
+        call = ToolCall(
+            id=f"schedule_{item.id}",
+            name=str(plan.get("tool", "")),
+            arguments=json.dumps(plan.get("args", {}), ensure_ascii=False),
+        )
+        channel = ApprovedChannel(self.agent.channel, plan.get("approved"))
+        outcome = await self.agent.run_call(call, channel, "schedule")
+        result = outcome.result
+        if result.ok:
+            return f"As you asked: {result.speech or 'done'}"
+        return f"I couldn't {lowered(item.message)} as scheduled: {result.error}"
 
     async def start_background(self, announce: Callable[[str], Awaitable[None]]) -> None:
         """Work that runs while chat, voice, or the web UI is open (not one-shot `ask`):
@@ -59,7 +75,7 @@ class App:
         self.background.append(
             asyncio.create_task(run_retention(self.db, self.settings.history), name="retention")
         )
-        scheduler = ReminderScheduler(self.services.reminders, self.bus, say)
+        scheduler = ReminderScheduler(self.services.reminders, self.bus, say, self.run_scheduled)
         self.background.append(asyncio.create_task(scheduler.run(), name="reminders"))
         if self.services.focus is not None:
             self.background.append(

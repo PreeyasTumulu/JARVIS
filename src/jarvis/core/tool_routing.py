@@ -47,11 +47,15 @@ class Group:
 
 GROUPS: dict[str, Group] = {
     "apps": Group(
-        ("open_app", "focus_app", "close_app"),
+        ("open_app", "focus_app", "close_app", "schedule_app"),
         re.compile(
             r"\b(open|launch|start|run|close|quit|exit|switch|focus|bring up|go to|app|apps|"
             r"application|window)\b"
         ),
+    ),
+    "notes": Group(
+        ("take_note", "read_notes", "open_notes"),
+        re.compile(r"\b(note|notes|noted|jot|write (it |that |this )?down)\b"),
     ),
     "files": Group(
         ("find_file", "open_file", "read_file", "get_selected_file", "vscode_open"),
@@ -73,11 +77,16 @@ GROUPS: dict[str, Group] = {
         ),
     ),
     "math": Group(
-        ("calculate",),
+        ("calculate", "calculator_show"),
         re.compile(
             r"\b(calculate|compute|plus|minus|times|multiplied|divided|percent|percentage|"
-            r"square root|squared|cubed|sum of|tip on|average of)\b|\d\s*[-+*/x^%]\s*\d"
+            r"square root|squared|cubed|sum of|tip on|average of|calculator)\b"
+            r"|\d\s*[-+*/x^%]\s*\d"
         ),
+    ),
+    "sheets": Group(
+        ("add_sheet_row", "find_file"),
+        re.compile(r"\b(sheets?|spreadsheets?|excel|xlsx|csv|workbook|row|budget)\b"),
     ),
     "market": Group(
         ("market_data", "crypto_price", "convert_currency"),
@@ -118,9 +127,9 @@ GROUPS: dict[str, Group] = {
         re.compile(r"\b(clipboard|copy|copied|paste)\b"),
     ),
     "time": Group(
-        ("set_timer", "set_reminder", "list_reminders", "cancel_reminder"),
+        ("set_timer", "set_reminder", "list_reminders", "cancel_reminder", "schedule_app"),
         re.compile(
-            r"\b(remind\w*|timers?|alarms?|countdown)\b"
+            r"\b(remind\w*|timers?|alarms?|countdown|schedul\w*|cancel)\b"
             r"|\bin \d+(\.\d+)? ?(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b"
             r"|\bat \d{1,2}(:\d{2})? ?(am|pm)?\b"
         ),

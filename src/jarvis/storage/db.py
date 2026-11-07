@@ -177,6 +177,10 @@ MIGRATIONS: list[str] = [
     ALTER TABLE audit_log ADD COLUMN handled_by TEXT;
     ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'user';
     """,
+    # 10: scheduled app actions ("close Spotify in 20 minutes", Phase 26, ADR-087)
+    """
+    ALTER TABLE reminders ADD COLUMN action_json TEXT;
+    """,
 ]
 
 

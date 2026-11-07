@@ -70,6 +70,15 @@ _VOLUME = re.compile(
     r"^(?:set\s+)?(?:the\s+)?volume\s+(?:to\s+|at\s+)?(?P<level>\d{1,3})\s*(?:percent|%)?$"
 )
 _MUTE = {"mute": True, "mute the volume": True, "unmute": False, "unmute the volume": False}
+# "note that the plumber comes on tuesday", "jot down buy milk", "make a note: call the bank".
+# The live test saw the model call take_note with read_notes' argument instead.
+# "Add a note to call mom" is left to the model: "add a note to ..." can mean a calendar event
+# or another app's notes (an MCP notes server, in a test), so those words need "that" or ":".
+_NOTE = re.compile(
+    r"^(?:please\s+)?(?:(?:note|jot)(?:\s+down)?(?:\s+that)?|write\s+down(?:\s+that)?|"
+    r"(?:make|take|add)\s+a\s+note\s*(?:that|:))\s*:?\s+(?P<text>\S.{1,1999})$",
+    re.I | re.S,
+)
 
 
 def _words(text: str) -> str:
@@ -85,6 +94,10 @@ async def template(request: RouteRequest) -> tuple[str, str] | None:
     opens the YouTube app only when one is installed). On a fresh data folder the first scan
     of the Start menu outlives the stage's time limit, and that one request goes to the model.
     """
+    # "note that ..." keeps the user's own words, case and punctuation, so it reads the raw text.
+    note = _NOTE.match(strip_wake_word(request.text).strip())
+    if note is not None:
+        return "take_note", json.dumps({"text": note["text"].strip()}, ensure_ascii=False)
     phrase = _words(request.text)
     volume = _VOLUME.match(phrase)
     if volume is not None:

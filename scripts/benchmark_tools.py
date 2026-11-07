@@ -150,6 +150,14 @@ CASES = [
     case("read my screen to me", "read_screen"),
     # Phase 14 ("good morning" and "brief me" never reach the model)
     case("what did I ask about docker last week", "recall", arg=("about", "docker")),
+    # Phase 26: apps later, notes, sheets, the Calculator app
+    case("close spotify in 20 minutes", "schedule_app", arg=("name", "spotify")),
+    case("open vs code at 9 tomorrow", "schedule_app", arg=("action", "open")),
+    case("what did I note yesterday", "read_notes", arg=("day", "yesterday")),
+    case("open my notes", "open_notes"),
+    case("add groceries and 450 to my budget sheet", "add_sheet_row", arg=("file", "budget")),
+    case("show 18 percent of 2400 in the calculator", "calculator_show"),
+    case("open my resume", "open_file", "find_file", arg=("path", "resume")),
     case("when did I last ask you about the weather", "recall"),
     case("give me a rundown of my day", "briefing"),
     # Phase 13: paraphrases with none of the keywords (semantic routing's job)

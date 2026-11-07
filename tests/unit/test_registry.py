@@ -92,7 +92,8 @@ def test_parse_docstring_without_args() -> None:
 
 
 ALL_TOOLS = {
-    "open_app", "focus_app", "close_app", "find_file", "open_file", "read_file",
+    "open_app", "focus_app", "close_app", "schedule_app", "take_note", "read_notes",
+    "open_notes", "add_sheet_row", "calculator_show", "find_file", "open_file", "read_file",
     "get_selected_file", "vscode_open", "docker_list", "docker_logs", "docker_start",
     "docker_stop", "web_search", "search_site", "open_url", "fetch_page", "market_data",
     "crypto_price",

@@ -64,7 +64,7 @@
 <div class="status" aria-hidden="true">
   <span class="now" id="now">idle</span>
   <span class="meter" id="meter"></span>
-  <span>jarvis 1.19.0</span>
+  <span>jarvis 1.20.0</span>
   <span>model jarvis-hermes3</span>
 </div>
 <p class="sr" aria-live="polite"><span data-kit="label"></span>. <span data-kit="say"></span> <span data-kit="ask"></span></p>
@@ -123,6 +123,8 @@ const Kit = (() => {
   const scene = {
     state: "idle", heard: "", heardShown: "", say: "", ask: "", tool: "",
     t: 0, since: 0, level: 0, mic: false, calm, still,
+    seq: 0, // counts every state change, so a page can tell a new step from the same one
+    picked: false, // this state was chosen by hand (a button, a key, ?state=), not by a run
   };
   const frames = [];
   let queue = [];
@@ -140,6 +142,8 @@ const Kit = (() => {
     scene.ask = entry.ask || "";
     scene.tool = entry.tool || "";
     scene.since = now;
+    scene.seq += 1;
+    scene.picked = Boolean(entry.picked);
     stepEnds = entry.ms ? now + entry.ms / 1000 : Infinity;
     document.body.dataset.state = entry.state;
     for (const el of document.querySelectorAll("[data-kit]")) {
@@ -176,7 +180,21 @@ const Kit = (() => {
     looping = false;
     updatePlay();
     queue = [];
-    show({ state, ...EXAMPLE[state] }, performance.now() / 1000);
+    show({ state, ...EXAMPLE[state], picked: true }, performance.now() / 1000);
+  }
+
+  // A page's own turn, such as a typed message: these steps once, then rest.
+  function play(steps) {
+    looping = false;
+    updatePlay();
+    run(steps, performance.now() / 1000);
+  }
+
+  function stop() {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state: "idle", ...EXAMPLE.idle }, performance.now() / 1000);
   }
 
   function noise(t) {
@@ -324,14 +342,18 @@ const Kit = (() => {
     });
     const first = params.get("state");
     const now = performance.now() / 1000;
-    if (STATES.includes(first)) show({ state: first, ...EXAMPLE[first] }, now);
-    else run(SCRIPT, now);
+    // <body data-kit-autoplay="off">: the page waits for you; "Play the demo" still runs it.
+    if (document.body.dataset.kitAutoplay === "off") looping = false;
+    updatePlay();
+    if (STATES.includes(first)) show({ state: first, ...EXAMPLE[first], picked: true }, now);
+    else if (looping) run(SCRIPT, now);
+    else show({ state: "idle", ...EXAMPLE.idle }, now);
     requestAnimationFrame(tick);
   }
 
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", start);
   else start();
-  return { STATES, NAMES, scene, onFrame: (fn) => frames.push(fn), pick, answer };
+  return { STATES, NAMES, EXAMPLE, scene, onFrame: (fn) => frames.push(fn), pick, answer, play, stop };
 })();
 // kit:end
 </script>

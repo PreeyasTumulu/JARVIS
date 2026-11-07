@@ -1,6 +1,6 @@
 # UI demos
 
-Six standalone concepts for how Jarvis could look, built in Phase 30 (ADR-100). Each is one HTML file. Double-click it, or run `python -m http.server 8780 --directory ui-demos` and open http://127.0.0.1:8780. Nothing connects to Jarvis yet: each page plays a short scripted run with real lines from Jarvis. You hear "send the clipboard to my phone", Jarvis asks first, sends it, and then cannot find a phone that is not paired.
+Six standalone concepts for how Jarvis could look, built in Phase 30 (ADR-100), and the chat interface made from the two you chose (ADR-101). Each is one HTML file. Double-click it, or run `python -m http.server 8780 --directory ui-demos` and open http://127.0.0.1:8780. Nothing connects to Jarvis yet: each page plays a short scripted run with real lines from Jarvis. You hear "send the clipboard to my phone", Jarvis asks first, sends it, and then cannot find a phone that is not paired.
 
 On any page:
 - **State buttons, or keys `1` to `7`:** show one state. This pauses the run.
@@ -8,6 +8,20 @@ On any page:
 - **"Use my microphone":** listening follows your real voice level. Only a loudness number is read; the sound is not recorded and never leaves the page.
 
 The pages make no network requests: no web fonts, no scripts from elsewhere. A test checks this. They use fonts Windows 11 already has (Bahnschrift, Segoe UI Variable, Sitka, Consolas). Movement stops when Windows has animations turned off (reduced motion).
+
+## The chat (the chosen direction)
+
+`chat.html` brings the orb and the edge glow together around a conversation.
+- **The orb:** waits large in the middle, then glides up into the header once you talk. New chat sends it back.
+- **The edge glow:** the window's edge glows in the orb's colour for each state.
+- **Your words:** appear in your bubble as you speak, and Jarvis's reply appears word by word while it is spoken.
+- **Confirmations:** a card in the conversation.
+- **Talking and typing:** type and press Enter, or press the mic. Stop interrupts. Try "send the clipboard to my phone", "find my phone", or "set a timer".
+- **Themes:** light and dark follow Windows, and the moon or sun button switches them.
+
+| Waiting for your yes | Speaking | Listening | Thinking |
+|---|---|---|---|
+| ![](screenshots/chat-confirm.jpg) | ![](screenshots/chat-speaking.jpg) | ![](screenshots/chat-listening.jpg) | ![](screenshots/chat-thinking.jpg) |
 
 ## The states
 

@@ -22,8 +22,9 @@ PAGES = build.pages()
 STATES = ("idle", "listening", "thinking", "speaking", "confirm", "tool", "error")
 
 
-def test_there_are_six_concepts() -> None:
+def test_there_are_six_concepts_and_the_chat() -> None:
     assert [p.stem for p in PAGES] == [
+        "chat",
         "constellation",
         "edge",
         "orb",
@@ -78,3 +79,12 @@ def test_no_long_dashes_in_the_demos() -> None:
         text = path.read_text(encoding="utf-8")
         assert chr(0x2013) not in text, path.name  # en dash
         assert chr(0x2014) not in text, path.name  # em dash
+
+
+def test_the_chat_waits_for_you_and_keeps_both_themes() -> None:
+    html = (DEMOS / "chat.html").read_text(encoding="utf-8")
+    assert 'data-kit-autoplay="off"' in html  # no run starts by itself in a chat
+    assert "prefers-color-scheme: dark" in html
+    assert ':root[data-theme="dark"]' in html
+    assert "localStorage" in html
+    assert "try {" in html

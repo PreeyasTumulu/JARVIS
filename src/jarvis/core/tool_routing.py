@@ -65,8 +65,20 @@ GROUPS: dict[str, Group] = {
             r"|\.\w{2,4}\b"
         ),
     ),
+    "git": Group(
+        ("git_changes", "git_commit", "git_push"),
+        re.compile(r"\b(git|commit|commits|push|pushed|repo|repository|branch|diff|changes)\b"),
+    ),
+    "ssh": Group(
+        ("ssh_connect",),
+        re.compile(r"\b(ssh|server|servers|vps|raspberry|pi)\b|\bconnect (to|into)\b"),
+    ),
+    "music": Group(
+        ("play_spotify", "media_control", "now_playing"),
+        re.compile(r"\b(spotify|song|songs|album|playlist|music|play)\b"),
+    ),
     "docker": Group(
-        ("docker_list", "docker_logs", "docker_start", "docker_stop", "open_app"),
+        ("docker_list", "docker_logs", "docker_start", "docker_stop", "docker_up", "open_app"),
         re.compile(r"\b(docker|containers?|compose|postgres|redis|mongo|mysql|nginx|images?)\b"),
     ),
     "web": Group(

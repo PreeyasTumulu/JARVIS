@@ -95,7 +95,8 @@ ALL_TOOLS = {
     "open_app", "focus_app", "close_app", "schedule_app", "take_note", "read_notes",
     "open_notes", "add_sheet_row", "calculator_show", "find_file", "open_file", "read_file",
     "get_selected_file", "vscode_open", "docker_list", "docker_logs", "docker_start",
-    "docker_stop", "web_search", "search_site", "open_url", "fetch_page", "market_data",
+    "docker_stop", "docker_up", "git_changes", "git_commit", "git_push", "ssh_connect",
+    "play_spotify", "web_search", "search_site", "open_url", "fetch_page", "market_data",
     "crypto_price",
     "convert_currency", "weather", "set_volume", "set_brightness", "lock_screen", "screenshot",
     "clipboard_read", "clipboard_write", "set_timer", "set_reminder", "list_reminders",
@@ -136,6 +137,8 @@ def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
         "web_search",
         "open_url",
         "search_site",
+        "play_spotify",  # the song request goes to Spotify
+        "git_push",  # commits go to the remote
     }
     read = registry.get("read_window_text")
     assert read is not None

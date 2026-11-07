@@ -367,6 +367,39 @@ class McpServerSideSettings(_Section):
     )
 
 
+class SpotifySettings(_Section):
+    """Search uses SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET from .env (ADR-091)."""
+
+    market: str = Field(
+        default="IN", pattern=r"^[A-Z]{2}$"
+    )  # the country whose catalogue to search
+
+
+class DockerProject(_Section):
+    path: str  # the folder with the compose file
+
+
+class DockerSettings(_Section):
+    ready_timeout_s: float = Field(default=120, gt=0, le=1800)
+    projects: dict[str, DockerProject] = Field(default_factory=dict)  # "shop" = { path = "..." }
+
+
+class SshProfile(_Section):
+    host: str
+    user: str = ""
+    port: int = Field(default=22, ge=1, le=65535)
+    key: str = ""  # an identity file, for example "~/.ssh/id_ed25519"
+
+
+class SshSettings(_Section):
+    profiles: dict[str, SshProfile] = Field(default_factory=dict)
+
+
+class GitSettings(_Section):
+    repos: dict[str, str] = Field(default_factory=dict)  # name to folder (ADR-094)
+    remote: str = Field(default="origin", pattern=r"^[A-Za-z0-9._-]{1,100}$")
+
+
 class NotesSettings(_Section):
     folder: str = "{documents}/Jarvis Notes"  # one Markdown file per day (ADR-088)
 
@@ -448,6 +481,10 @@ class Settings(_Section):
     mcp: McpSettings = McpSettings()
     mcp_server: McpServerSideSettings = McpServerSideSettings()
     notes: NotesSettings = NotesSettings()
+    spotify: SpotifySettings = SpotifySettings()
+    docker: DockerSettings = DockerSettings()
+    ssh: SshSettings = SshSettings()
+    git: GitSettings = GitSettings()
     briefing: BriefingSettings = BriefingSettings()
     history: HistorySettings = HistorySettings()
     server: ServerSettings = ServerSettings()

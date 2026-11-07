@@ -41,7 +41,7 @@ from jarvis.tools.base import (
     ToolResult,
 )
 from jarvis.tools.policy import PolicyDecision, PolicyGate
-from jarvis.tools.registry import Registry, Tool
+from jarvis.tools.registry import LaterArgument, Registry, Tool
 
 log = logging.getLogger(__name__)
 
@@ -233,6 +233,8 @@ class ToolExecutor:
             return invalid("The arguments must be a JSON object.")
         try:
             args = tool.validate(raw)
+        except LaterArgument as exc:
+            return invalid(str(exc), raw)
         except ValidationError as exc:
             problems = "; ".join(
                 f"{'.'.join(str(p) for p in err['loc']) or 'arguments'}: {err['msg']}"

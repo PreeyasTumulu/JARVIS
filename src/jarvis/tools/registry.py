@@ -19,6 +19,16 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 from jarvis.tools.base import Clearance, Prepared, Risk, Sensitivity, ToolContext, ToolResult
 
 ToolFn = Callable[..., Awaitable[ToolResult]]
+# Arguments that mean "not now". A tool without them must not run now when a model adds one.
+LATER_WORDS = frozenset(
+    {"at", "in_minutes", "minutes", "delay", "delay_minutes", "time", "when", "schedule", "later"}
+)
+
+
+class LaterArgument(ValueError):
+    """A timing argument on a tool that only runs now."""
+
+
 PrepareFn = Callable[[ToolContext, dict[str, Any]], Awaitable[Prepared]]
 
 _SECTION_HEADERS = {"returns", "raises", "example", "examples", "note", "notes", "yields"}
@@ -76,6 +86,14 @@ class Tool:
         call itself ({"function": "reply_email", "arguments": {...}}); that is unwrapped.
         """
         cleaned = dict(raw)
+        late = sorted(set(cleaned) & LATER_WORDS - set(self.args_model.model_fields))
+        if late:
+            # Unknown arguments are otherwise ignored, so "open VS Code at 9" called as
+            # open_app(name, at) would open it now (seen in the Phase 27 benchmark).
+            raise LaterArgument(
+                f"{self.name} runs now and takes no '{late[0]}'. To do it later, use "
+                "schedule_app for apps or set_reminder for anything else."
+            )
         inner = cleaned.get("arguments")
         if (
             isinstance(inner, dict)

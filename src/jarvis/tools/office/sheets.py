@@ -38,6 +38,7 @@ log = logging.getLogger(__name__)
 SHEET_TYPES = (".xlsx", ".xlsm", ".csv")
 MAX_CELLS = 30
 MAX_CELL_CHARS = 500
+_DEFAULT_SHEET = re.compile(r"^sheet\s*\d+$", re.I)  # Excel's default names, often guessed
 WM_GETOBJECT = 0x003D
 OBJID_NATIVEOM = -16  # asks a workbook window for Excel's own object model
 _NUMBER = re.compile(r"^-?\d{1,15}(\.\d{1,10})?$")
@@ -121,6 +122,12 @@ def _excel_write(path: Path, values: list[Any], sheet: str | None) -> Written | 
     workbook = _excel_workbook(path)
     if workbook is None:
         return None
+    if (
+        sheet
+        and sheet not in [str(ws.Name) for ws in workbook.Worksheets]
+        and _DEFAULT_SHEET.match(sheet)
+    ):
+        sheet = None  # the benchmark saw the model invent "Sheet1"
     if sheet:
         names = [str(ws.Name) for ws in workbook.Worksheets]
         if sheet not in names:
@@ -156,6 +163,8 @@ def _xlsx_write(path: Path, values: list[Any], sheet: str | None, backups: Path)
     keep_vba = path.suffix.casefold() == ".xlsm"
     workbook = openpyxl.load_workbook(path, keep_vba=keep_vba)
     try:
+        if sheet and sheet not in workbook.sheetnames and _DEFAULT_SHEET.match(sheet):
+            sheet = None  # the benchmark saw the model invent "Sheet1"
         if sheet:
             if sheet not in workbook.sheetnames:
                 names = ", ".join(workbook.sheetnames)

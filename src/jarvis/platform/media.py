@@ -110,3 +110,32 @@ async def control(action: Action) -> MediaState | None:
 def press_media_key(action: Action) -> None:
     """The keyboard's media key: play and pause are one toggle key."""
     sendinput.press_combo([], MEDIA_KEYS[action])
+
+
+async def _app_session(app: str) -> Any:
+    """The media session of one app ("spotify"), whether or not Windows calls it current."""
+    from winrt.windows.media.control import (
+        GlobalSystemMediaTransportControlsSessionManager as Manager,
+    )
+
+    manager = await Manager.request_async()
+    wanted = app.casefold()
+    for session in manager.get_sessions():
+        if wanted in (session.source_app_user_model_id or "").casefold():
+            return session
+    return None
+
+
+async def app_state(app: str) -> MediaState | None:
+    """What one app is playing (title and artist), or None when it has no session."""
+    session = await _app_session(app)
+    if session is None:
+        return None
+    props = await session.try_get_media_properties_async()
+    return _state(session, props.title or "", props.artist or "")
+
+
+async def play_app(app: str) -> bool:
+    """Press play (not the toggle) on one app's session. False when it has none or refuses."""
+    session = await _app_session(app)
+    return bool(session is not None and await session.try_play_async())

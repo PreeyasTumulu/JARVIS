@@ -44,6 +44,25 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 25: Jarvis as an MCP server
+
+Run on 2026-11-07 with `jarvis serve --no-voice --port 8799` on a scratch data folder and config (with `open_app`, `send_whatsapp`, and `read_file` added to `[mcp_server] tools` on purpose, and `confirm_timeout_s = 6`), driven by the MCP SDK's own stdio client starting `uv run jarvis mcp serve`, and a WebSocket client standing in for a UI.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 25.1 | `initialize`, `tools/list` | the listed public tools; never `send_whatsapp` or `read_file` | weather, calculate, convert_currency, market_data, crypto_price, web_search, open_app | pass |
+| 25.2 | `calculate {"expression": "12 * 7"}` | 84, audited | `{"ok": true, "summary": "84", ...}` in 0.4 s; audit `auto`, `handled_by = mcp:...` | pass |
+| 25.3 | `convert_currency` 100 USD to INR | a rate from the free API | "100 dollars is 9,392 rupees." in 0.1 s | pass |
+| 25.4 | `send_whatsapp` called directly | refused by the running Jarvis | "Jarvis does not offer a tool called send_whatsapp.", no audit row | pass |
+| 25.5 | `calculate {"nope": 1}` | invalid | "Invalid arguments for calculate: expression: Field required", audit `invalid` | pass |
+| 25.6 | `open_app paint`, nobody answers | asked naming the client, then no | first run: the API saw the question as "Open Paint" without the client's name, and the refusal said "reply with exactly: Okay, I won't." | **fail** |
+| 25.6 (after fix) | same | same | asked as "Claude Code wants to: Open Paint"; after 6 s: "The user did not answer in Jarvis in time, so it was not done." Paint did not open | pass |
+| 25.7 | `open_app paint` from a client named Claude Code, answered no over the WebSocket | the question names the client; denied | "Claude Code wants to: Open Paint" (not in the allowlist); "The user said no in Jarvis..."; audit `denied`, `mcp:Claude Code` | pass |
+| 25.8 | a call with `jarvis serve` stopped and a stale `bridge.json` | a clear sentence, no hang | "Jarvis is not running, so this tool cannot run..." in 2.2 s | pass |
+| 25.9 | the log | each refused private name logged once per process | twice per start (send_whatsapp, read_file); the first run logged them on every call (fixed) | pass |
+
+**Fixed in 25.6:** the question was renamed only for voice; the client's name now travels on the call (`ToolContext.requester`), so every channel and the audit see it, and a test covers the API's copy. Not run: a "yes" end to end (it would open Paint on this desktop; unit tests cover it), and a real Claude Code session (adding a server changes your Claude Code config, which is your call).
+
 ## Phase 24: Core on LangGraph and ChromaDB
 
 Run on 2026-11-07 with `jarvis chat` through `scripts/drive_chat.py` on a scratch data folder and config, the real local model (jarvis-hermes3) and Groq.

@@ -554,6 +554,30 @@ Claude Code runs `jarvis claude-hook` for three hook events (installed with `jar
 
 The hook posts to `http://127.0.0.1:<port>/bridge` with the bearer token from `%LOCALAPPDATA%\Jarvis\bridge.json`, which `jarvis serve` writes at start and removes at stop; a request with an `Origin` header (any browser) is refused. `BridgeService` (`bridge/service.py`) races its askers, voice and API clients, and after `bridge.escalate_after_s` the phone (`bridge/phone.py`: ntfy or Twilio, off by default). An empty answer from one asker keeps the others waiting. Answers are matched by `bridge/answers.py` without any model: numbers ("two", "option two", "the second one"), names (exact, then fuzzy with a margin over the runner-up), "other: ..." for free text; a permission needs a clear yes or no. No decision within `bridge.answer_timeout_s` prints nothing, and Claude Code asks you itself.
 
+### 9.5 Jarvis as an MCP server (Phase 25)
+
+```mermaid
+sequenceDiagram
+    participant C as MCP client (Claude Code)
+    participant S as jarvis mcp serve (stdio)
+    participant J as jarvis serve /mcp/
+    participant A as Agent.run_call
+    participant Y as You (voice, terminal)
+
+    C->>S: tools/list
+    S-->>C: the offered tools (public and listed only)
+    C->>S: tools/call open_app {"name": "paint"}
+    S->>J: the same call, with the token from bridge.json
+    J->>A: check, policy gate, clearance, audit (handled_by mcp:Claude Code)
+    A->>Y: "Claude Code wants to: Open Paint. Yes or no?"
+    Y-->>A: no
+    A-->>J: denied
+    J-->>S: "The user said no in Jarvis, so it was not done."
+    S-->>C: the result, is_error = true
+```
+
+`server/mcp_server.py` decides what is offered and runs calls; `server/mcp_stdio.py` is the command clients start. Only public tools listed in `[mcp_server] tools` are offered (ADR-085): an MCP client usually sends results to a cloud model. Calls run one at a time with voice and chat turns, and never enter the conversation. `/mcp/` sits behind the same checks as the rest of the local API (127.0.0.1, Host header, no Origin, the token).
+
 ## 10. Storage
 
 SQLite at `%LOCALAPPDATA%\Jarvis\jarvis.db`, migrations tracked with `PRAGMA user_version`. The journal is WAL on a SQLite with the WAL-reset fix and the rollback journal otherwise (Python 3.12's bundled SQLite 3.50.4 has the bug, which damaged the database twice when several Jarvis processes shared it; ADR-048).
@@ -707,7 +731,8 @@ jarvis/
     bridge/                   the Claude Code bridge: hook.py (the hook, install), service.py (asking),
                               answers.py (matching what you said), phone.py (ntfy, Twilio)
     server/                   app.py (the local API and its checks), hub.py (clients, WebChannel),
-                              runtime.py (requests from clients), serve.py (uvicorn, voice, reminders)
+                              runtime.py (requests from clients), serve.py (uvicorn, voice, reminders),
+                              mcp_server.py (/mcp/: what is offered, calls), mcp_stdio.py (jarvis mcp serve)
     platform/                 Windows helpers: hotkeys, known folders (OneDrive), window list/focus/close,
                               COM thread, volume, display (brightness, lock, screenshot), clipboard,
                               UI Automation (uia.py), synthetic keys and clicks (sendinput.py),

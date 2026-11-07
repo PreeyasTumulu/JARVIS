@@ -6,6 +6,10 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 
 ## [Unreleased]
 
+### Added
+- Jarvis as an MCP server: `jarvis mcp serve` offers the public tools in `[mcp_server] tools` to Claude Code, Claude Desktop, and other clients, through the running Jarvis's policy gate and audit log; a call that needs a yes is asked on Jarvis's own voice and terminal, naming the client (ADR-085).
+- `config/ollama/llama3.2-3b.Modelfile`: Llama 3.2 3B as a faster local model option (ADR-086).
+
 ### Changed
 - The agent loop is a LangGraph graph (route, think, guard, gate, await_confirmation, execute, respond) whose policy gate no path can skip; a tool runs only with a one-time clearance from the gate for exactly its arguments (ADR-083).
 - Memories and past commands are found by meaning in ChromaDB, copied once from SQLite, with SQLite as the fallback; vectors are written after the answer (ADR-084).

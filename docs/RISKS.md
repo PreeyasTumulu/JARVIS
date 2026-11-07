@@ -297,6 +297,10 @@ LangGraph takes about 2.5 s to import on this laptop and ChromaDB about 1 s. Bot
 
 A streamed reply is spoken before the model has finished, so text the model writes before deciding to call a tool can be heard ("Let me check that."). Text that could be a call (`{`, `<`, a code fence) is held back, and the stream closes when a call arrives, but a model that writes an ordinary sentence and then a call will have said that sentence. Ollama must stream tool calls for its OpenAI endpoint (it does since 0.8); an older Ollama answers without them and the reply is treated as text. `[tts] stream = false` turns streaming off.
 
+### R63. Tools offered to another program
+
+`jarvis mcp serve` lets another program, often driven by a cloud model, call Jarvis's tools. Only public tools can be offered, every call meets the policy gate and is audited with the client's name, and a call that needs a yes is asked on Jarvis's own channels. What remains: a public tool can still act on this laptop (adding `type_text`, `click`, or `press_keys` to `[mcp_server] tools` lets the client type into your windows within the gate's rules), and the client sees the results of what it may call. The default list only reads public data and does sums. The client's name comes from its own handshake and is not proof of who it is; anything that can run `jarvis mcp serve` as you can call the listed tools.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

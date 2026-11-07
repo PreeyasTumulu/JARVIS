@@ -31,6 +31,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 22 | Remove the page and overlay | Built on `phase/22-remove-ui` (stacked on Phase 21), hand tested | v1.12.0 |
 | 23 | Research: other assistants | On `phase/23-research` (stacked on Phase 22), docs only | v1.12.0 |
 | 24 | Core on LangGraph and ChromaDB | Built on `phase/24-core` (stacked on Phase 23), hand tested on scratch data | v1.13.0 |
+| 25 | Jarvis as an MCP server | Built on `phase/25-mcp-server` (stacked on Phase 24), hand tested on scratch data | v1.14.0 |
 
 ## How each phase runs
 
@@ -951,6 +952,28 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 **Exit criteria:** every tool entry point meets the gate (checked by tests), every turn says who handled it, and a streamed voice reply is never spoken twice or over a confirmation.
 
+## Phase 25: Jarvis as an MCP server
+
+**Goal:** other MCP clients can use Jarvis's tools without a way around its policy gate, its audit log, or its privacy rule (ADR-085). Also: Llama 3.2 3B measured as a faster default and kept as an option (ADR-086).
+
+**Scope**
+
+- `jarvis mcp serve`: a stdio MCP server that clients start; it lists the offered tools and forwards each call to the running `jarvis serve` with the token from `bridge.json`.
+- `/mcp/` on the local API (Streamable HTTP, behind the API's checks) and `Agent.run_call`: the argument check, the gate, the clearance, and the audit, one call at a time with turns, outside the conversation.
+- `[mcp_server] enabled` and `tools`; private tools are never offered whatever the list says, and each refused name is logged once.
+- Confirmations name the client on every channel ("Claude Code wants to: Open Paint"); refusals reach the client in plain words.
+- The live end-to-end test checks safety before the first tool choice, so a wrong tool cannot hide a leak.
+
+**Test it**
+
+1. `uv run jarvis serve`, then in Claude Code `claude mcp add jarvis -- uv run --directory <this folder> jarvis mcp serve`.
+2. Ask Claude Code "use the jarvis calculate tool for 12 * 7": 84, and `uv run jarvis audit --last 1` shows `mcp:...`.
+3. Add `open_app` to `[mcp_server] tools`, restart the client, ask it to open Paint: Jarvis asks you, naming Claude Code.
+
+**Measured (2026-11-07):** a forwarded call takes 0.1 to 0.4 s; "Jarvis is not running" comes back in about 2 s. Models, live end-to-end suite: Hermes 3 8B 51 of 54 in 322 s, Llama 3.2 3B 50 of 54 in 95 s, both with every safety check passed; streamed first audio 2.8 to 3.6 s against 1.2 to 1.5 s.
+
+**Exit criteria:** no private tool can be offered, every call is audited with the client's name, and nothing that needs a yes runs without one from you.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -973,7 +996,7 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 | 22 | Remove the page and overlay (done) | Delete the HTML page, shader, and OpenGL overlay and their dependencies; the server stays as a JSON API; confirmations in the CLI and by voice (ADR-081) |
 | 23 | Research (done) | Open Interpreter, Leon, OpenVoiceOS, Home Assistant Assist, Willow, Pipecat, LiveKit Agents, Open WebUI, strong "JARVIS" repos: architecture, plugins, UI, what users like, what is weak; "what we take, what we do better" in RESEARCH.md |
 | 24 | Core on LangGraph and ChromaDB (done) | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; from Phase 23: a tiered router pipeline with `handled_by` on every turn, a guard node (schema check, one repair, no duplicate calls, a step cap), named graph states mapped to UI states, tool options `cancel_on_interruption` and `timeout_secs`, sentence-streamed Piper, a per-stage latency breakdown, a test that every tool entry point meets the gate; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
-| 25 | Jarvis as an MCP server | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
+| 25 | Jarvis as an MCP server (done) | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
 | 26 | Apps, files, and office | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
 | 27 | Music, developer tools, browser | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
 | 28 | Screen understanding and daily news | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |

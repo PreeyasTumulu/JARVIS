@@ -9,7 +9,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 24 (v1.13.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 25 (v1.14.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -48,6 +48,8 @@ When Claude Code needs you, Jarvis says the question and the options aloud, show
 uv run jarvis claude-hook test       # try it
 uv run jarvis claude-hook install    # turn it on for Claude Code
 ```
+
+Jarvis is also an MCP server: Claude Code or Claude Desktop can call some of its tools (weather, sums, currency, prices, web search by default) through `jarvis mcp serve`. Only public tools can be offered, every call passes Jarvis's policy gate and audit log, and anything that needs a yes is asked on Jarvis's own voice and terminal ([setup](docs/SETUP.md)).
 
 ## How it works
 

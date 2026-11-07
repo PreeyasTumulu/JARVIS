@@ -37,6 +37,9 @@ uv sync --extra voice --extra piper
 
 ## 3. Local model (Phase 1)
 
+Llama 3.2 3B is a faster option (about three times, ADR-086): `ollama create jarvis-llama3.2 -f config/ollama/llama3.2-3b.Modelfile`, then `model = "jarvis-llama3.2"` under `[llm.providers.local]` in `config/local.toml`. It answers sooner and makes more odd replies.
+
+
 ```powershell
 ollama pull hermes3:8b
 ollama pull hermes3:3b
@@ -386,6 +389,24 @@ tools = ["HassTurnOn", "HassTurnOff", "GetLiveContext"]
 ```
 
 `uv run jarvis mcp tools home` lists everything it offers, with which ones are read-only. Add `trusted = true` only for a server you trust to label its tools honestly, and `[mcp.servers.home.params]` to show the model fewer parameters.
+
+## 5l-2. Jarvis's tools in Claude Code and other MCP clients (Phase 25)
+
+Jarvis can offer some of its own tools to an MCP client. Keep `jarvis serve` running (or start at login on), then add it to the client.
+
+Claude Code:
+
+```powershell
+claude mcp add jarvis -- uv run --directory C:\path\to\JARVIS jarvis mcp serve
+```
+
+Claude Desktop, in `claude_desktop_config.json`:
+
+```json
+{"mcpServers": {"jarvis": {"command": "uv", "args": ["run", "--directory", "C:\\path\\to\\JARVIS", "jarvis", "mcp", "serve"]}}}
+```
+
+What is offered is `[mcp_server] tools` in `config/local.toml` (default: weather, calculate, convert_currency, market_data, crypto_price, web_search). Only public tools can be offered: messages, files, mail, notifications, memory, and the screen never are, because these clients send results to a cloud model. A call that needs a yes is asked on Jarvis's voice and terminal ("Claude Code wants to: Open Paint"). Restart the client after changing the list. Its log is `logs\mcp-serve.log` in the data folder; every call is in `uv run jarvis audit`.
 
 ## 5m. Faster speech recognition (Phase 13)
 

@@ -519,6 +519,18 @@ Yours, asked 2026-11-01, all as recommended.
 - **Why:** ChromaDB gives an index and metadata filters instead of a full scan; the copy keeps every existing memory; writing after the turn keeps embedding time out of the reply.
 - **Cost:** about 1 s more at start (warmed up in a thread) and a dependency of its own. A memory saved in one turn is found by meaning from the next turn on, not within the same turn.
 
+### ADR-085: Jarvis as an MCP server
+
+- **Decision (2026-11-07, all as recommended):** MCP clients (Claude Code, Claude Desktop, others) run `jarvis mcp serve`, a stdio command that forwards every call to the running `jarvis serve` at `/mcp/` on the local API, with the per-launch token from `bridge.json` (the pattern of `jarvis claude-hook`). Only public tools listed in `[mcp_server] tools` are offered; the default list is weather, calculate, convert_currency, market_data, crypto_price, and web_search. Private tools are never offered, whatever the config says. Every call goes through `Agent.run_call`: the argument check, the policy gate, a one-time clearance, and the audit log (`handled_by = "mcp:<client>"`), one at a time with voice and chat turns. A call that needs a yes is asked on Jarvis's own voice, terminal, and API clients as "Claude Code wants to: Open Paint"; the client's own approval never counts. Results go back as the data and its one-line summary, without the reply hints written for Jarvis's own model; outside content stays marked as data.
+- **Why:** an MCP client usually sends tool results to a cloud model, so the privacy rule decides what can be offered, not the config. Forwarding to the running Jarvis keeps one policy gate, one audit log, and a person to ask, and the client's config never changes when the token does. The client's model cannot approve its own request.
+- **Cost:** tools work only while `jarvis serve` runs (a call says so otherwise). The tool list is read when the client starts, so a changed `[mcp_server] tools` needs a client restart. A call that needs a yes can wait up to `confirm_timeout_s`.
+
+### ADR-086: Hermes 3 8B stays the default; Llama 3.2 3B is ready as an option
+
+- **Decision (2026-11-07, as recommended):** the default local model stays `jarvis-hermes3`. `config/ollama/llama3.2-3b.Modelfile` makes `jarvis-llama3.2` (the same 8192-token context), one config line away. Measured on the live end-to-end suite: Hermes 51 of 54 in 322 s, Llama 50 of 54 in 95 s; first audio of a streamed reply 2.8 to 3.6 s against 1.2 to 1.5 s. Both passed every safety check. The tool-choice benchmark gave 89% and 88%.
+- **Why:** Llama's misses are worse in kind: twice it answered with tool syntax as text ("open wikipedia and browser_type ..."), which would be read aloud, and once it made up a reply from a contact that does not exist ("Zork said hi back."). Hermes's misses were reasonable alternatives (opening Notepad for a vague request).
+- **Cost:** about three times slower replies than Llama. Revisit when the guard refuses replies that contain tool names or "call X with", which would remove Llama's worst failure.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

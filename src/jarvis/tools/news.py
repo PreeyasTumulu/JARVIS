@@ -331,11 +331,15 @@ async def ai_news(ctx: ToolContext, refresh: bool = False) -> ToolResult:
     "tech news", or "AI news today". Saved with links in today's news file.
 
     Args:
-        refresh: Make it again from the feeds even if today's digest exists.
+        refresh: Only when the user asks for newer news than they already heard today.
     """
     now = datetime.now().astimezone()
     path = digest_file(ctx, now)
-    if not refresh and await asyncio.to_thread(path.exists):
+    # The model passed refresh=true for every request in the benchmark, which would fetch and
+    # write the digest again each time; a digest under an hour old is read instead.
+    if (not refresh or await asyncio.to_thread(_fresh, path)) and await asyncio.to_thread(
+        path.exists
+    ):
         items = await asyncio.to_thread(read_saved, path)
         if items:
             return ToolResult.success(
@@ -354,6 +358,18 @@ async def ai_news(ctx: ToolContext, refresh: bool = False) -> ToolResult:
     if failed:
         data["feeds_failed"] = failed
     return ToolResult.success(data=data, speech=_spoken(items))
+
+
+REFRESH_AFTER_S = 3600
+
+
+def _fresh(path: Path) -> bool:
+    import time
+
+    try:
+        return time.time() - path.stat().st_mtime < REFRESH_AFTER_S
+    except OSError:
+        return False
 
 
 def _save(path: Path, text: str) -> None:

@@ -307,3 +307,19 @@ def test_link_only_descriptions_are_not_given_to_the_model() -> None:
     assert news.useful_text(hn) == ""
     assert news.useful_text("Comments") == ""
     assert news.useful_text("A real summary.") == "A real summary."
+
+
+async def test_refresh_reads_a_digest_made_within_the_hour(feeds: Harness, web: FakeWeb) -> None:
+    # The benchmark: the model asked for refresh=true every time.
+    import os
+    import time
+
+    feeds.app.services.cloud = FakeRouter(FakeCloud("1. One.\n2. Two."))  # type: ignore[assignment]
+    first = await call(feeds, "ai_news")
+    before = len(web.requests)
+    await call(feeds, "ai_news", refresh=True)
+    assert len(web.requests) == before
+    old = time.time() - 2 * 3600
+    os.utime(first.result.data["file"], (old, old))
+    await call(feeds, "ai_news", refresh=True)
+    assert len(web.requests) > before  # an older digest is made again

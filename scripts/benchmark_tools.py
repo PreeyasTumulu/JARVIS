@@ -56,7 +56,7 @@ CASES = [
     case("search the web for the latest python release", "web_search"),
     case("who won the most recent cricket world cup", "web_search"),
     case("find reviews of the RTX 3050 laptop GPU", "web_search"),
-    case("what is the latest news about OpenAI", "web_search"),
+    case("what is the latest news about OpenAI", "web_search", "ai_news"),
     case("look up how tall the Burj Khalifa is", "web_search"),
     case("say hello", "speak"),
     case("read this out loud: the build passed", "speak", arg=("text", "build passed")),
@@ -146,7 +146,7 @@ CASES = [
     case("what's my next meeting", "calendar_events", arg=("day", "next")),
     case("am I free on friday", "calendar_events", arg=("day", "friday")),
     # Phase 15
-    case("what's on my screen", "read_screen"),
+    case("what's on my screen", "read_screen", "look_at_screen"),
     case("read my screen to me", "read_screen"),
     # Phase 14 ("good morning" and "brief me" never reach the model)
     case("what did I ask about docker last week", "recall", arg=("about", "docker")),

@@ -245,15 +245,20 @@ class BridgeSettings(_Section):
     questions: bool = True  # answer AskUserQuestion by voice or the page
     permissions: bool = True  # allow or deny tool permissions by a clear spoken yes or no
     announce: bool = True  # say "Claude is waiting for you" and "Claude finished"
-    # Reach your phone when nobody answers at the PC (ADR-052): "" (off), "ntfy", or "twilio".
-    phone: Literal["", "ntfy", "twilio"] = ""
+    # Reach your phone when nobody answers at the PC (ADR-052, ADR-098): "" (off), "ntfy",
+    # "twilio", or "kdeconnect" (a notification over your Wi-Fi, then ntfy buttons if set up).
+    phone: Literal["", "ntfy", "twilio", "kdeconnect"] = "kdeconnect"
     escalate_after_s: float = Field(default=45, gt=0)
 
 
 class PhoneSettings(_Section):
-    """Your phone, for calls through Phone Link and for the bridge's phone escalation."""
+    """Your phone: alerts and files through KDE Connect, ntfy pushes, calls (ADR-098)."""
 
     number: str = ""  # your own number, e.g. "+919876543210" (local.toml only)
+    kdeconnect: bool = True  # ring, notify, and send files over your own Wi-Fi
+    kdeconnect_cli: str = "kdeconnect-cli"  # installed with the KDE Connect app
+    device: str = ""  # the KDE Connect device name or id; "" uses the one paired phone
+    ntfy_alerts: bool = True  # alerts go by ntfy when the phone is not on the Wi-Fi
     ntfy_server: str = "https://ntfy.sh"  # or your own ntfy server
     ntfy_topic: str = ""  # a long random topic name; anyone who knows it can read it
     twilio_from: str = ""  # a Twilio number that may call yours
@@ -363,6 +368,8 @@ class McpServerSideSettings(_Section):
             "market_data",
             "crypto_price",
             "web_search",
+            "ring_phone",
+            "notify_phone",
         ]
     )
 

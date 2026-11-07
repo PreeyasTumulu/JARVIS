@@ -52,6 +52,8 @@ def test_the_default_list_is_public_and_harmless(make_app: MakeApp) -> None:
         "market_data",
         "crypto_price",
         "web_search",
+        "ring_phone",  # only ever your own phone (ADR-098)
+        "notify_phone",
     ]
     calculate = next(t for t in McpGateway(h.app.agent).listing() if t["name"] == "calculate")
     assert calculate["input_schema"]["properties"]["expression"]["type"] == "string"

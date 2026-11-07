@@ -103,12 +103,7 @@ class Tool:
             cleaned = dict(inner)
         for name, field in self.args_model.model_fields.items():
             value = cleaned.get(name)
-            if (
-                isinstance(value, str)
-                and value.strip().casefold() in NULL_WORDS
-                and not field.is_required()
-                and _accepts_none(field.annotation)
-            ):
+            if _is_null(value) and not field.is_required() and _accepts_none(field.annotation):
                 cleaned[name] = None
         return self.args_model.model_validate(cleaned).model_dump()
 
@@ -244,6 +239,17 @@ def _build_args_model(fn: ToolFn, arg_docs: dict[str, str]) -> type[BaseModel]:
 
 
 NULL_WORDS = {"null", "none", "nil", "undefined", ""}
+
+
+def _is_null(value: Any) -> bool:
+    """ "null", or {"null": true}, which Hermes wrote for set_reminder's `at` in the Phase 29
+    live test when it gave in_minutes instead."""
+    if isinstance(value, str):
+        return value.strip().casefold() in NULL_WORDS
+    if isinstance(value, dict) and len(value) == 1:
+        (key,) = value
+        return isinstance(key, str) and key.strip().casefold() in NULL_WORDS
+    return False
 
 
 def _accepts_none(annotation: Any) -> bool:

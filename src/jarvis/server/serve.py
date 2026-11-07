@@ -346,7 +346,7 @@ def _bridge(runtime: Runtime, console: Console) -> BridgeService:
         runtime.app.settings.bridge,
         [on_page, by_voice],
         announce,
-        phone=phone_asker(runtime.app.settings),
+        phone=phone_asker(runtime.app.settings, device=runtime.app.services.phone),
     )
 
 

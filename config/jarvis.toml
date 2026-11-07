@@ -213,7 +213,9 @@ answer_timeout_s = 120       # no answer by then: Claude Code asks you as usual
 questions = true             # Claude's multiple-choice questions, answered by voice or the page
 permissions = true           # tool permissions: a clear spoken yes allows, no denies, silence asks as usual
 announce = true              # say "Claude is waiting for you" and "Claude finished"
-phone = ""                   # "" (off), "ntfy" (a push with answer buttons), or "twilio" (a real call)
+# "kdeconnect": a notification on your phone over your Wi-Fi (then ntfy buttons if a topic is set);
+# "ntfy" (a push with answer buttons), "twilio" (a paid call), or "" (off). ADR-098.
+phone = "kdeconnect"
 escalate_after_s = 45        # how long the PC gets before the phone is tried
 
 [calls]
@@ -222,7 +224,12 @@ escalate_after_s = 45        # how long the PC gets before the phone is tried
 method = "whatsapp"
 
 [phone]
+# Jarvis reaches your own phone for free (ADR-098): KDE Connect on the same Wi-Fi rings it,
+# notifies it, and receives files; ntfy carries short alerts when the phone is away.
 number = ""                # your own number, +91..., set it in local.toml
+kdeconnect = true
+device = ""                  # the KDE Connect device name; "" uses the one paired phone
+ntfy_alerts = true           # alerts go by ntfy when the phone is not on the Wi-Fi
 ntfy_server = "https://ntfy.sh"
 ntfy_topic = ""              # a long random name, in local.toml; anyone who knows it can read it
 twilio_from = ""             # a Twilio number allowed to call yours
@@ -260,7 +267,8 @@ call_timeout_s = 30
 # tools can be offered, whatever this says; every call passes the policy gate, and a call
 # that needs a yes is asked on Jarvis's own voice and terminal, naming the client.
 enabled = true
-tools = ["weather", "calculate", "convert_currency", "market_data", "crypto_price", "web_search"]
+tools = ["weather", "calculate", "convert_currency", "market_data", "crypto_price", "web_search",
+         "ring_phone", "notify_phone"]
 
 [mcp.servers.github]
 # GitHub's official server in Docker. Starts once GITHUB_PERSONAL_ACCESS_TOKEN is in .env.

@@ -59,6 +59,11 @@ class Reminder:
     action: dict[str, Any] | None = None  # for "app": the tool, its arguments, an approval
 
     @property
+    def on_phone(self) -> bool:
+        """A reminder that also rings your phone (ADR-098)."""
+        return self.kind == "reminder" and bool((self.action or {}).get("phone"))
+
+    @property
     def due(self) -> datetime:
         return datetime.fromtimestamp(self.due_at)
 
@@ -238,11 +243,13 @@ class ReminderScheduler:
         bus: EventBus,
         announce: Callable[[str], Awaitable[None]],
         run_action: Callable[[Reminder], Awaitable[str]] | None = None,
+        alert_phone: Callable[[str], Awaitable[object]] | None = None,
     ) -> None:
         self._reminders = reminders
         self._bus = bus
         self._announce = announce
         self._run_action = run_action
+        self._alert_phone = alert_phone
 
     async def run(self) -> None:
         reminders = self._reminders
@@ -275,6 +282,11 @@ class ReminderScheduler:
             text = await self._action(item) if item.kind == "app" else item.announcement(late)
         log.info("%s %d is due", item.kind.capitalize(), item.id)
         await self._bus.publish(ReminderDue(reminder_id=item.id, kind=item.kind, text=text))
+        if item.on_phone and self._alert_phone is not None:
+            try:
+                await self._alert_phone(text)
+            except Exception:
+                log.warning("Reminder %d could not reach the phone", item.id, exc_info=True)
         try:
             await self._announce(text)
         except Exception:
@@ -344,7 +356,11 @@ async def set_timer(
 
 @tool(risk=Risk.SAFE, sensitivity=Sensitivity.PRIVATE, timeout_s=5)
 async def set_reminder(
-    ctx: ToolContext, message: str, in_minutes: float | None = None, at: str | None = None
+    ctx: ToolContext,
+    message: str,
+    in_minutes: float | None = None,
+    at: str | None = None,
+    on_phone: bool = False,
 ) -> ToolResult:
     """Remind the user about something later, after some minutes or at a clock time.
 
@@ -352,6 +368,8 @@ async def set_reminder(
         message: What to remind the user about, for example "stretch" or "call mom".
         in_minutes: Minutes from now, for "in 10 minutes" (2 hours is 120).
         at: A clock time or date and time, for example "17:30", "5:30 pm", or "2026-10-16 09:00".
+        on_phone: True only when the user asks to be reminded on their phone or to have their
+            phone ring ("remind me on my phone", "ring my phone at 7").
     """
     reminders = ctx.services.reminders
     now = reminders.clock()
@@ -366,10 +384,11 @@ async def set_reminder(
     text = re.sub(r"^(to|about)\s+", "", " ".join(message.split()), flags=re.I).rstrip(".")
     if not text:
         raise ToolError("Ask the user what the reminder is for.")
-    item = reminders.add("reminder", text, due_at)
+    item = reminders.add("reminder", text, due_at, {"phone": True} if on_phone else None)
     when = spoken_when(item.due, datetime.fromtimestamp(now))
-    data = {"id": item.id, "message": text, "due": when}
-    speech = f"Reminder set for {when}: {text}.{_not_running_note(ctx)}"
+    data = {"id": item.id, "message": text, "due": when, "on_phone": on_phone}
+    phone = " Your phone will ring too." if on_phone else ""
+    speech = f"Reminder set for {when}: {text}.{phone}{_not_running_note(ctx)}"
     return ToolResult.success(data=data, speech=speech)
 
 
@@ -386,6 +405,7 @@ async def list_reminders(ctx: ToolContext) -> ToolResult:
             "kind": "scheduled action" if item.kind == "app" else item.kind,
             "message": item.message,
             "due": spoken_when(item.due, now),
+            **({"on_phone": True} if item.on_phone else {}),
         }
         for item in pending
     ]

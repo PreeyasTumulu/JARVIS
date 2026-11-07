@@ -67,6 +67,14 @@ HANG_UP = {
     "cut the call",
     "disconnect the call",
 }
+RING_PHONE = {
+    "ring my phone",
+    "find my phone",
+    "where is my phone",
+    "where's my phone",
+    "i can't find my phone",
+    "i cant find my phone",
+}
 FOCUS_START = {
     "start a focus session",
     "start focus session",
@@ -114,6 +122,8 @@ def exact_call(text: str) -> tuple[str, str] | None:
         return "briefing", "{}"
     if phrase in HANG_UP:
         return "hang_up", "{}"
+    if phrase in RING_PHONE:
+        return "ring_phone", "{}"
     if phrase in FOCUS_START:
         return "focus_start", "{}"
     if phrase in FOCUS_END:

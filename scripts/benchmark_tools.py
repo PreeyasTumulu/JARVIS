@@ -163,6 +163,12 @@ CASES = [
     case("what does this error on my screen mean", "look_at_screen"),
     case("what's new in AI today", "ai_news"),
     case("any tech news", "ai_news"),
+    # Phase 29: your own phone through KDE Connect and ntfy
+    case("find my phone", "ring_phone"),
+    case("send the clipboard to my phone", "send_to_phone", arg=("item", "clipboard")),
+    case("send my resume to my phone", "send_to_phone", arg=("item", "resume")),
+    case("notify my phone that the download is done", "notify_phone"),
+    case("remind me on my phone at 7 pm to call the bank", "set_reminder", arg=("on_phone", "t")),
     case("when did I last ask you about the weather", "recall"),
     case("give me a rundown of my day", "briefing"),
     # Phase 13: paraphrases with none of the keywords (semantic routing's job)

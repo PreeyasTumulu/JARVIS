@@ -65,6 +65,13 @@ GROUPS: dict[str, Group] = {
             r"|\.\w{2,4}\b"
         ),
     ),
+    "phone": Group(
+        ("ring_phone", "notify_phone", "send_to_phone"),
+        re.compile(
+            r"\b(my phone|my mobile|the phone|to (my )?phone|on (my )?phone|ring me|"
+            r"find my phone|notify me|ping me|alert me)\b"
+        ),
+    ),
     "git": Group(
         ("git_changes", "git_commit", "git_push"),
         re.compile(r"\b(git|commit|commits|push|pushed|repo|repository|branch|diff|changes)\b"),

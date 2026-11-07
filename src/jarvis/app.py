@@ -75,7 +75,15 @@ class App:
         self.background.append(
             asyncio.create_task(run_retention(self.db, self.settings.history), name="retention")
         )
-        scheduler = ReminderScheduler(self.services.reminders, self.bus, say, self.run_scheduled)
+        phone = self.services.phone
+        scheduler = ReminderScheduler(
+            self.services.reminders,
+            self.bus,
+            say,
+            self.run_scheduled,
+            # Your own words to your own phone, asked for when the reminder was set (ADR-098).
+            alert_phone=(lambda text: phone.alert(text, ring=True)) if phone else None,
+        )
         self.background.append(asyncio.create_task(scheduler.run(), name="reminders"))
         if self.services.focus is not None:
             self.background.append(

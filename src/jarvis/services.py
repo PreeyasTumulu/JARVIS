@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from jarvis.adapters.phone import Phone
 from jarvis.config import Settings
 from jarvis.core.meaning import Embedder, MeaningIndex
 from jarvis.core.semantic_routing import SemanticRouter
@@ -60,6 +61,7 @@ class Services:
     quiet_speech: bool = False  # the PC is locked: nothing private is said aloud (ADR-076)
     cloud: Router | None = None  # cloud models for public work, such as the news digest
     local_model: ChatModel | None = None  # the local model, for tools that write text
+    phone: Phone | None = None  # your phone through KDE Connect or ntfy (ADR-098)
 
     async def aclose(self) -> None:
         await self.mcp.aclose()
@@ -107,4 +109,5 @@ def build_services(settings: Settings, db: Database) -> Services:
         else None,
         history=HistoryLog(db),
         prefs=Preferences(db),
+        phone=Phone(settings.phone),
     )

@@ -104,7 +104,8 @@ ALL_TOOLS = {
     "cancel_reminder", "type_text", "click", "press_keys", "read_window_text", "read_screen",
     "browser_open",
     "browser_read", "browser_click", "browser_type", "send_whatsapp", "call_contact",
-    "hang_up", "media_control", "now_playing", "read_notifications", "read_mail", "read_email",
+    "hang_up", "ring_phone", "notify_phone", "send_to_phone",
+    "media_control", "now_playing", "read_notifications", "read_mail", "read_email",
     "reply_email", "calendar_events",
     "remember", "list_memories", "forget", "recall", "briefing", "forget_history",
     "clipboard_history", "clipboard_restore", "clipboard_forget",
@@ -141,6 +142,7 @@ def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
         "play_spotify",  # the song request goes to Spotify
         "git_push",  # commits go to the remote
         "ai_news",  # it fetches the news feeds
+        "notify_phone",  # by ntfy over the internet when the phone is away (ADR-098)
     }
     read = registry.get("read_window_text")
     assert read is not None
@@ -157,6 +159,11 @@ def test_the_word_null_for_an_optional_argument_means_none() -> None:
     args = type_text.validate({"app": "notepad", "text": "hi", "field": "null"})
     assert args["field"] is None
     assert type_text.validate({"app": "notepad", "text": "None", "field": "x"})["text"] == "None"
+    # Hermes in the Phase 29 live test: "remind me on my phone in 30 minutes to stretch".
+    reminder = registry.get("set_reminder")
+    assert reminder is not None
+    raw = {"at": {"null": True}, "in_minutes": 30, "message": "stretch", "on_phone": True}
+    assert reminder.validate(raw)["at"] is None
 
 
 def test_arguments_wrapped_in_the_call_are_unwrapped() -> None:

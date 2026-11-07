@@ -27,6 +27,7 @@ from jarvis.tools.notes import open_notes, read_notes, take_note
 from jarvis.tools.notifications.tools import read_notifications
 from jarvis.tools.office.calculator import calculator_show
 from jarvis.tools.office.sheets import add_sheet_row
+from jarvis.tools.phone import notify_phone, ring_phone, send_to_phone
 from jarvis.tools.recall import forget_history, recall
 from jarvis.tools.registry import Registry
 from jarvis.tools.system.arithmetic import calculate
@@ -122,6 +123,9 @@ def build_registry() -> Registry:
             send_whatsapp,
             call_contact,
             hang_up,
+            ring_phone,
+            notify_phone,
+            send_to_phone,
             read_notifications,
             read_mail,
             read_email,

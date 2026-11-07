@@ -11,8 +11,9 @@ timeouts, retries, rate limits, key handling, and redaction, and gives tests one
 - Apps: `jarvis.tools.apps.index`, the Start menu index, launched by AppsFolder id.
 - Browser: `jarvis.tools.browser.session`, Playwright on Brave or Edge with its own profile.
 - MCP servers: `jarvis.tools.mcp.hub`, stdio processes, listed tools only.
-- Shell and SSH (Phase 27) and telephony (Phase 29) come here too, with the same rules: a
-  timeout, a retry rule, redacted logs, and keys only from .env.
+- Your phone: `jarvis.adapters.phone`, KDE Connect over the Wi-Fi and ntfy pushes (Phase 29).
+- Shell and SSH (Phase 27) come here too, with the same rules: a timeout, a retry rule,
+  redacted logs, and keys only from .env.
 
 A new outside service gets an adapter here, not code inside a tool.
 """

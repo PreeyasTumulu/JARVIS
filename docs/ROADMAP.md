@@ -25,20 +25,20 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 16 | Release polish (installer, changelog, templates) | On `main`, not tagged, waiting for your test | unreleased |
 | 17 | WhatsApp calls | On `main`, not tagged, waiting for your test | v1.7.0 |
 | 18 | New interface and wake overlay | On `main`, not tagged, waiting for your test | v1.8.0 |
-| 19 | Privacy: history expiry, forgetting, quiet when locked | Built on `phase/19-privacy` (from `main`), waiting for your test | v1.9.0 |
-| 20 | Clipboard history and focus sessions | Built on `phase/20-clipboard-focus` (stacked on Phase 19), hand tested, two items need you | v1.10.0 |
-| 21 | Speed and coverage: arithmetic without the model | Built on `phase/21-speed-coverage` (stacked on Phase 20), hand tested | v1.11.0 |
-| 22 | Remove the page and overlay | Built on `phase/22-remove-ui` (stacked on Phase 21), hand tested | v1.12.0 |
-| 23 | Research: other assistants | On `phase/23-research` (stacked on Phase 22), docs only | v1.12.0 |
-| 24 | Core on LangGraph and ChromaDB | Built on `phase/24-core` (stacked on Phase 23), hand tested on scratch data | v1.13.0 |
-| 25 | Jarvis as an MCP server | Built on `phase/25-mcp-server` (stacked on Phase 24), hand tested on scratch data | v1.14.0 |
-| 26 | Apps, files, and office | Built on `phase/26-apps-files-office` (stacked on Phase 25), hand tested on scratch data and the real desktop | v1.15.0 |
-| 27 | Music, developer tools, browser | Built on `phase/27-music-dev-browser` (stacked on Phase 26), git hand tested live; Spotify, Docker, SSH need your setup | v1.16.0 |
-| 28 | Screen understanding and daily news | Built on `phase/28-vision-news` (stacked on Phase 27), hand tested with real models and feeds | v1.17.0 |
-| 29 | Your phone, for free | Built on `phase/29-phone-bridge` (stacked on Phase 28), hand tested on this laptop; pairing the phone needs you | v1.18.0 |
-| 30 | UI demos, then the chosen chat | Built on `phase/30-ui-demos` (stacked on Phase 29), checked in the browser; the real microphone needs you | v1.20.0 |
-| 31 | Open-source readiness | Built on `phase/31-open-source` (stacked on Phase 30); the release is prepared for you to merge and tag | v1.21.0 |
-| 32 | The chat window, live | Built on `phase/32-chat-ui` (stacked on Phase 31), hand tested with a real serve on scratch data; voice in the window needs you | v1.22.0 |
+| 19 | Privacy: history expiry, forgetting, quiet when locked | On `main` (merged 2026-11-07), not tagged; waiting for your test | v1.9.0 |
+| 20 | Clipboard history and focus sessions | On `main` (merged 2026-11-07), not tagged; hand tested, two items need you | v1.10.0 |
+| 21 | Speed and coverage: arithmetic without the model | On `main` (merged 2026-11-07), not tagged; hand tested | v1.11.0 |
+| 22 | Remove the page and overlay | On `main` (merged 2026-11-07), not tagged; hand tested | v1.12.0 |
+| 23 | Research: other assistants | On `main` (merged 2026-11-07), not tagged; docs only | v1.12.0 |
+| 24 | Core on LangGraph and ChromaDB | On `main` (merged 2026-11-07), not tagged; hand tested on scratch data | v1.13.0 |
+| 25 | Jarvis as an MCP server | On `main` (merged 2026-11-07), not tagged; hand tested on scratch data | v1.14.0 |
+| 26 | Apps, files, and office | On `main` (merged 2026-11-07), not tagged; hand tested on scratch data and the real desktop | v1.15.0 |
+| 27 | Music, developer tools, browser | On `main` (merged 2026-11-07), not tagged; git hand tested live; Spotify, Docker, SSH need your setup | v1.16.0 |
+| 28 | Screen understanding and daily news | On `main` (merged 2026-11-07), not tagged; hand tested with real models and feeds | v1.17.0 |
+| 29 | Your phone, for free | On `main` (merged 2026-11-07), not tagged; hand tested on this laptop; pairing the phone needs you | v1.18.0 |
+| 30 | UI demos, then the chosen chat | On `main` (merged 2026-11-07), not tagged; checked in the browser; the real microphone needs you | v1.20.0 |
+| 31 | Open-source readiness | On `main` (merged 2026-11-07), not tagged; the release is prepared for you to tag | v1.21.0 |
+| 32 | The chat window, live | On `main` (merged 2026-11-07), not tagged; hand tested with a real serve on scratch data; voice in the window needs you | v1.22.0 |
 
 ## How each phase runs
 

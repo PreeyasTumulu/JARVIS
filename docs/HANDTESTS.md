@@ -60,7 +60,12 @@ Run on 2026-11-07 with a real `jarvis serve --no-voice` on a scratch data folder
 | 32.8 | `/` with `Sec-Fetch-Site: cross-site`; a foreign Host | refused | 403; 400 | pass |
 | 32.9 | the window command | Brave in app mode | `brave.exe --app=http://127.0.0.1:8765/ --window-size=480,800` (not launched) | pass |
 
-**Needs your hands:** `uv run jarvis serve --tray`, then `jarvis ui` for the real window, the mic button with voice on, and "open Jarvis" by voice.
+| 32.10 | `jarvis ui` against a running serve (scratch data) | a Brave app window that connects | "Opened the chat window in brave", a window titled "Jarvis chat", a second client in the log | pass |
+| 32.11 | typed "open Jarvis" | the exact phrase opens another window | "Opening the chat window.", two Jarvis chat windows | pass |
+| 32.12 | `voice_selftest.py --agent` with "what is the capital of France" (scratch data) | wake word, endpoint, Whisper, agent, spoken reply | wake 0.99 at +51 ms, end of speech +756 ms, text in 196 ms, web search, "The capital of France is Paris." spoken | pass |
+| 32.13 | KDE Connect state | paired | still visible but not paired | needs you |
+
+**Needs your hands:** the mic button with voice on, "open Jarvis" by voice, and pairing the phone.
 
 ## Phase 31: Open-source readiness
 

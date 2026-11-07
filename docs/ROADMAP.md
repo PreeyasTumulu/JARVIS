@@ -947,7 +947,7 @@ Try it with a light window open, say a command that opens an app (it should rece
 4. `uv run jarvis voice`, push to talk, "why do cats purr": speech starts before the reply is finished.
 5. `uv run pytest tests/unit/test_gate_coverage.py`.
 
-**Measured (2026-11-07):** imports: LangGraph 2.7 s, ChromaDB 1.0 s, both off the startup path (warm-up thread, 3.0 s in the background on a cold start). Router stages: 0 to 3 ms once the app index is built. Streaming, warm model: first text after 0.9 to 1.4 s against 5.7 to 7.1 s for whole replies; first audio with real Piper (silent player) 2.8 s and 3.6 s against 3.7 s and 5.0 s for the whole reply plus the first sentence, and no gain for a reply of one long sentence. Tool choice: [benchmarks/phase24.md](benchmarks/phase24.md).
+**Measured (2026-11-07):** imports: LangGraph 2.7 s, ChromaDB 1.0 s, both off the startup path (warm-up thread, 3.0 s in the background on a cold start). Router stages: 0 to 3 ms once the app index is built. Streaming, warm model: first text after 0.9 to 1.4 s against 5.7 to 7.1 s for whole replies; first audio with real Piper (silent player) 2.8 s and 3.6 s against 3.7 s and 5.0 s for the whole reply plus the first sentence, and no gain for a reply of one long sentence. Tool choice ([benchmarks/phase24.md](benchmarks/phase24.md), the model alone, without the router stages): jarvis-hermes3 89% of 97 at a 3.0 s median (Phase 17: 91% of 90); llama3.2:3b 88% at 0.4 s.
 
 **Exit criteria:** every tool entry point meets the gate (checked by tests), every turn says who handled it, and a streamed voice reply is never spoken twice or over a confirmation.
 

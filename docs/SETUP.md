@@ -467,7 +467,7 @@ Free, no account needed (ADR-098):
 1. **KDE Connect** is already on this laptop (Microsoft Store: "KDE Connect"). Install KDE Connect on the phone (Play Store or F-Droid), keep both on the same Wi-Fi, then on the PC open KDE Connect, choose the phone, press **Pair**, and accept on the phone. Allow its notification permission, and in Android's battery settings let it run unrestricted.
 2. Check it: `kdeconnect-cli --list-devices` should say `paired and reachable`. Then "find my phone" rings it, "send the clipboard to my phone" asks and sends, and "remind me on my phone at 7 to call the bank" rings it at 7.
 3. **Away from home (optional):** install the ntfy app, subscribe to a long random topic, and set it in `config/local.toml` as `[phone] ntfy_topic = "..."`. Alerts and Claude Code's questions (with answer buttons) then reach the phone anywhere. In ntfy's topic settings, "Keep alerting for highest priority" makes urgent pushes ring until you look.
-4. With several phones paired, set `[phone] device = "OnePlus Nord2 5G"`. `[bridge] phone = ""` turns the phone off for Claude Code's questions.
+4. With several phones paired, set `[phone] device = "Pixel 8"` (the name KDE Connect shows). `[bridge] phone = ""` turns the phone off for Claude Code's questions.
 
 ## 6. Windows settings
 

@@ -21,6 +21,7 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest --cov=jarvis --cov-fail-under=75
 uv run python scripts/check_dashes.py
+uv run python scripts/check_personal.py
 ```
 
 Optional, on a machine with Ollama: `uv run pytest tests/e2e -m llm` (the scripted scenarios against the real model) and `uv run python scripts/benchmark_tools.py` (tool-choice accuracy). Real-browser tests: `uv run pytest -m browser`.
@@ -37,6 +38,8 @@ Hand tests (see [docs/HANDTESTS.md](docs/HANDTESTS.md)): `uv run python scripts/
 - **Windows unreliability** is written down in [docs/RISKS.md](docs/RISKS.md), not hidden.
 - **Decisions with real tradeoffs** get an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 - **No em or en dashes** in code, comments, docs, or strings; use hyphens. `scripts/check_dashes.py` enforces it.
+- **No personal data** in the repository: no home folder paths, home network addresses, real phone numbers, real email addresses, device names, or keys, even from a live test. Use made-up values (`+91 98765 43210`, `ravi@work.example`, `192.168.1.x`, `Test Phone`). `scripts/check_personal.py` enforces the checkable part.
+- **UI demos** in `ui-demos/` share `_kit.js`; after editing it run `uv run python scripts/build_ui_demos.py`, and `scripts/capture_ui_demos.py` and `scripts/make_demo_gif.py` remake the screenshots and the README GIF.
 
 ## Pull requests
 

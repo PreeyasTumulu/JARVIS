@@ -37,6 +37,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 28 | Screen understanding and daily news | Built on `phase/28-vision-news` (stacked on Phase 27), hand tested with real models and feeds | v1.17.0 |
 | 29 | Your phone, for free | Built on `phase/29-phone-bridge` (stacked on Phase 28), hand tested on this laptop; pairing the phone needs you | v1.18.0 |
 | 30 | UI demos, then the chosen chat | Built on `phase/30-ui-demos` (stacked on Phase 29), checked in the browser; the real microphone needs you | v1.20.0 |
+| 31 | Open-source readiness | Built on `phase/31-open-source` (stacked on Phase 30); the release is prepared for you to merge and tag | v1.21.0 |
 
 ## How each phase runs
 
@@ -1098,6 +1099,21 @@ Try it with a light window open, say a command that opens an app (it should rece
 
 It was checked in all seven states, light and dark, at 1000 by 680 and 390 by 844, plus a live typed run with Yes, the mic, and New chat. That found and fixed two problems: a hard inner edge in the glow, and an answered confirmation left as an empty box. Six design and animation skills were installed for it: emil-design-eng, improve-animations, choreograph, animation-performance, impeccable, and ui-ux-pro-max. review-animations is also installed, but only you can start it (`/review-animations`).
 
+## Phase 31: Open-source readiness
+
+**Goal:** the repository can be shared: nothing personal in it, a demo up top, and a quickstart that works (ADR-102).
+
+**Scope**
+
+- `scripts/check_personal.py` in CI and as a test: home folder paths, home network addresses, real-looking phone numbers, real emails, and API keys, with the obvious fakes allowed. The live tests' real phone model and Wi-Fi address were replaced, and the history was checked clean.
+- `docs/demo.gif` from `ui-demos/chat.html` by `scripts/make_demo_gif.py`.
+- README: the GIF, the quickstart, and the stale numbers. CONTRIBUTING: the personal data rule and the demo scripts. `.env.example` was checked against every key the code reads.
+- RELEASING.md: the v1.21.0 checklist, every hands-on item in one list, and the merge and tag commands for you to run.
+
+**Measured (2026-11-07):** the first scan found 5 hits in the tracked files after the clean-up of the phone model and address (3 in the check's own patterns, an SSH test target, a made-up number), and all were resolved. The GIF has 172 frames at 648 by 403, 1.4 MB.
+
+**Exit criteria:** `check_personal.py` passes in CI, the README shows the demo, and nothing is merged or tagged without you.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.
@@ -1126,4 +1142,4 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 | 28 | Screen understanding and daily news (done) | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
 | 29 | Phone calls (done: your phone for free) | Researched cost, Indian numbers, and legal limits; you chose free alerts and file sending by KDE Connect and ntfy over paid calls (ADR-098, ADR-099) |
 | 30 | UI demos (done) | Six standalone concepts in `ui-demos/` with seven states each, screenshots in the README (ADR-100) |
-| 31 | Open-source readiness | Demo GIF, feature list, quickstart, `.env.example`, a check that no personal paths, servers, or contacts are committed |
+| 31 | Open-source readiness (done) | Demo GIF, quickstart, `.env.example` checked, and a CI check that no personal paths, addresses, numbers, emails, or keys are committed (ADR-102) |

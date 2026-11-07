@@ -601,7 +601,7 @@ Yours, asked 2026-11-01, all as recommended.
 
 ### ADR-098: Your phone for free: KDE Connect on the Wi-Fi, ntfy away from it
 
-- **Decision (2026-11-07, your choice after the call research in RESEARCH.md section 2.4):** no paid calls. Jarvis reaches your own phone through `jarvis.adapters.phone`: KDE Connect (`kdeconnect-cli`, already installed and seeing your OnePlus Nord2 5G) when the phone is on the same Wi-Fi, and an ntfy push to `[phone] ntfy_topic` when it is not. Three tools:
+- **Decision (2026-11-07, your choice after the call research in RESEARCH.md section 2.4):** no paid calls. Jarvis reaches your own phone through `jarvis.adapters.phone`: KDE Connect (`kdeconnect-cli`, already installed and seeing your phone) when the phone is on the same Wi-Fi, and an ntfy push to `[phone] ntfy_topic` when it is not. Three tools:
   - `ring_phone` (safe, public): rings loudly, even on silent; away from the Wi-Fi it sends an urgent push instead. "Find my phone" and "where's my phone" are exact phrases, with no model.
   - `notify_phone(message, title)` (safe, public, egress): a notification. The way is picked when the call is prepared and pinned into its arguments, so what runs is exactly what was decided; a pinned KDE Connect send that fails is an error, never a silent push over the internet. When the push would go over the internet and the conversation holds private data, it asks first.
   - `send_to_phone(item, text)` (confirm floor, private): a file (through the file guard: inside the allowed folders, never a secret file, up to 200 MB), a web link, the clipboard, a screenshot (taken only after the yes), or text. Wi-Fi only; nothing of this goes through ntfy.
@@ -644,6 +644,18 @@ Yours, asked 2026-11-01, all as recommended.
   - **The kit:** gains `play`, `stop`, `picked`, and `data-kit-autoplay="off"`, so the chat waits for you instead of starting the scripted run.
 - **Why:** you liked the orb's speaking animation and the edge glow, and asked for a chat-like interface built from them.
 - **Cost:** it is still a demo, simulated on the page (ADR-100). Wiring it to `jarvis serve` is the next UI step, and needs the safe local-page connection noted in R74.
+
+### ADR-102: Open-source readiness: no personal data, a demo GIF, and a release you start
+
+- **Decision (2026-11-07, as recommended):**
+  - **Your details become generic.** The UI demos say "your phone" instead of your phone's model, tests use made-up devices and example addresses, and the Wi-Fi address copied from a Phase 29 live test is gone. The screenshots were made again.
+  - **A personal-data check.** `scripts/check_personal.py` runs in CI and as a test. It fails on home folder paths, this machine's temporary folders, home network addresses outside 192.168.1.x and 10.0.0.x, real-looking +91 numbers, real email addresses, and API keys. A short list of the obvious fakes the tests use is allowed.
+  - **History.** It was checked and holds only fake keys and numbers, so nothing needs rewriting.
+  - **The demo GIF.** `docs/demo.gif` is recorded from `ui-demos/chat.html` by `scripts/make_demo_gif.py`, using Playwright and Pillow with one palette for the whole run.
+  - **The README:** the GIF up top, a quickstart that starts with "just look" and offline pages, and the stale lines fixed: test counts, the benchmark, the removed page.
+  - **The release** is prepared, not made: RELEASING.md has the v1.21.0 checklist, every hands-on item in one list, and the exact merge and tag commands. You run them.
+- **Why:** the repo is about to be shared, and live tests on a real laptop print real details. A check in CI catches the next one before it is pushed. Merging and tagging are yours, because hands-on items are still open.
+- **Cost:** the check only knows patterns. A name, a device or a town can still slip through, so CONTRIBUTING.md asks for made-up values. The GIF shows the demo page, not a real Jarvis turn.
 
 ## Open decisions
 

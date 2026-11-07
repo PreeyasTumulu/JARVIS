@@ -44,6 +44,18 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 31: Open-source readiness
+
+Run on 2026-11-07.
+
+| # | Check | Expected | Actual | Result |
+|---|---|---|---|---|
+| 31.1 | scan the tracked files by hand | nothing personal | the phone's real model in the demos, tests and docs, its real Wi-Fi address in a comment and tests, your first name as an SSH user in a test | **fail**, replaced with made-up values |
+| 31.2 | `git log --all -p` for keys and +91 numbers | only fakes | only the test fakes | pass |
+| 31.3 | `scripts/check_personal.py` | passes on the clean repo, catches real-looking values | 5 hits on its first run, all resolved; 8 real-looking samples caught and 8 known fakes passed in the tests | pass |
+| 31.4 | `.env.example` against the code | every key listed | all 14 present | pass |
+| 31.5 | `scripts/make_demo_gif.py` | a small looping GIF with every state's colours | first try: one frame's palette turned the idle orb and the blue listening state grey; with one palette from frames across the run, 172 frames, 1.4 MB | pass after fix |
+
 ## Phase 30: UI demos
 
 Run on 2026-11-07 in the browser pane and with Playwright on Edge.
@@ -68,7 +80,7 @@ Run on 2026-11-07 on a scratch data folder. The phone was visible to KDE Connect
 
 | # | Command | Expected | Actual | Result |
 |---|---|---|---|---|
-| 29.1 | real `kdeconnect-cli --list-devices` through the adapter | the OnePlus, its state | "OnePlus Nord2 5G", reachable, not paired, in 2.1 s (`--list-available` printed none) | pass |
+| 29.1 | real `kdeconnect-cli --list-devices` through the adapter | the phone, its state | the phone by name, reachable, not paired, in 2.1 s (`--list-available` printed none) | pass |
 | 29.2 | `ring_phone`, `notify_phone` with the phone unpaired | nothing sent; how to pair | "on the Wi-Fi but not paired: open KDE Connect on the PC, choose it, press Pair, and accept on the phone" | pass |
 | 29.3 | `Phone.alert(ring=True)` by ntfy to a random topic | priority 5, read back | 0.75 s; read back with title "Jarvis", priority 5 | pass |
 | 29.4 | "find my phone" | exact phrase, no model | handled_by exact_phrase, `ring_phone` | pass |

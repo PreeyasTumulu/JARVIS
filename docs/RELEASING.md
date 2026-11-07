@@ -29,8 +29,45 @@ Each `phase/<n>-<name>` branch starts from the one before it, so the last one co
 
 Older versions (0.4.0 to 1.7.0) stay as entries in the changelog; tagging them afterwards is optional, on the last commit of each phase branch.
 
+## The next release: v1.21.0 (prepared 2026-11-07)
+
+`phase/31-open-source` holds Phases 19 to 31 (stacked on `main`, which has 0 to 18). CI is green on it. Before merging, do the hands-on items you want covered. These are every item still open, in one list:
+
+| Phase | Item |
+|---|---|
+| 19.5 | Lock the PC while Jarvis runs: the microphone closes, and nothing private is said aloud |
+| 20.5 | Clipboard history: "the second last thing I copied" with a real Ctrl+V |
+| 17 | A real WhatsApp call ("call Amma") and "hang up", with someone who expects it |
+| 24 | A real voice turn with streamed speech, and "stop" during it |
+| 25 | `claude mcp add jarvis -- uv run --directory <repo> jarvis mcp serve`, then ask Claude Code for the weather |
+| 27 | Spotify keys in `.env`; Docker Desktop running with a `[docker.projects]` entry; an `[ssh.profiles]` entry |
+| 28 | "What's on my screen" on your real screen, by voice |
+| 29 | Pair the phone in KDE Connect, then "find my phone", "send the clipboard to my phone", and a phone reminder; optionally an ntfy topic |
+| 30 | `ui-demos`: "Use my microphone" with your own microphone; `/review-animations` on `chat.html` if you want that report |
+
+Then:
+
+```powershell
+uv run pytest
+uv run python scripts/check_personal.py
+git checkout main
+git pull
+git merge --no-ff phase/31-open-source -m "Merge phases 19 to 31"
+git push
+```
+
+Move the `[Unreleased]` section of CHANGELOG.md under `## [1.21.0] - <date>` and add its compare link, commit, and then:
+
+```powershell
+git tag -a v1.21.0 -m "Jarvis 1.21.0"
+git push origin v1.21.0
+```
+
+Create the GitHub release from the tag, with that CHANGELOG section as the notes and `docs/demo.gif` at the top.
+
 ## Every release
 
 - `uv run pytest`, `uv run pytest tests/e2e -m llm`, and `uv run python scripts/benchmark_tools.py` on a laptop with Ollama, so the scenarios and the benchmark reflect the real model.
 - `.\install.ps1 -DryRun` on a clean checkout.
+- `uv run python scripts/check_personal.py` and `scripts/check_dashes.py` pass (CI runs both).
 - The version in `pyproject.toml`, `src/jarvis/__init__.py`, CHANGELOG.md, and the README status line agree.

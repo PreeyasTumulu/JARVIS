@@ -7,9 +7,11 @@
 
 **A local-first voice assistant for Windows 11 that actually operates your laptop, and never acts without your yes.**
 
+![Jarvis's chat: typing "send the clipboard to my phone", a confirmation, the reply, then a spoken timer](docs/demo.gif)
+
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 30 (v1.20.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 31 (v1.21.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22; the new chat interface is designed in `ui-demos/` (the GIF above) and not wired to Jarvis yet, so for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -54,7 +56,6 @@ It came out of six concepts, each one standalone page you can open by double-cli
 - **Safety in code, not in a prompt.** Every tool has a risk floor. Sending, deleting, stopping, calling, or buying waits for your explicit yes, and the approval is bound to the exact action Jarvis showed you. Config can tighten a rule, never loosen it.
 - **Private stays local.** Messages, notifications, files, the clipboard, screen text, contacts, and memories are labelled private, and the router raises an error rather than send them to a cloud model. Tests prove it with a fake cloud that records everything.
 - **Six looks to choose from.** [ui-demos/](ui-demos/README.md) has six standalone concepts for the new interface, each showing listening, thinking, speaking, waiting for your yes, running a tool, and errors. Double-click one to try it.
-- **The screen answers (until Phase 22).** Say "Hey Jarvis" and the whole desktop transforms, with your words appearing as you speak, in a window that takes no clicks and no focus.
 - **Content is data.** Text from web pages, files, notifications, and windows is wrapped as untrusted and can never approve anything. Secret-looking values are hidden before the model sees them.
 - **Everything is audited.** Every tool call, its arguments, the decision, and the result go to a local SQLite log (`jarvis audit`).
 - **Honest about Windows.** What is unreliable is written down in [RISKS.md](docs/RISKS.md), with the workaround.
@@ -81,7 +82,7 @@ flowchart LR
   A --> P[Policy gate: safe, confirm, blocked]
   P --> R[52 typed tools + MCP servers]
   R --> W[Apps, UI, files, web, Brave, data, WhatsApp, calls, notifications, system]
-  A --> E[Events: page, tray, voice, audit log]
+  A --> E[Events: tray, voice, local API, audit log]
   C[Claude Code hooks] --> B[Bridge] --> E
 ```
 
@@ -89,7 +90,9 @@ The full design is in [ARCHITECTURE.md](docs/ARCHITECTURE.md), and every tradeof
 
 ## Quick start
 
-Needs Windows 11, [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.com). A GPU with 4 GB is enough. Full details in [SETUP.md](docs/SETUP.md).
+**Just look first:** double-click `ui-demos/chat.html` (or any page in `ui-demos/`). It runs offline in your browser, with nothing to install.
+
+**Run Jarvis:** it needs Windows 11, [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.com). A GPU with 4 GB is enough. Full details are in [SETUP.md](docs/SETUP.md).
 
 ```powershell
 git clone https://github.com/PreeyasTumulu/JARVIS.git
@@ -100,7 +103,7 @@ uv run jarvis serve --wake
 
 The installer asks before installing uv or Ollama with winget, uses the GPU for speech recognition when it finds an NVIDIA card, and never overwrites your `config/local.toml` or `.env`. The manual steps are in [SETUP.md](docs/SETUP.md).
 
-Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the weather". Hold `Ctrl+Alt+D` to dictate into the app you are typing in. `Ctrl+Alt+X` or "stop" cancels. `uv run jarvis startup enable` starts it at every login in the tray. Add contacts with `uv run jarvis contacts add "Amma" "+91 98765 43210" --alias Mom`.
+Copy `.env.example` to `.env` only for the services you want (all optional: a free Groq key makes hard public questions better; the rest are listed there). Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the weather". No voice? `uv run jarvis chat` types instead. Hold `Ctrl+Alt+D` to dictate into the app you are typing in. `Ctrl+Alt+X` or "stop" cancels. `uv run jarvis startup enable` starts it at every login in the tray. Add contacts with `uv run jarvis contacts add "Amma" "+91 98765 43210" --alias Mom`.
 
 ## Tech stack
 
@@ -111,12 +114,12 @@ Say "Hey Jarvis" (or hold `Ctrl+Alt+J`) and try "open notepad" or "what's the we
 | Cloud (optional, public questions only) | Groq gpt-oss-120b, then OpenRouter's free Nemotron, both free tiers |
 | Voice | openWakeWord ("hey jarvis"), Silero VAD, faster-whisper on the GPU, Piper or Windows SAPI |
 | Automation | Windows UI Automation (comtypes), SendInput, Playwright driving your default browser (Brave, Chrome, or Edge) |
-| Interface | FastAPI and a WebSocket page, a pystray tray icon, a rich CLI |
+| Interface | a rich CLI, a pystray tray icon, a local FastAPI and WebSocket API; the chat interface designed as standalone pages in `ui-demos/` |
 | Storage | SQLite (local audit log, history, contacts, memories) |
 
 ## Quality
 
-About 765 tests run in CI on Windows, including 54 end-to-end scenarios that drive the whole pipeline with Windows and the network faked; the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 93% of 89 benchmark commands ([benchmark](docs/benchmarks/phase15.md)).
+About 1,170 tests run in CI on Windows. They include 54 end-to-end scenarios that drive the whole pipeline with Windows and the network faked, and the same scenarios run against the real local model with `pytest -m llm`. Hermes 3 8B picks the right first tool for 92% of 113 benchmark commands ([benchmark](docs/benchmarks/phase29.md)). CI also checks that the repository holds no em dashes and no personal data: home folder paths, home network addresses, real-looking phone numbers, real email addresses, or API keys (`scripts/check_personal.py`).
 
 ## Documentation
 

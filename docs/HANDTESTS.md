@@ -44,6 +44,19 @@ Run on 2026-11-05.
 | 21.5 | `jarvis chat` start and `/quit`, three runs | measured | 2.54 s, 2.50 s, 2.56 s | measured |
 | 21.6 | `pytest --cov` | at least 78 percent | 78 percent of 11,799 statements, 966 passed | pass |
 
+## Phase 27: Music, developer tools, browser
+
+Run on 2026-11-07 with `jarvis chat` and the real model through `scripts/drive_chat.py`, on a scratch data folder and config with a scratch repository `shop` (one changed file) and a local bare remote.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 27.1 | "what changed in my shop repo" | the branch, the file, the diff | `git_changes(shop)` in 0.2 s; "a change to cart.py on main ... adds a discount parameter" | pass |
+| 27.2 | "commit it with a good message", y | a drafted message, asked, committed | `git_commit(message="Add discount feature to cart")`, asked, committed as 0a93899 | pass |
+| 27.3 | "push it", y | asked with the count, pushed | asked, "Pushed main to origin."; the remote's log shows the commit | pass |
+| 27.4 | benchmark: "open vs code at 9 tomorrow" | schedule_app | the model called `open_app` with `at`, which would have opened it at once | **fail**, fixed by ADR-095 (now refused, test added) |
+
+**Needs your setup (not run):** Spotify with your keys (27.5), Docker Desktop running for `docker_up` (27.6), an SSH profile (27.7). The unit tests cover each with fakes: Spotify's API and media session, the Docker CLI, and the terminal command; git runs for real in a temporary repository.
+
 ## Phase 26: Apps, files, and office
 
 Run on 2026-11-07 on the real desktop with a scratch data folder, config, and work folder (the only allowed folder), with Excel and Calculator closed beforehand: first tool calls without a model, then `jarvis chat` with the real model through `scripts/drive_chat.py`.

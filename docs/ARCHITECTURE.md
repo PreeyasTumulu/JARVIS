@@ -701,10 +701,13 @@ jarvis/
       interaction.py          speak, ask_user
       memory.py               remember, list_memories, forget
       notes.py                take_note, read_notes, open_notes (a Markdown file per day, ADR-088)
+      media/                  spotify.py (play_spotify: search API, desktop app, ADR-091)
+      dev/                    git.py (git_changes, git_commit, git_push, ADR-094), ssh.py (ssh_connect, ADR-093)
       office/                 sheets.py (add_sheet_row: Excel, openpyxl, CSV, ADR-089),
                               calculator.py (calculator_show, ADR-090)
       secrets.py              hides secret-looking values in text tools read
-      apps/                   app index (SQLite), open/focus/close, window matching, vscode, docker
+      apps/                   app index (SQLite), open/focus/close/schedule, window matching, vscode, docker,
+                              docker_up.py (compose or image, then readiness, ADR-092)
       ui/                     type_text, click, press_keys, read_window_text; key parsing; risk rules
       files/                  guard (allowlist, secrets), index and search (Everything or SQLite),
                               readers (text, PDF, docx), "this file" from Explorer or VS Code

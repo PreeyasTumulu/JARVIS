@@ -7,6 +7,13 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 ## [Unreleased]
 
 ### Added
+- "Play lofi beats on spotify": found with Spotify's search API and started in the app, saying "Playing ..." only when Spotify does (ADR-091).
+- "Start the shop project", "run redis on port 6379": compose projects and images started after a yes, then waited for until healthy or answering (ADR-092).
+- "Connect to my pi": SSH profiles from config open in Windows Terminal (ADR-093).
+- "What changed in my shop repo", "commit it", "push it": the local model drafts the message, and the commit and the push each ask first (ADR-094).
+
+### Fixed
+- A time given to a tool that only runs now ("open VS Code at 9" as open_app) is refused instead of running at once (ADR-095).
 - "Close Spotify in 20 minutes", "open VS Code at 9": apps opened or closed later, asked once when you say it and checked by the gate again when it runs (ADR-087).
 - Opening an app waits for its window and says how long it took.
 - Notes: "note that ...", "what did I note yesterday", "open my notes", in a Markdown file per day in Documents (ADR-088).

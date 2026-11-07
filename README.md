@@ -9,7 +9,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 26 (v1.15.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 18 are on `main`; Phases 19 to 27 (v1.16.0) are on stacked branches, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md). The web page and wake overlay were removed in Phase 22 and will be rebuilt from `ui-demos/`; for now Jarvis is voice plus `jarvis chat`. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 
@@ -20,7 +20,8 @@ Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools
 | Notes and sheets | "note that the plumber comes on Tuesday", "what did I note yesterday", "open my notes", "add groceries and 450 to my budget sheet" (asks first), "show 18 percent of 2400 in the calculator" |
 | Web | "search YouTube for lofi music", "look up Alan Turing on Wikipedia", "search the web for the latest Python release", "summarize https://..." |
 | Data | "what's the weather tomorrow in Bangalore", "price of Reliance shares", "bitcoin in rupees", "convert 100 dollars to rupees" |
-| Media | "pause the music", "next song", "resume", "what's playing" (instant, no model needed), in Spotify, YouTube, or any player |
+| Media | "play lofi beats on spotify", "pause the music", "next song", "resume", "what's playing" (instant, no model needed), in Spotify, YouTube, or any player |
+| Developer | "what changed in my shop repo", "commit it" (drafts the message, asks first), "push it" (asks first), "start the shop project" (compose, waits until ready), "run redis on port 6379", "connect to my pi" (opens a terminal) |
 | Dictation | hold `Ctrl+Alt+D` and speak: the text appears where your cursor is, in any app ("new line", "comma", "full stop" work) |
 | System | "set the volume to 30", "dim the screen", "lock my computer", "take a screenshot", "set a timer for 10 minutes", "remind me to call the bank at 5" |
 | People | "message Mom that I'll be late", "call Mom", "read my notifications", "anything new from Ravi" |

@@ -448,6 +448,13 @@ Nothing to set up: Windows OCR and its English language data come with Windows (
 - **Calculator:** "show 18 percent of 2400 in the calculator" types the sum into Windows Calculator and reads its answer.
 - **Apps later:** "close Spotify in 20 minutes" or "open VS Code at 9". Keep Jarvis running; "what's scheduled" and "cancel the spotify one" work like reminders. `[apps] open_wait_s` sets how long opening waits for a window.
 
+## 5q. Spotify, Docker, SSH, and git (Phase 27)
+
+- **Spotify:** create a free app at developer.spotify.com/dashboard (any name; redirect URI `http://127.0.0.1:8888/callback`, unused), then put its client ID and secret in `.env` as `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`. "Play lofi beats on spotify" then finds and starts it in the Spotify app. `[spotify] market` is the country to search (default IN).
+- **Docker projects:** `[docker.projects.shop]` with `path = "C:/Projects/shop"` (the folder with the compose file) lets "start the shop project" run `docker compose up -d` and wait until it is ready. "Run redis on port 6379" runs an image. Both ask first.
+- **SSH:** `[ssh.profiles.pi]` with `host`, `user`, `port`, and `key` (for example `"~/.ssh/id_ed25519"`). "Connect to my pi" opens Windows Terminal with the session; you type in it.
+- **Git:** `[git.repos]` with `jarvis = "C:/Projects/JARVIS"`. "What changed in jarvis", "commit it", "push it": the commit and the push each ask first. `[git] remote` is the remote to push to (default origin).
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

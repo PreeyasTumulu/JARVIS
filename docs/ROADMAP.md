@@ -33,6 +33,7 @@ Jarvis is built in phases. Each phase ends with a stop: you test it on your lapt
 | 24 | Core on LangGraph and ChromaDB | Built on `phase/24-core` (stacked on Phase 23), hand tested on scratch data | v1.13.0 |
 | 25 | Jarvis as an MCP server | Built on `phase/25-mcp-server` (stacked on Phase 24), hand tested on scratch data | v1.14.0 |
 | 26 | Apps, files, and office | Built on `phase/26-apps-files-office` (stacked on Phase 25), hand tested on scratch data and the real desktop | v1.15.0 |
+| 27 | Music, developer tools, browser | Built on `phase/27-music-dev-browser` (stacked on Phase 26), git hand tested live; Spotify, Docker, SSH need your setup | v1.16.0 |
 
 ## How each phase runs
 
@@ -996,9 +997,32 @@ Try it with a light window open, say a command that opens an app (it should rece
 4. With a budget workbook in Documents open in Excel: "add tea and 40 to my budget sheet", yes: the row appears, unsaved.
 5. "show 18 percent of 2400 in the calculator".
 
-**Measured (2026-11-07):** Calculator opened in 1.1 s and read back 432 and 4875 correctly; a scheduled open fired and ran through the gate; a note took 6 ms without the model; a row through a running Excel and through openpyxl each took 0.1 to 1.1 s. Tool choice: [benchmarks/phase26.md](benchmarks/phase26.md).
+**Measured (2026-11-07):** Calculator opened in 1.1 s and read back 432 and 4875 correctly; a scheduled open fired and ran through the gate; a note took 6 ms without the model; a row through a running Excel and through openpyxl each took 0.1 to 1.1 s. Tool choice ([benchmarks/phase26.md](benchmarks/phase26.md)): jarvis-hermes3 92% of 104, six of the seven new cases right.
 
 **Exit criteria:** nothing is written to a file without a yes, a scheduled action never runs late or without the gate, and every answer from Calculator is checked against Jarvis's own.
+
+## Phase 27: Music, developer tools, browser
+
+**Goal:** the music and developer jobs from the brief: Spotify search and play, Docker with a readiness wait, SSH profiles, and git commit and push behind a yes (ADR-091 to ADR-095). Media keys and Brave site search were already done (Phases 10 and 9).
+
+**Scope**
+
+- `play_spotify`: search API with client credentials, the desktop app, play on Spotify's media session, and a check of what plays.
+- `docker_up`: compose projects from config or images with names and ports only; readiness by health check or answering ports.
+- `ssh_connect`: profiles from config, opened in Windows Terminal.
+- `git_changes`, `git_commit`, `git_push`: diff for the local model, commit and push each asked.
+- Timing arguments on tools that only run now are refused (ADR-095), found by the benchmark.
+
+**Test it**
+
+1. Add the Spotify keys, then "play snowman by wys on spotify".
+2. With Docker Desktop running and a project in `[docker.projects]`: "start the shop project".
+3. With a profile in `[ssh.profiles]`: "connect to my pi".
+4. With a repository in `[git.repos]`: "what changed in jarvis", "commit it", "push it".
+
+**Measured (2026-11-07):** live with the real model on a scratch repository and a local remote: the diff was read in 0.2 s, the drafted message was "Add discount feature to cart", and the commit and the push each took about 1.3 s after a yes; the remote has the commit. Phase 26 benchmark (hermes3, 104 commands with seven new ones): 92%, the miss being "open vs code at 9 tomorrow" as open_app, which led to ADR-095.
+
+**Exit criteria:** nothing reaches a remote, a server, or Docker without your yes or your own typing, and Spotify is never said to play when it does not.
 
 ## Beyond 1.0
 
@@ -1024,7 +1048,7 @@ Planned on 2026-11-05 from your brief, in this order. Research comes before the 
 | 24 | Core on LangGraph and ChromaDB (done) | The agent loop as a LangGraph graph with the policy gate as a node it cannot skip; vectors in ChromaDB; an adapters layer (OS, apps, browser, APIs, shell, SSH, telephony), one pattern for API auth, retries, timeouts, and rate limits; from Phase 23: a tiered router pipeline with `handled_by` on every turn, a guard node (schema check, one repair, no duplicate calls, a step cap), named graph states mapped to UI states, tool options `cancel_on_interruption` and `timeout_secs`, sentence-streamed Piper, a per-stage latency breakdown, a test that every tool entry point meets the gate; ARCHITECTURE.md rewritten with diagrams (ADR-079) |
 | 25 | Jarvis as an MCP server (done) | Expose Jarvis's tools to other MCP clients through the same policy gate, alongside the MCP client from Phase 12 |
 | 26 | Apps, files, and office (done) | Open and close any app with timing, fuzzy file open, add a row to a sheet, Calculator app, notes in Notepad and a notes folder |
-| 27 | Music, developer tools, browser | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
+| 27 | Music, developer tools, browser (done) | Spotify search and play, media keys, Docker run with readiness wait, SSH profiles from config, git commit and push with a confirm before push, Brave site search |
 | 28 | Screen understanding and daily news | Local vision model (ADR-080), a morning AI and tech digest spoken and saved as Markdown with sources |
 | 29 | Phone calls | Research cost, Indian numbers, and legal limits first and bring them to you; then calls that open with a disclosure, after a confirm |
 | 30 | UI demos | Five or six standalone concepts in `ui-demos/` with listening, thinking, and speaking states, screenshots in the README |

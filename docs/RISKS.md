@@ -313,6 +313,18 @@ Excel joins the running object table only after its window first loses focus, so
 
 A scheduled open or close runs while you may be away, with the yes you gave when you scheduled it, for exactly that app and action. It is never run late after Jarvis was off, the gate rates it again when it runs, and apps still ask about unsaved work. Cancel it with "cancel the ... one".
 
+### R67. Spotify playback
+
+Opening a `spotify:` link and pressing play may resume what played before instead of the new item, depending on the Spotify app's version and state. Jarvis checks the media session and says so rather than claiming success. Not yet tried with real keys on this laptop. Spotify's search API can change its free terms.
+
+### R68. Docker readiness
+
+A published port that accepts a connection is taken as ready, but an app can accept connections before it serves requests; images with a health check are judged by it instead. `docker compose ps --format json` printed one JSON array in older Compose and one object per line in newer ones; both are read. Not yet tried against a running engine on this laptop (Docker Desktop was not running).
+
+### R69. Git from Jarvis
+
+Commit hooks run as they do from a terminal and can take time or fail. A push that needs credentials Git cannot ask for in the background fails with that reason. Pushing to main asks like any push, with the branch named; protect main on GitHub if you want a second guard.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

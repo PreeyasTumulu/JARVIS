@@ -556,6 +556,36 @@ Yours, asked 2026-11-01, all as recommended.
 - **Why:** you see the sum in the app you asked for, and the two answers check each other.
 - **Cost:** it depends on Calculator's keyboard shortcuts and its English "Display is" text (R65), and it takes the focus for about a second.
 
+### ADR-091: Spotify through its search API and the desktop app
+
+- **Decision (2026-11-07, as recommended):** `play_spotify` searches Spotify's Web API with client credentials (SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in .env: no login, no Premium), opens the result in the desktop app with its `spotify:` link, and presses play on Spotify's own media session. It then checks what Spotify reports as playing and says "Playing ..." only when that matches; otherwise it says it opened the item and asks you to press play. Without the keys it opens Spotify's search for the words. The tool is public and counts as egress, so a song request right after private content asks first.
+- **Why:** a song request is public data, the search API needs no account login, and checking the media session keeps Jarvis from claiming something plays when it does not.
+- **Cost:** whether play starts the new item or resumes the old one is up to the Spotify app; then you press play once. Not yet tried with your keys (R67).
+
+### ADR-092: Docker work started and waited for
+
+- **Decision (2026-11-07, as recommended):** `docker_up` starts a compose project listed in `[docker.projects.<name>]` (`docker compose up -d` in its folder) or runs an image (`docker run -d` with only a container name and published ports). Both ask first. Then it waits up to `[docker] ready_timeout_s` until each container is healthy, or running with its published ports answering on 127.0.0.1, and says how long it took; a container that stops is reported with the end of its log, secrets hidden.
+- **Why:** "start the database" is only done when you can connect to it; allowing only names and ports keeps a request from becoming an arbitrary command line.
+- **Cost:** a port that answers is not always an app that is ready (R68); an image is pulled first when it is missing, which can take minutes.
+
+### ADR-093: SSH profiles open a terminal you drive
+
+- **Decision (2026-11-07, as recommended):** `[ssh.profiles.<name>]` (host, user, port, key) and `ssh_connect` open Windows Terminal (or a console) running `ssh` to the profile. Jarvis never types into the session, sends commands, or reads it. Host and user names are checked, so neither can start with "-" and become an ssh option.
+- **Why:** a remote shell is the most powerful thing Jarvis could touch; you keep it in your own hands, and passwords and host keys are answered by you.
+- **Cost:** no "check the disk on my server" by voice; that would be a later, confirm-every-command tool.
+
+### ADR-094: Git commit and push, each after a yes
+
+- **Decision (2026-11-07, as recommended):** repositories are listed in `[git.repos]`. `git_changes` gives the branch, the files, and the diff, from which the local model drafts the message (git tools are private, so they never reach a cloud model). `git_commit` asks with the message and the files and commits what is staged, or every change when nothing is staged. `git_push` asks again with the branch, the remote, and the number of commits (and says when it is the main branch); it sets the upstream for a new branch and never forces. Git never prompts in the background.
+- **Why:** a commit is easy to undo and a push is public, but both carry your name, so both are asked; drafting from the diff locally keeps the code on the laptop.
+- **Cost:** the message is only as good as the local model; you hear it before it is used. Your own commit hooks run as usual.
+
+### ADR-095: A time on a tool that only runs now is an error
+
+- **Decision (2026-11-07):** tool arguments the tool does not declare are still ignored, except words that mean later (`at`, `in_minutes`, `time`, `when`, `delay`, ...): those make the call invalid with "use schedule_app or set_reminder".
+- **Why:** the Phase 27 benchmark had the model call `open_app(name="vs code", at="tomorrow 9")`; the ignored `at` would have opened VS Code at once.
+- **Cost:** none seen; the model retries with the right tool.
+
 ## Open decisions
 
 These need you; nothing is blocked on them.

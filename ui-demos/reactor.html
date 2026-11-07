@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis reactor</title>
+<style>
+  /* Reactor: steel linework on deep blue, one warm core. The loud, film-like one. */
+  :root {
+    --deep: #0E2236;
+    --steel: #2E4D6B;
+    --line: #8FB3CF;
+    --text: #D9E6F1;
+    --core: #FFC56B;
+    --accent: #8FB3CF;
+    --dock-bg: #0A1B2C;
+    --dock-fg: #B9CDDD;
+    --dock-line: #2E4D6B;
+    --dock-accent: #FFC56B;
+    --dock-on-accent: #10233A;
+    --dock-radius: 3px;
+  }
+  body[data-state="listening"] { --accent: #7FD6FF; }
+  body[data-state="thinking"] { --accent: #FFC56B; }
+  body[data-state="speaking"] { --accent: #F4F8FB; }
+  body[data-state="confirm"] { --accent: #FFB13B; }
+  body[data-state="tool"] { --accent: #B9A4FF; }
+  body[data-state="error"] { --accent: #FF6B5B; }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column; background: var(--deep); color: var(--text);
+    font-family: Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif;
+    font-stretch: condensed;
+  }
+  .stage {
+    flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    align-items: center; gap: 24px; padding: 24px clamp(16px, 4vw, 56px);
+    background: radial-gradient(ellipse 60% 70% at 35% 50%, #143150 0%, var(--deep) 70%);
+  }
+  canvas { width: 100%; height: 100%; min-height: 300px; display: block; }
+  .readout { max-width: 34ch; }
+  .state {
+    margin: 0 0 18px; font-size: clamp(34px, 5vw, 64px); font-weight: 300; line-height: 1;
+    color: var(--accent); font-variation-settings: "wdth" 75;
+  }
+  .clock { margin: 0 0 22px; font-size: 15px; color: var(--line); font-variant-numeric: tabular-nums; }
+  .heard, .say, .ask { margin: 0; font-size: clamp(19px, 2vw, 25px); line-height: 1.3; font-weight: 350; }
+  .heard::before { content: "You said "; color: var(--line); }
+  .heard:empty::before { content: ""; }
+  .tool { margin: 10px 0 0; font-size: 15px; color: var(--accent); }
+  .tool:not(:empty)::before { content: "Tool "; color: var(--line); }
+  .confirm { display: none; }
+  .confirm .buttons { display: flex; gap: 10px; margin-top: 18px; }
+  .confirm button {
+    font: inherit; font-size: 17px; padding: 8px 22px; border-radius: 3px; cursor: pointer;
+    border: 1px solid var(--accent); background: transparent; color: var(--text);
+  }
+  .confirm button[data-kit-answer="yes"] { background: var(--accent); color: var(--deep); }
+  .confirm button:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+  body[data-state="confirm"] .confirm { display: block; }
+  body[data-state="confirm"] .say, body[data-state="confirm"] .heard { display: none; }
+  body:not([data-state="listening"]):not([data-state="thinking"]) .heard { display: none; }
+  body[data-state="listening"] .say, body[data-state="thinking"] .say { display: none; }
+  body[data-state="idle"] .say { color: var(--line); }
+
+  @media (max-width: 760px) {
+    .stage { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 1fr) auto; text-align: center; }
+    .readout { margin: 0 auto; }
+    .confirm .buttons { justify-content: center; }
+  }
+</style>
+</head>
+<body data-state="idle">
+<main class="stage">
+  <canvas id="reactor" aria-hidden="true"></canvas>
+  <section class="readout" aria-live="polite">
+    <p class="state" data-kit="label">Idle</p>
+    <p class="clock" id="clock">0.0 s in this state</p>
+    <p class="heard" data-kit="heard"></p>
+    <p class="say" data-kit="say"></p>
+    <div class="confirm">
+      <p class="ask" data-kit="ask"></p>
+      <div class="buttons">
+        <button type="button" data-kit-answer="yes">Yes</button>
+        <button type="button" data-kit-answer="no">No</button>
+      </div>
+    </div>
+    <p class="tool" data-kit="tool"></p>
+  </section>
+</main>
+<nav id="dock"></nav>
+<script>
+// kit:begin
+// The demo kit: the seven states, a scripted run, the controls, and the microphone level.
+// Every demo page carries a copy between its kit markers; edit this file, then run
+// `uv run python scripts/build_ui_demos.py` (a test checks the copies match).
+//
+// A page reads Kit.scene in Kit.onFrame(fn) and styles itself from body[data-state].
+// Elements marked data-kit="heard" | "say" | "ask" | "tool" | "label" get their text here,
+// and buttons marked data-kit-answer="yes" | "no" answer the confirmation.
+// Nothing here makes a network request. The microphone is opened only after its button is
+// pressed, and its sound never leaves the page: only a loudness number is read.
+const Kit = (() => {
+  const STATES = ["idle", "listening", "thinking", "speaking", "confirm", "tool", "error"];
+  const NAMES = {
+    idle: "Idle",
+    listening: "Listening",
+    thinking: "Thinking",
+    speaking: "Speaking",
+    confirm: "Waiting for your yes",
+    tool: "Running a tool",
+    error: "Error",
+  };
+  // What each state shows when picked by hand, and in screenshots.
+  const EXAMPLE = {
+    idle: { say: "Say “Hey Jarvis”" },
+    listening: { heard: "send the clipboard to my phone" },
+    thinking: { heard: "send the clipboard to my phone" },
+    confirm: { ask: "Send what you copied to your OnePlus Nord2 5G?" },
+    tool: { tool: "send_to_phone", say: "Sending to your OnePlus Nord2 5G" },
+    speaking: { say: "Sent what you copied to your OnePlus Nord2 5G." },
+    error: { say: "Your OnePlus isn’t paired yet. Open KDE Connect on the PC and press Pair." },
+  };
+  const SCRIPT = [
+    { state: "idle", ms: 1800, ...EXAMPLE.idle },
+    { state: "listening", ms: 2800, heard: "send the clipboard to my phone" },
+    { state: "thinking", ms: 1300, heard: "send the clipboard to my phone" },
+    { state: "confirm", ms: 2600, ...EXAMPLE.confirm, auto: "yes" },
+    { state: "idle", ms: 1600, ...EXAMPLE.idle },
+    { state: "listening", ms: 1700, heard: "find my phone" },
+    { state: "tool", ms: 1200, tool: "ring_phone", say: "Looking for your phone" },
+    { state: "error", ms: 3400, ...EXAMPLE.error },
+  ];
+  const AFTER_YES = [
+    { state: "tool", ms: 1400, ...EXAMPLE.tool },
+    { state: "speaking", ms: 2800, ...EXAMPLE.speaking },
+  ];
+  const AFTER_NO = [{ state: "speaking", ms: 1600, say: "Okay, I won’t." }];
+
+  const params = new URLSearchParams(location.search);
+  const still = params.has("still"); // a frozen frame, for screenshots
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const scene = {
+    state: "idle", heard: "", heardShown: "", say: "", ask: "", tool: "",
+    t: 0, since: 0, level: 0, mic: false, calm, still,
+  };
+  const frames = [];
+  let queue = [];
+  let stepEnds = 0;
+  let looping = !still && !params.has("state");
+  let step = null;
+  let analyser = null;
+  let samples = null;
+
+  function show(entry, now) {
+    step = entry;
+    scene.state = entry.state;
+    scene.heard = entry.heard || "";
+    scene.say = entry.say || "";
+    scene.ask = entry.ask || "";
+    scene.tool = entry.tool || "";
+    scene.since = now;
+    stepEnds = entry.ms ? now + entry.ms / 1000 : Infinity;
+    document.body.dataset.state = entry.state;
+    for (const el of document.querySelectorAll("[data-kit]")) {
+      const key = el.dataset.kit;
+      if (key === "label") el.textContent = NAMES[entry.state];
+      else if (key !== "heard") el.textContent = scene[key] || "";
+    }
+    for (const button of document.querySelectorAll("[data-kit-state]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.kitState === entry.state));
+    }
+  }
+
+  function run(steps, now) {
+    queue = steps.slice();
+    show(queue.shift(), now);
+  }
+
+  function next(now) {
+    if (step && step.auto) return answer(step.auto === "yes");
+    if (queue.length) return show(queue.shift(), now);
+    if (looping) return run(SCRIPT, now);
+    stepEnds = Infinity;
+  }
+
+  function answer(yes) {
+    if (scene.state !== "confirm") return;
+    const now = performance.now() / 1000;
+    queue = (yes ? AFTER_YES : AFTER_NO).slice();
+    if (looping) queue.push(...SCRIPT);
+    show(queue.shift(), now);
+  }
+
+  function pick(state) {
+    looping = false;
+    updatePlay();
+    queue = [];
+    show({ state, ...EXAMPLE[state] }, performance.now() / 1000);
+  }
+
+  function noise(t) {
+    return (Math.sin(t * 7.3) + Math.sin(t * 13.1 + 1.7) * 0.6 + Math.sin(t * 29.9 + 0.4) * 0.3) / 1.9;
+  }
+
+  function syntheticLevel(t, inState) {
+    switch (scene.state) {
+      case "listening": return Math.min(1, 0.3 + 0.45 * Math.abs(noise(t * 1.4)));
+      case "speaking": {
+        const syllable = Math.abs(Math.sin(t * 9.5)) * (0.55 + 0.45 * Math.abs(Math.sin(t * 2.1)));
+        return inState < 0.15 ? syllable * inState / 0.15 : syllable;
+      }
+      case "thinking": return 0.12 + 0.05 * Math.sin(t * 3);
+      case "tool": return 0.2;
+      default: return 0;
+    }
+  }
+
+  function micLevel() {
+    analyser.getFloatTimeDomainData(samples);
+    let sum = 0;
+    for (const v of samples) sum += v * v;
+    return Math.min(1, Math.sqrt(sum / samples.length) * 6);
+  }
+
+  function tick(ms) {
+    const now = ms / 1000;
+    if (!still && now >= stepEnds) next(now);
+    const t = still ? 2.2 : now;
+    const inState = still ? 1.4 : now - scene.since;
+    scene.t = t;
+    const target = scene.mic && scene.state === "listening" ? micLevel() : syntheticLevel(t, inState);
+    scene.level = still ? target : scene.level + (target - scene.level) * 0.25;
+    // The words appear as they are heard.
+    const share = scene.state === "listening" && !still ? Math.min(1, inState / 1.8) : 1;
+    scene.heardShown = scene.heard.slice(0, Math.ceil(scene.heard.length * share));
+    for (const el of document.querySelectorAll('[data-kit="heard"]')) {
+      if (el.textContent !== scene.heardShown) el.textContent = scene.heardShown;
+    }
+    for (const fn of frames) fn(scene);
+    requestAnimationFrame(tick); // a frozen frame keeps drawing the same picture, so resizes redraw
+  }
+
+  async function toggleMic(button, status) {
+    if (scene.mic) {
+      scene.mic = false;
+      analyser.context.close();
+      analyser = null;
+      button.textContent = "Use my microphone";
+      status.textContent = "";
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const context = new AudioContext();
+      analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      samples = new Float32Array(analyser.fftSize);
+      context.createMediaStreamSource(stream).connect(analyser);
+      scene.mic = true;
+      button.textContent = "Stop using the microphone";
+      status.textContent = "Listening follows your voice. Nothing is recorded or sent.";
+      pick("listening");
+    } catch (error) {
+      status.textContent = "The microphone was not allowed. Allow it in the address bar and try again.";
+    }
+  }
+
+  let playButton = null;
+  function updatePlay() {
+    if (playButton) playButton.textContent = looping ? "Pause the demo" : "Play the demo";
+  }
+
+  function dock() {
+    const nav = document.querySelector("#dock");
+    if (!nav) return;
+    nav.setAttribute("aria-label", "Demo controls");
+    const states = document.createElement("div");
+    states.className = "kit-states";
+    states.setAttribute("role", "group");
+    states.setAttribute("aria-label", "Show a state");
+    STATES.forEach((state, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.kitState = state;
+      button.textContent = NAMES[state];
+      button.title = `${NAMES[state]} (key ${index + 1})`;
+      button.addEventListener("click", () => pick(state));
+      states.append(button);
+    });
+    const actions = document.createElement("div");
+    actions.className = "kit-actions";
+    playButton = document.createElement("button");
+    playButton.type = "button";
+    playButton.addEventListener("click", () => {
+      looping = !looping;
+      updatePlay();
+      if (looping) run(SCRIPT, performance.now() / 1000);
+    });
+    const mic = document.createElement("button");
+    mic.type = "button";
+    mic.textContent = "Use my microphone";
+    const status = document.createElement("p");
+    status.className = "kit-status";
+    status.setAttribute("role", "status");
+    mic.addEventListener("click", () => toggleMic(mic, status));
+    actions.append(playButton, mic);
+    nav.append(states, actions, status);
+    updatePlay();
+  }
+
+  const css = `
+  #dock { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: 8px 16px; padding: 10px 16px; color: var(--dock-fg); background: var(--dock-bg);
+    font: 13px/1.3 var(--dock-font, inherit); }
+  #dock button { font: inherit; color: inherit; background: transparent; cursor: pointer;
+    border: 1px solid var(--dock-line); border-radius: var(--dock-radius, 999px); padding: 5px 11px; }
+  #dock button:hover { border-color: var(--dock-fg); }
+  #dock button[aria-pressed="true"] { background: var(--dock-accent); color: var(--dock-on-accent);
+    border-color: var(--dock-accent); }
+  #dock button:focus-visible, [data-kit-answer]:focus-visible { outline: 2px solid var(--dock-accent);
+    outline-offset: 2px; }
+  .kit-states, .kit-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .kit-status { margin: 0; width: 100%; text-align: center; min-height: 1.3em; opacity: .8; }
+  body.kit-still #dock { display: none; }`;
+
+  function start() {
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.append(style);
+    if (still) document.body.classList.add("kit-still");
+    dock();
+    for (const button of document.querySelectorAll("[data-kit-answer]")) {
+      button.addEventListener("click", () => answer(button.dataset.kitAnswer === "yes"));
+    }
+    addEventListener("keydown", (event) => {
+      if (event.target.closest && event.target.closest("input, textarea")) return;
+      const index = Number(event.key) - 1;
+      if (index >= 0 && index < STATES.length) pick(STATES[index]);
+      else if (event.key === " " && event.target === document.body) {
+        event.preventDefault();
+        playButton.click();
+      }
+    });
+    const first = params.get("state");
+    const now = performance.now() / 1000;
+    if (STATES.includes(first)) show({ state: first, ...EXAMPLE[first] }, now);
+    else run(SCRIPT, now);
+    requestAnimationFrame(tick);
+  }
+
+  if (document.readyState === "loading") addEventListener("DOMContentLoaded", start);
+  else start();
+  return { STATES, NAMES, scene, onFrame: (fn) => frames.push(fn), pick, answer };
+})();
+// kit:end
+</script>
+<script>
+  const canvas = document.querySelector("#reactor");
+  const ctx = canvas.getContext("2d");
+  const clock = document.querySelector("#clock");
+  const css = (name) => getComputedStyle(document.body).getPropertyValue(name).trim();
+  let spin = 0;
+  let last = 0;
+
+  function size() {
+    const ratio = devicePixelRatio || 1;
+    const { width, height } = canvas.getBoundingClientRect();
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
+  addEventListener("resize", size);
+  size();
+
+  Kit.onFrame((s) => {
+    const { width, height } = canvas.getBoundingClientRect();
+    const dt = s.still ? 0 : Math.min(0.05, s.t - last);
+    last = s.t;
+    const speeds = { idle: 0.05, listening: 0.15, thinking: 1.6, speaking: 0.25, confirm: 0, tool: 0.7, error: 0 };
+    spin += (s.calm ? 0 : speeds[s.state]) * dt;
+    const turn = s.still ? 0.6 : spin;
+    const cx = width / 2, cy = height / 2;
+    const R = Math.min(width, height) * 0.36;
+    const accent = css("--accent"), line = css("--line"), steel = css("--steel"), core = css("--core");
+    const inState = s.still ? 1.4 : s.t - s.since;
+    clock.textContent = `${inState.toFixed(1)} s in this state`;
+    ctx.clearRect(0, 0, width, height);
+    ctx.lineCap = "round";
+
+    // Outer ticks: 120 of them. Listening lifts them with your voice; a tool steps them round.
+    const ticks = 120;
+    for (let i = 0; i < ticks; i++) {
+      const a = (i / ticks) * Math.PI * 2 - Math.PI / 2;
+      let lift = 0, lit = false;
+      if (s.state === "listening") lift = s.level * (0.5 + 0.5 * Math.sin(i * 0.9 + s.t * 6)) * R * 0.14;
+      if (s.state === "thinking") lit = ((i / ticks + turn * 0.5) % 1) < 0.12;
+      if (s.state === "tool") lit = Math.floor(i / 10) === Math.floor((turn * 4) % 12);
+      if (s.state === "speaking") lift = s.level * R * 0.06;
+      if (s.state === "error") lit = i % 7 < 3;
+      if (s.state === "confirm") lit = i < 15 || i > 105 || (i > 45 && i < 75);
+      const long = i % 10 === 0;
+      const r1 = R * 1.12, r2 = r1 + (long ? R * 0.07 : R * 0.035) + lift;
+      ctx.strokeStyle = lit || s.state === "listening" || s.state === "speaking" ? accent : steel;
+      ctx.globalAlpha = lit ? 1 : long ? 0.9 : 0.55;
+      ctx.lineWidth = long ? 2 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // The middle ring and three arcs that turn.
+    ctx.strokeStyle = steel;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = s.state === "idle" ? line : accent;
+    ctx.lineWidth = 3;
+    for (let k = 0; k < 3; k++) {
+      const start = turn * (k % 2 ? -1 : 1) + (k * Math.PI * 2) / 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * (0.86 - k * 0.04), start, start + Math.PI * (0.32 + 0.08 * k));
+      ctx.stroke();
+    }
+
+    // The aperture: six blades that open with the level.
+    const open = 0.44 + s.level * 0.12 + (s.state === "confirm" ? 0.04 * Math.sin(s.t * 2.4) : 0);
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    for (let k = 0; k <= 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + turn * 0.3;
+      const x = cx + Math.cos(a) * R * open, y = cy + Math.sin(a) * R * open;
+      k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + turn * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * R * open, cy + Math.sin(a) * R * open);
+      ctx.lineTo(cx + Math.cos(a + 1.2) * R * 0.2, cy + Math.sin(a + 1.2) * R * 0.2);
+      ctx.stroke();
+    }
+
+    // The core: warm, brighter when Jarvis speaks, red on an error.
+    const glow = s.state === "error" ? "#FF6B5B" : core;
+    const strength = { idle: 0.35, listening: 0.5, thinking: 0.55, speaking: 0.55 + s.level * 0.45,
+      confirm: 0.7, tool: 0.6, error: 0.8 }[s.state];
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.32);
+    g.addColorStop(0, glow);
+    g.addColorStop(0.35, glow + "AA");
+    g.addColorStop(1, glow + "00");
+    ctx.globalAlpha = strength;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+</script>
+</body>
+</html>

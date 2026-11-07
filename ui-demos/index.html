@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis UI demos</title>
+<style>
+  :root { --bg: #F3F4F7; --card: #FFFFFF; --ink: #1D2230; --muted: #5C6378; --line: #DADDE6; --link: #2B5FD9; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #171A22; --card: #20242F; --ink: #E7E9EF; --muted: #A0A6B8; --line: #333948; --link: #8DB0FF; }
+  }
+  :root[data-theme="dark"] { --bg: #171A22; --card: #20242F; --ink: #E7E9EF; --muted: #A0A6B8; --line: #333948; --link: #8DB0FF; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { margin: 0 0 8px; font: 600 clamp(28px, 4vw, 40px)/1.15 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+  .lead { margin: 0 0 32px; max-width: 64ch; color: var(--muted); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  a { color: inherit; text-decoration: none; display: block; }
+  a:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; border-radius: 10px; }
+  img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: var(--line); }
+  h2 { margin: 14px 16px 4px; font-size: 18px; font-weight: 600; }
+  li p { margin: 0 16px 16px; color: var(--muted); font-size: 15px; }
+  a:hover h2 { color: var(--link); }
+  .keys { margin-top: 36px; color: var(--muted); font-size: 15px; max-width: 70ch; }
+  kbd { font: 13px Consolas, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Six ways Jarvis could look</h1>
+  <p class="lead">Each page plays a short scripted run: Jarvis hears "send the clipboard to my phone", asks before sending, sends it, then fails to find a phone that is not paired. Pick any state yourself from the buttons at the bottom of a page.</p>
+  <ul>
+    <li><a href="reactor.html"><img src="screenshots/reactor-listening.jpg" alt="Reactor: steel rings around a warm core, listening"><h2>Reactor</h2><p>Steel rings, a turning aperture, and one warm core. The film-like one.</p></a></li>
+    <li><a href="orb.html"><img src="screenshots/orb-listening.jpg" alt="Orb: a soft blue shape in daylight, listening"><h2>Orb</h2><p>A soft shape that changes colour and moves with your voice, with the words set large.</p></a></li>
+    <li><a href="edge.html"><img src="screenshots/edge-listening.jpg" alt="Edge glow: the screen's edge lit blue around a Notepad window"><h2>Edge glow</h2><p>The edge of the screen lights up and a small caption sits above the taskbar, so your work stays in view.</p></a></li>
+    <li><a href="terminal.html"><img src="screenshots/terminal-listening.jpg" alt="Terminal: jarvis chat lines in peach on plum"><h2>Terminal</h2><p>jarvis chat as the whole interface: every state is a line you can read back.</p></a></li>
+    <li><a href="pill.html"><img src="screenshots/pill-listening.jpg" alt="Pill: a dark capsule with a waveform above the taskbar"><h2>Pill</h2><p>A small capsule above the taskbar that grows only as much as each state needs.</p></a></li>
+    <li><a href="constellation.html"><img src="screenshots/constellation-listening.jpg" alt="Constellation: a globe of stars on indigo"><h2>Constellation</h2><p>A globe of stars that leans in to listen, spins to think, and forms a ring while it waits.</p></a></li>
+  </ul>
+  <p class="keys">On any page: <kbd>1</kbd> to <kbd>7</kbd> pick a state, <kbd>Space</kbd> pauses or plays the run, and "Use my microphone" makes listening follow your real voice. The pages make no network requests, and the microphone's sound never leaves the page.</p>
+</main>
+</body>
+</html>

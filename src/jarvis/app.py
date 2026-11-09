@@ -85,6 +85,13 @@ class App:
             alert_phone=(lambda text: phone.alert(text, ring=True)) if phone else None,
         )
         self.background.append(asyncio.create_task(scheduler.run(), name="reminders"))
+        services = self.services
+        if services.claude is not None:
+            # Claude Code runs started by voice report what they do and when they finish.
+            async def show_claude(text: str) -> None:
+                await self.bus.publish(Announcement(source="claude", text=text))
+
+            services.claude.attach(show_claude, say, lambda: services.quiet_speech)
         if self.services.focus is not None:
             self.background.append(
                 asyncio.create_task(self.services.focus.run(say_focus), name="focus")

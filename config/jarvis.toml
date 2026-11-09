@@ -261,6 +261,15 @@ enabled = true
 connect_timeout_s = 60       # the first start of a Docker image is slow
 call_timeout_s = 30
 
+[claude]
+# Claude Code by voice (ADR-105). Projects go in local.toml as [claude.projects.<name>] with a
+# folder (and an optional runner). Prompts always ask first; in background runs every edit,
+# command, or fetch asks you again through Jarvis. bypassPermissions and auto are refused.
+enabled = true
+cli = ""                     # claude.exe; empty finds it (npm's claude.cmd is never run with a prompt)
+permission_mode = "manual"
+run_timeout_s = 1800
+
 [mcp_server]
 # Jarvis's own tools for other MCP clients (Claude Code, Claude Desktop): they run
 # `uv run jarvis mcp serve`, which reaches the running `jarvis serve` (ADR-085). Only public

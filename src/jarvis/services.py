@@ -17,6 +17,7 @@ from jarvis.tools.apps.index import AppIndex, AppStore
 from jarvis.tools.browser.session import BrowserManager
 from jarvis.tools.calendar.feed import Calendar
 from jarvis.tools.data.hub import DataHub
+from jarvis.tools.dev.claude_code import ClaudeRuns
 from jarvis.tools.files.index import FileIndex
 from jarvis.tools.mail.mailbox import Mailbox
 from jarvis.tools.mcp.hub import McpHub
@@ -62,6 +63,7 @@ class Services:
     cloud: Router | None = None  # cloud models for public work, such as the news digest
     local_model: ChatModel | None = None  # the local model, for tools that write text
     phone: Phone | None = None  # your phone through KDE Connect or ntfy (ADR-098)
+    claude: ClaudeRuns | None = None  # Claude Code runs started by voice (ADR-105)
 
     async def aclose(self) -> None:
         await self.mcp.aclose()
@@ -110,4 +112,5 @@ def build_services(settings: Settings, db: Database) -> Services:
         history=HistoryLog(db),
         prefs=Preferences(db),
         phone=Phone(settings.phone),
+        claude=ClaudeRuns(settings) if settings.claude.enabled else None,
     )

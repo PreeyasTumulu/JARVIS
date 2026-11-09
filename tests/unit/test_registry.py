@@ -95,7 +95,8 @@ ALL_TOOLS = {
     "open_app", "focus_app", "close_app", "schedule_app", "take_note", "read_notes",
     "open_notes", "add_sheet_row", "calculator_show", "find_file", "open_file", "read_file",
     "get_selected_file", "vscode_open", "docker_list", "docker_logs", "docker_start",
-    "docker_stop", "docker_up", "git_changes", "git_commit", "git_push", "ssh_connect",
+    "docker_stop", "docker_up", "docker_run_code", "claude_open", "claude_sessions", "claude_ask",
+    "claude_stop", "git_changes", "git_commit", "git_push", "ssh_connect",
     "play_spotify", "look_at_screen", "ai_news", "web_search", "search_site", "open_url",
     "fetch_page", "market_data",
     "crypto_price",
@@ -143,6 +144,7 @@ def test_send_whatsapp_always_asks_and_the_browser_counts_as_egress() -> None:
         "git_push",  # commits go to the remote
         "ai_news",  # it fetches the news feeds
         "notify_phone",  # by ntfy over the internet when the phone is away (ADR-098)
+        "claude_ask",  # the prompt goes to Anthropic (ADR-105)
     }
     read = registry.get("read_window_text")
     assert read is not None

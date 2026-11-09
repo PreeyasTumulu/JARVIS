@@ -63,3 +63,20 @@
 # [router]
 # escalate = "explicit"               # the cloud only when you say "think harder"; "never" turns it off
 # cloud = ["groq"]                    # or [] to keep everything local
+
+# Claude Code by voice (ADR-105): "open Claude for jarvis", "tell Claude in jarvis to add a test".
+# [claude.projects.jarvis]
+# folder = "C:/Projects/JARVIS"       # where Claude Code works; its sessions are kept per folder
+# runner = "jarvis"                   # the [docker.runners] entry for "run it in Docker"
+# [claude]
+# permission_mode = "manual"          # each edit or command asks you; also "plan", "dontAsk", "acceptEdits"
+
+# Run a project's code in a container (ADR-106): "run the jarvis code in Docker".
+# [docker.runners.jarvis]
+# image = "python:3.12-slim"
+# command = ["python", "main.py"]  # only from here; speech picks the runner, never the command
+# folder = "C:/Projects/JARVIS"       # mounted read-only at /work
+# network = false                     # no internet unless you turn it on
+# memory = "1g"
+# cpus = 2
+# timeout_s = 300

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from jarvis.tools.apps.docker import docker_list, docker_logs, docker_start, docker_stop
+from jarvis.tools.apps.docker_run import docker_run_code
 from jarvis.tools.apps.docker_up import docker_up
 from jarvis.tools.apps.tools import close_app, focus_app, open_app, schedule_app
 from jarvis.tools.apps.vscode import vscode_open
@@ -14,6 +15,7 @@ from jarvis.tools.data.crypto import crypto_price
 from jarvis.tools.data.currency import convert_currency
 from jarvis.tools.data.market import market_data
 from jarvis.tools.data.weather import weather
+from jarvis.tools.dev.claude_code import claude_ask, claude_open, claude_sessions, claude_stop
 from jarvis.tools.dev.git import git_changes, git_commit, git_push
 from jarvis.tools.dev.ssh import ssh_connect
 from jarvis.tools.files.tools import find_file, get_selected_file, open_file, read_file
@@ -78,10 +80,15 @@ def build_registry() -> Registry:
             docker_start,
             docker_stop,
             docker_up,
+            docker_run_code,
             git_changes,
             git_commit,
             git_push,
             ssh_connect,
+            claude_open,
+            claude_sessions,
+            claude_ask,
+            claude_stop,
             play_spotify,
             look_at_screen,
             ai_news,

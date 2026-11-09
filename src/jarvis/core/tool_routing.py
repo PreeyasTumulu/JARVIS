@@ -85,8 +85,20 @@ GROUPS: dict[str, Group] = {
         re.compile(r"\b(spotify|song|songs|album|playlist|music|play)\b"),
     ),
     "docker": Group(
-        ("docker_list", "docker_logs", "docker_start", "docker_stop", "docker_up", "open_app"),
+        (
+            "docker_list",
+            "docker_logs",
+            "docker_start",
+            "docker_stop",
+            "docker_up",
+            "docker_run_code",
+            "open_app",
+        ),
         re.compile(r"\b(docker|containers?|compose|postgres|redis|mongo|mysql|nginx|images?)\b"),
+    ),
+    "claude": Group(
+        ("claude_open", "claude_sessions", "claude_ask", "claude_stop", "docker_run_code"),
+        re.compile(r"\bclaude\b"),
     ),
     "web": Group(
         ("web_search", "open_url", "fetch_page"),

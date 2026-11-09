@@ -386,9 +386,40 @@ class DockerProject(_Section):
     path: str  # the folder with the compose file
 
 
+class DockerRunner(_Section):
+    """A fixed way to run a project's code in a container (ADR-106). Speech picks a runner by
+    name; the image and the command come only from here."""
+
+    image: str
+    command: list[str] = Field(min_length=1)
+    folder: str  # mounted at /work, read-only
+    network: bool = False  # no internet unless you turn it on here
+    memory: str = Field(default="1g", pattern=r"^\d{1,5}[kmg]$")
+    cpus: float = Field(default=2, gt=0, le=64)
+    timeout_s: float = Field(default=300, gt=0, le=3600)
+
+
 class DockerSettings(_Section):
     ready_timeout_s: float = Field(default=120, gt=0, le=1800)
     projects: dict[str, DockerProject] = Field(default_factory=dict)  # "shop" = { path = "..." }
+    runners: dict[str, DockerRunner] = Field(default_factory=dict)
+
+
+class ClaudeProject(_Section):
+    folder: str  # where Claude Code works; its sessions are kept per folder
+    runner: str = ""  # a [docker.runners] name, for "run it in Docker" after Claude is done
+
+
+class ClaudeSettings(_Section):
+    """Claude Code sessions opened and prompted by voice (ADR-105)."""
+
+    enabled: bool = True
+    cli: str = ""  # claude.exe; empty finds it on PATH (never a .cmd or .bat)
+    # How Claude asks before a change in background runs. bypassPermissions and auto are not
+    # allowed: every edit or command waits for your yes through Jarvis.
+    permission_mode: Literal["manual", "plan", "dontAsk", "acceptEdits"] = "manual"
+    run_timeout_s: float = Field(default=1800, gt=0, le=7200)
+    projects: dict[str, ClaudeProject] = Field(default_factory=dict)
 
 
 class SshProfile(_Section):
@@ -521,6 +552,7 @@ class Settings(_Section):
     news: NewsSettings = NewsSettings()
     spotify: SpotifySettings = SpotifySettings()
     docker: DockerSettings = DockerSettings()
+    claude: ClaudeSettings = ClaudeSettings()
     ssh: SshSettings = SshSettings()
     git: GitSettings = GitSettings()
     briefing: BriefingSettings = BriefingSettings()

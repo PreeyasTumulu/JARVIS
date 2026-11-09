@@ -6,6 +6,9 @@ Claude Code sends the hook event as JSON on stdin (code.claude.com/docs/en/hooks
   `updatedInput.answers` with `permissionDecision: "allow"`, which answers the question.
 - PermissionRequest: a clear spoken yes allows the tool, no denies it.
 - Notification: "Claude is waiting for you" and "Claude finished" are said aloud.
+- `claude-hook gate`, only in the runs Jarvis starts itself (ADR-105): PreToolUse for an edit,
+  a command, or a fetch asks you first, since a background `claude -p` run cannot show
+  Claude's own permission prompt. A yes allows that one call, a no denies it.
 
 Anything that goes wrong (Jarvis not running, no answer, a timeout) prints nothing, which
 leaves Claude Code to ask you itself as usual. The hook never blocks Claude.
@@ -33,6 +36,8 @@ NOTICES = {
     "elicitation_dialog": "Claude needs your input{where}.",
 }
 SKIP_PERMISSIONS = {"AskUserQuestion", "ExitPlanMode"}  # a plan is read, not approved by ear
+GATED_TOOLS = ("Bash", "Edit", "MultiEdit", "Write", "NotebookEdit", "WebFetch")
+GATE_MATCHER = "|".join(GATED_TOOLS)
 
 
 def permission_text(tool: str, tool_input: dict[str, Any]) -> str:
@@ -58,12 +63,16 @@ def permission_text(tool: str, tool_input: dict[str, Any]) -> str:
     return f"use {tool}"
 
 
-def requests_for(event: dict[str, Any]) -> list[dict[str, Any]]:
+def requests_for(event: dict[str, Any], *, gate: bool = False) -> list[dict[str, Any]]:
     """The bridge requests one hook event turns into (several for a multi-question ask)."""
     name = event.get("hook_event_name")
     project = Path(str(event.get("cwd") or "")).name
     tool = str(event.get("tool_name") or "")
     tool_input = event.get("tool_input") or {}
+    if gate and name == "PreToolUse" and tool in GATED_TOOLS:
+        return [
+            {"kind": "permission", "text": permission_text(tool, tool_input), "project": project}
+        ]
     if name == "PreToolUse" and tool == "AskUserQuestion":
         return [
             {
@@ -87,9 +96,24 @@ def requests_for(event: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def output_for(event: dict[str, Any], answers: list[dict[str, Any]]) -> dict[str, Any] | None:
+def output_for(
+    event: dict[str, Any], answers: list[dict[str, Any]], *, gate: bool = False
+) -> dict[str, Any] | None:
     """The hook's stdout for Claude Code, or None to let Claude Code ask as usual."""
     name = event.get("hook_event_name")
+    if gate and name == "PreToolUse" and event.get("tool_name") in GATED_TOOLS:
+        if not answers or "allow" not in answers[0]:
+            return None  # no answer: Claude Code's own rules decide (a -p run denies)
+        allowed = bool(answers[0]["allow"])
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow" if allowed else "deny",
+                "permissionDecisionReason": (
+                    "You said yes through Jarvis" if allowed else "The user said no through Jarvis."
+                ),
+            }
+        }
     if name == "PreToolUse":
         questions = (event.get("tool_input") or {}).get("questions") or []
         if (
@@ -118,11 +142,13 @@ def output_for(event: dict[str, Any], answers: list[dict[str, Any]]) -> dict[str
     return None
 
 
-def run_hook(raw: str, data_dir: Path, *, http: httpx.Client | None = None) -> str:
+def run_hook(
+    raw: str, data_dir: Path, *, http: httpx.Client | None = None, gate: bool = False
+) -> str:
     """Handle one hook event; returns what to print (often nothing)."""
     try:
         event = json.loads(raw)
-        wanted = requests_for(event)
+        wanted = requests_for(event, gate=gate)
         if not wanted:
             return ""
         address = json.loads(bridge_file(data_dir).read_text("utf-8"))
@@ -146,20 +172,31 @@ def run_hook(raw: str, data_dir: Path, *, http: httpx.Client | None = None) -> s
     finally:
         if http is None:
             client.close()
-    result = output_for(event, answers)
+    result = output_for(event, answers, gate=gate)
     return json.dumps(result) if result else ""
 
 
 # Installing the hooks into Claude Code's user settings (~/.claude/settings.json)
 
 
-def hook_command(project: Path) -> dict[str, Any]:
+def hook_command(project: Path, action: str | None = None) -> dict[str, Any]:
     uv = shutil.which("uv") or "uv"
+    extra = [action] if action else []
     return {
         "type": "command",
         "command": uv,
-        "args": ["run", "--quiet", "--project", str(project), "jarvis", MARK],
+        "args": ["run", "--quiet", "--project", str(project), "jarvis", MARK, *extra],
         "timeout": HOOK_TIMEOUT_S,
+    }
+
+
+def gate_settings(project: Path) -> dict[str, Any]:
+    """Settings for `claude --settings` in Jarvis's own runs: each edit, command, or fetch asks
+    you through Jarvis. Your own sessions never get this hook."""
+    return {
+        "hooks": {
+            "PreToolUse": [{"matcher": GATE_MATCHER, "hooks": [hook_command(project, "gate")]}]
+        }
     }
 
 

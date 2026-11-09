@@ -31,6 +31,7 @@ from jarvis.tools.browser.session import PageElement, PageSnapshot
 from jarvis.tools.calendar.feed import Calendar
 from jarvis.tools.data.hub import DataHub
 from jarvis.tools.data.market import Listing, Price
+from jarvis.tools.dev.claude_code import ClaudeRuns
 from jarvis.tools.files.guard import FileGuard
 from jarvis.tools.files.index import FileIndex
 from jarvis.tools.mail.mailbox import Mailbox, MailError, MailHeader, MailMessage, preview
@@ -695,6 +696,7 @@ def make_app(
                 urls=[CALENDAR_URL],
             ),
             mcp=McpHub(cfg.mcp.model_copy(update={"servers": {}})),
+            claude=ClaudeRuns(cfg),
         )
         router = Router(cfg, db, clients=cloud or {}, clock=lambda: FakeNotificationCenter.NOW)
         app = build_app(

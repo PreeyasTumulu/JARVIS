@@ -127,8 +127,9 @@ def build_parser() -> argparse.ArgumentParser:
         "action",
         nargs="?",
         default="run",
-        choices=["run", "install", "uninstall", "status", "test"],
-        help="run (what Claude Code calls), install or uninstall the hooks, status, or test",
+        choices=["run", "gate", "install", "uninstall", "status", "test"],
+        help="run (what Claude Code calls; gate in Jarvis's own runs), install or uninstall "
+        "the hooks, status, or test",
     )
     startup = sub.add_parser("startup", help="start Jarvis at login (tray, voice, Hey Jarvis)")
     startup.add_argument(
@@ -540,9 +541,9 @@ def claude_hook(
     from jarvis.bridge import hook
 
     settings_path = (claude_dir or Path.home() / ".claude") / "settings.json"
-    if action == "run":
+    if action in ("run", "gate"):
         file_only_logging(settings.data_dir)
-        reply = hook.run_hook(sys.stdin.read(), settings.data_dir)
+        reply = hook.run_hook(sys.stdin.read(), settings.data_dir, gate=action == "gate")
         if reply:
             sys.stdout.write(reply)
         return 0

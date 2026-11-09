@@ -4,6 +4,26 @@ Each phase is tested by hand on the laptop, not only with unit tests. Every row 
 
 The harness that drives `jarvis chat` through pipes is `scripts/drive_chat.py`, described in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+## Hands-on pass for v1.22.0
+
+Run by the user on 2026-11-09 with their own voice, microphone, and data, using `jarvis serve --tray --wake` on `main` (v1.22.0).
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| H.1 (32) | tray "Open Jarvis", the mic button, "what time is it" | the words appear while speaking; the reply is shown and spoken | as expected | pass |
+| H.2 (32) | window closed; "Hey Jarvis", then "open Jarvis" | the chat window opens | as expected | pass |
+| H.3 (24) | a long answer ("tell me about the history of Hyderabad"), then "stop" while it speaks | the speech stops within about a second | as expected | pass |
+| H.4 (19.5) | lock the PC for about 30 seconds, "Hey Jarvis", then unlock | no response while locked; responds again after unlock | as expected | pass |
+| H.5 (29) | pair the OnePlus, then "find my phone" | the phone rings | first run: Jarvis said "Ringing your OnePlus Nord2 5G" but the phone stayed silent; a plain `--ping-msg` also never arrived, though the PC said `paired and reachable` and every call exited 0 | **fail** |
+| H.5 (after re-pairing) | unpair and pair again from the PC, accept on the phone, "find my phone" | the phone rings | the phone rings | pass |
+
+**Found in H.5:** the phone did not count itself paired while the PC did, and KDE Connect reports no error for that, so the ring was dropped silently. Not a Jarvis bug; recorded in R72 and SETUP.md 5s.
+
+| H.6 (29) | "remind me in two minutes on my phone to drink water" | the phone rings and shows the reminder | first run: it rang, but the full-screen ringer showed only KDE Connect's "Found it" button and the text was hidden behind it | **fail** |
+| H.6 (after the fix) | same, after restarting Jarvis on `phase/33-hands-on-fixes` | same | it rang; after Found it, the reminder text was the newest notification | pass |
+
+**Fixed in H.6:** a ringing alert now rings first and sends the text after it, and also goes to ntfy when a topic is set (ADR-104).
+
 ## Phase 19: Privacy
 
 Run on 2026-11-05.

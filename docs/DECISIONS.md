@@ -682,3 +682,10 @@ These need you; nothing is blocked on them.
 
 The Claude Code hooks (once open decision 1) were installed on 2026-10-20 after `jarvis claude-hook test` passed.
 The Ollama speed settings (once open decision 2) were found already set on this laptop on 2026-10-20 (`OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, confirmed in Ollama's log); every Phase 13 measurement includes them.
+
+### ADR-104: Phone reminders ring, then show the text, and also go to ntfy when a topic is set
+
+- **Context (2026-11-09 hands-on test):** a phone reminder pinged the text and then rang. KDE Connect's ring opens a full-screen ringer with only a "Found it" button, which covers the text, so the reminder looked like it said nothing.
+- **Decision (the user's choice, "a mixture of all"):** a ringing alert (phone reminders) now rings first and sends the text right after, so the text is the newest notification once Found it is tapped. When `[phone] ntfy_topic` is set, the same alert also goes to ntfy at the highest priority, as one alert with a title and the text, even when KDE Connect reached the phone. A failed ntfy copy does not undo a ring that worked. Alerts that do not ring (Claude Code's questions) still use ntfy only when the phone is away.
+- **Privacy:** with no topic set, nothing changes and nothing leaves the laptop and the phone. With one set, the reminder text, which you wrote for your own phone, passes through the ntfy server, as ADR-098 already allowed for alerts when you are away.
+- **Rejected:** a message only, with no ring (easy to miss on silent); ntfy only (needs the app and a topic first).

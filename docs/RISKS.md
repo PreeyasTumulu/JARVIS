@@ -337,6 +337,8 @@ Feeds change their addresses and formats; a feed that fails is left out and name
 
 The phone must be paired once and on the same Wi-Fi with the KDE Connect app open in the background; Android may stop it to save battery. On this laptop `kdeconnect-cli --list-available` printed no device while `--list-devices` showed the phone reachable, so Jarvis reads the full list and checks "paired" and "reachable" itself. Listing took about 2 s, so ringing or notifying takes 2 to 4 s. A ring keeps ringing until you stop it on the phone. Sending files over `--share` was not tried live, because the phone was not paired during the test. When several phones are paired, `[phone] device` must name one.
 
+Seen on 2026-11-09: the PC listed the phone as `paired and reachable` and every `--ring` and `--ping-msg` exited 0, yet nothing arrived, because the phone did not count itself paired. KDE Connect gives no error for this, so Jarvis says "Ringing your phone" while the phone ignores it. Fix: `kdeconnect-cli --unpair -d <id>`, then `--pair -d <id>` and accept on the phone (with its notification permission on, since the pairing request is a notification).
+
 ### R73. ntfy alerts
 
 An alert by ntfy goes through ntfy.sh (or your own server) over the internet, and anyone who knows the topic name can read it: use a long random topic, or set `NTFY_TOKEN` with a protected topic. A notification asks first when the conversation holds private data; reminders send their own text, which you set. Files, the clipboard, and screenshots never go this way. Android may delay pushes in battery saver unless ntfy is allowed to run unrestricted.

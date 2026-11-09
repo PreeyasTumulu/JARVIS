@@ -11,6 +11,7 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 - Open-source readiness: a demo GIF from the chat interface at the top of the README, a quickstart that starts with the offline demo pages, and a CI check that the repository holds no personal data (`scripts/check_personal.py`, ADR-102).
 
 ### Changed
+- Phone reminders ring first and send their text right after, so the text is on top once you tap KDE Connect's "Found it". With an ntfy topic set, they also go to ntfy as a titled alert (ADR-104).
 - The UI demos, tests, and docs use made-up devices and addresses instead of the real ones from live tests.
 - `ui-demos/chat.html`: the orb and the edge glow brought together around a conversation. The orb glides from the middle into the header, your words and Jarvis's reply appear live, confirmations are cards in the conversation, and light and dark themes are included (ADR-101).
 - `ui-demos/`: six standalone UI concepts (reactor, orb, edge glow, terminal, pill, constellation). Each shows the same seven states, plays a scripted run, and can follow your real microphone. They are offline, one file each, with screenshots in the READMEs (ADR-100).

@@ -470,6 +470,37 @@ Free, no account needed (ADR-098):
 3. **Away from home (optional):** install the ntfy app, subscribe to a long random topic, and set it in `config/local.toml` as `[phone] ntfy_topic = "..."`. Alerts and Claude Code's questions (with answer buttons) then reach the phone anywhere. In ntfy's topic settings, "Keep alerting for highest priority" makes urgent pushes ring until you look.
 4. With several phones paired, set `[phone] device = "Pixel 8"` (the name KDE Connect shows). `[bridge] phone = ""` turns the phone off for Claude Code's questions.
 
+## 5t. Claude Code by voice, and running code in Docker (Phase 34)
+
+Needs Claude Code installed and signed in, and `jarvis serve` running so Claude's questions can reach you. Check the sign-in with `echo hi | claude -p`: if it says the OAuth token has expired, run `claude auth login` (the desktop app's sign-in does not count).
+
+1. Name your projects in `config/local.toml`:
+
+   ```toml
+   [claude.projects.jarvis]
+   folder = "C:/Internships/SELF_PROJECTS/JARVIS"
+   runner = "jarvis"          # optional, for "run it in Docker"
+   ```
+
+2. Say:
+   - "open Claude for jarvis": a window on the latest session.
+   - "open my phone fix session in Claude": a session by its name (rename one with `/rename` in Claude Code).
+   - "which Claude sessions do I have in jarvis": the latest five.
+   - "tell Claude in jarvis to add a test for the phone module": asks first and shows the exact prompt. Claude then works in the background, the chat shows what it changes, and Jarvis says a summary at the end. Each edit or command asks you again ("Claude wants to edit app.py").
+   - "... so I can watch": the same prompt, sent in a window instead.
+   - "stop Claude": ends a background run.
+3. **Running the code:** add a runner, then say "run the jarvis code in Docker". It asks first and reports the exit code and the last lines.
+
+   ```toml
+   [docker.runners.jarvis]
+   image = "python:3.12-slim"
+   command = ["python", "main.py"]
+   folder = "C:/Internships/SELF_PROJECTS/JARVIS"   # mounted read-only at /work
+   network = false                                  # no internet unless true
+   ```
+
+   The image must exist or be pullable, and Docker Desktop must be running. The folder is read-only, so a command that writes there fails; write to /tmp in the container instead.
+
 ## 6. Windows settings
 
 | Setting | Path in Settings | Needed from |

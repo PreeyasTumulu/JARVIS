@@ -11,7 +11,7 @@
 
 Say "Hey Jarvis" (or type), and a local LLM plans the request, calls typed tools to do it, and answers out loud. It opens apps, types and clicks in them, takes dictation into any app, controls your music, searches sites in your browser, reads your WhatsApp notifications and your email, tells you what's on your calendar, sends messages and email replies, places calls through your phone, answers data questions from free APIs, and remembers what you tell it. It can also answer Claude Code's questions for you by voice. Everything runs on your laptop by default; a free cloud model helps with hard public questions, and nothing private is ever sent to it.
 
-> **Status:** Phases 0 to 32 (v1.22.0) are on `main`, hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md); a few items still need hands-on checks (docs/RELEASING.md). The chat window in the GIF above is the real interface: `jarvis ui` opens it, and it shows your typed and spoken turns live. `jarvis chat` still works in a terminal. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
+> **Status:** Phases 0 to 32 (v1.22.0) are on `main`; Phase 34 (Claude Code by voice and code runs in Docker, v1.23.0) is on `phase/34-claude-sessions`, stacked on the hands-on fixes in `phase/33-hands-on-fixes`. Phases 0 to 32 are hand tested and logged in [docs/HANDTESTS.md](docs/HANDTESTS.md); a few items still need hands-on checks (docs/RELEASING.md). The chat window in the GIF above is the real interface: `jarvis ui` opens it, and it shows your typed and spoken turns live. `jarvis chat` still works in a terminal. No release is tagged past v0.3.0 yet. See the [roadmap](docs/ROADMAP.md).
 
 ## What you can say
 

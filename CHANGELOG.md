@@ -7,6 +7,8 @@ Versions 0.4.0 to 1.8.0 are merged to `main` with green CI, but not tagged: they
 ## [Unreleased]
 
 ### Added
+- Claude Code by voice: "open Claude for jarvis" resumes a session in a window, "which Claude sessions do I have", and "tell Claude in jarvis to ..." sends a prompt after a yes. It runs in the background with progress in the chat and a spoken summary, and each edit or command asks you through Jarvis. "So I can watch" sends it in a window instead (ADR-105).
+- `docker_run_code`: "run the jarvis code in Docker" runs a project's image and command from `[docker.runners]`, with the folder read-only, no internet by default, limits, and a time limit (ADR-106).
 - The chat window is live: `jarvis serve` serves it, and `jarvis ui`, the tray's "Open Jarvis", or saying "open Jarvis" opens it in Brave's app mode. It shows typed and spoken turns, confirmations, questions, Stop, push-to-talk, and the last 20 turns. Only that page may use the socket (ADR-103).
 - Open-source readiness: a demo GIF from the chat interface at the top of the README, a quickstart that starts with the offline demo pages, and a CI check that the repository holds no personal data (`scripts/check_personal.py`, ADR-102).
 

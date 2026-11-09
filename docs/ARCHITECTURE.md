@@ -711,12 +711,15 @@ jarvis/
       phone.py                ring_phone, notify_phone, send_to_phone (your own phone, ADR-098)
       news.py                 ai_news (feeds, a cloud model writes it, saved with links, ADR-097)
       media/                  spotify.py (play_spotify: search API, desktop app, ADR-091)
-      dev/                    git.py (git_changes, git_commit, git_push, ADR-094), ssh.py (ssh_connect, ADR-093)
+      dev/                    git.py (git_changes, git_commit, git_push, ADR-094), ssh.py (ssh_connect, ADR-093),
+                              claude_code.py (claude_open, claude_sessions, claude_ask, claude_stop; ClaudeRuns,
+                              the background runs, ADR-105)
       office/                 sheets.py (add_sheet_row: Excel, openpyxl, CSV, ADR-089),
                               calculator.py (calculator_show, ADR-090)
       secrets.py              hides secret-looking values in text tools read
       apps/                   app index (SQLite), open/focus/close/schedule, window matching, vscode, docker,
-                              docker_up.py (compose or image, then readiness, ADR-092)
+                              docker_up.py (compose or image, then readiness, ADR-092),
+                              docker_run.py (docker_run_code: a runner from config, shut in, ADR-106)
       ui/                     type_text, click, press_keys, read_window_text; key parsing; risk rules
       files/                  guard (allowlist, secrets), index and search (Everything or SQLite),
                               readers (text, PDF, docx), "this file" from Explorer or VS Code

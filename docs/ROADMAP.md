@@ -1147,6 +1147,33 @@ It was checked in all seven states, light and dark, at 1000 by 680 and 390 by 84
 
 **Exit criteria:** no website can open the socket or read the page, and everything the terminal can do with a turn, the window can too.
 
+## Phase 34: Claude Code by voice, and code runs in Docker
+
+**Goal:** say which project and session, pass Claude Code a prompt, and run the result in a container (ADR-105, ADR-106). Asked for on 2026-11-09.
+
+**Scope**
+
+- `[claude.projects.<name>]` with a folder and an optional runner. Sessions are read from `~/.claude/projects/` by title or last prompt.
+- `claude_open` (a window, resuming a session), `claude_sessions`, `claude_ask` (background by default, or in a window), and `claude_stop`.
+- Background runs: `claude.exe -p --resume <id> --output-format stream-json`, with the prompt on stdin, progress in the chat, and a spoken summary. A PreToolUse gate hook (`jarvis claude-hook gate`, passed with `--settings`) asks before each edit, command, or fetch.
+- `[docker.runners.<name>]` and `docker_run_code`: a fixed image and command, the folder read-only, no network by default, limits, and a time limit.
+- Fixes from the 2026-11-09 hands-on pass are on `phase/33-hands-on-fixes` (ADR-104); this phase is stacked on it.
+
+**Test it**
+
+1. Add a project and a runner (SETUP.md 5t), then `uv run jarvis serve`.
+2. "Which Claude sessions do I have in jarvis", then "open Claude for jarvis".
+3. "Tell Claude in jarvis to create a file named hello.txt containing hi": say yes to the prompt, then to the write.
+4. "Run the jarvis code in Docker".
+
+**Measured (2026-11-09):** on scratch data with the real Docker engine and Claude Code CLI (docs/HANDTESTS.md, 34.1 to 34.6):
+- **Docker:** the demo run asked with everything it would do, took 27 s (most of it Docker Desktop's file sharing), and the folder stayed read-only with no internet.
+- **The block:** a prompt after the container's output was refused, as designed.
+- **Claude:** the prompt card, the background start, and the end report worked; Claude Code itself refused because the CLI's sign-in had expired.
+- **Sessions:** read by name from Claude's own files.
+
+**Exit criteria:** nothing reaches Claude or Docker without a yes, a prompt is never parsed by a shell, and speech never chooses a command line.
+
 ## Beyond 1.0
 
 Ideas from [RESEARCH.md](RESEARCH.md), in the order they would pay off. Each would be a phase of its own, with its decisions asked first.

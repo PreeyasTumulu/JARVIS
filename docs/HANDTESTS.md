@@ -24,6 +24,21 @@ Run by the user on 2026-11-09 with their own voice, microphone, and data, using 
 
 **Fixed in H.6:** a ringing alert now rings first and sends the text after it, and also goes to ntfy when a topic is set (ADR-104).
 
+## Phase 34: Claude Code by voice, and code runs in Docker
+
+Run on 2026-11-09 on scratch data (`LOCALAPPDATA` and `JARVIS_CONFIG_DIR` in a scratch folder) with the real Docker engine (29.9.2), the real Claude Code CLI (2.1.247), and Hermes 3 8B. A demo folder held `run.sh`, which prints a line, tries to write to /work, tries to reach example.com, and exits 3. `[bridge] phone = ""` kept the real phone out of it.
+
+| # | Command | Expected | Actual | Result |
+|---|---|---|---|---|
+| 34.1 | `jarvis chat`: "run the demo code in docker" | asks with the command, image, folder, and limits; reports the exit code | card: "Run `sh run.sh` in alpine:3.20 with ...\demo read-only, no internet, 1g memory, 2 CPUs, at most 60 s"; y; "The demo run failed with exit code 3 after 27 seconds. The last line: no internet" | pass |
+| 34.2 | the same container, its full output | the folder is read-only and there is no internet | "hello from the container", "no python here", "the folder is read-only", "no internet"; nothing new in the demo folder | pass |
+| 34.3 | after 34.1, "tell claude in demo to create a file named hello.txt containing the word hi" | refused: the container's output is outside content | blocked, "outside content ... is in this conversation"; nothing was asked or sent | pass |
+| 34.4 | `jarvis serve --no-voice`, a socket client: the same prompt in a new chat | asks with the exact prompt, then runs in the background and reports the end | card: 'Send to Claude Code in demo, a new session, in the background: "create a file named hello.txt containing the word hi"'; yes; "Sent to Claude in demo. I'll tell you when it's done."; then "Claude stopped in demo: Failed to authenticate. API Error: 401 OAuth access token has expired." | pass (Jarvis); Claude Code's own sign-in had expired |
+| 34.5 | `claude -p` straight from a terminal, same folder | tells the login apart from Jarvis | also `api_error`, so the CLI's sign-in is expired on this laptop (the desktop app signs in separately) | needs you: `claude auth login` |
+| 34.6 | "which claude sessions do I have in demo" | the sessions from Claude's own files, by name | "The latest Claude sessions in demo: Reply with the single word ok; Jarvis: demo." | pass |
+
+**Needs your hands:** after `claude auth login`, 34.4 again with your voice, saying yes to "Claude wants to write hello.txt" (the gate hook's yes path has only run in unit tests); "open Claude for jarvis" (a window on your desktop); and "so I can watch".
+
 ## Phase 19: Privacy
 
 Run on 2026-11-05.

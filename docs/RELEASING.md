@@ -42,6 +42,7 @@ Older versions (0.4.0 to 1.7.0) stay as entries in the changelog; tagging them a
 | 25 | `claude mcp add jarvis -- uv run --directory <repo> jarvis mcp serve`, then ask Claude Code for the weather |
 | 27 | Spotify keys in `.env`; Docker Desktop running with a `[docker.projects]` entry; an `[ssh.profiles]` entry |
 | 28 | "What's on my screen" on your real screen, by voice |
+| 34 | `claude auth login` first (the CLI's sign-in had expired), then "tell Claude in jarvis to ..." with a yes to the edit by voice, "open Claude for jarvis", and "... so I can watch"; "run the jarvis code in Docker" with your own runner |
 | 30 | `ui-demos`: "Use my microphone" with your own microphone; `/review-animations` on `chat.html` if you want that report |
 
 Passed on 2026-11-09 (docs/HANDTESTS.md, H.1 to H.6): the mic button with voice on and "open Jarvis" by voice (32), "stop" during a spoken reply (24), the microphone closing while locked (19.5), pairing the phone, "find my phone", and a phone reminder (29). The phone reminder fix (ADR-104) is on `phase/33-hands-on-fixes`.

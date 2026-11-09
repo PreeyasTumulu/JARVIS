@@ -351,6 +351,19 @@ The demos are simulations: their timings and levels are scripted, so a real turn
 
 The window is your own Brave (or Edge) profile in app mode, so that profile's extensions run there too. An extension allowed on all sites can read the page, its token, and your conversation. A program running as you can fetch the page and read the token, as it can read bridge.json; the token opens only the chat socket, which can type commands but cannot skip a confirmation. An open window reconnects every 2 s while Jarvis is down, with the token kept across restarts. If `ui_token` is deleted, reload the window. The mic button is push-to-talk on Jarvis's own microphone, not the browser's, so the browser never asks for the microphone; with `jarvis serve --no-voice` it is greyed out.
 
+### R76. Claude Code by voice
+
+- **The CLI is a moving target:** flags and permission mode names change between Claude Code versions (2.1.247 names `manual`, `plan`, `dontAsk`, `acceptEdits`, `auto`, and `bypassPermissions`). The session file layout (`custom-title` and `last-prompt` lines) is not a public format either. An update can break session names or a run; the run then reports Claude's own error.
+- **Two windows on one session:** a session open in the desktop app or a terminal while Jarvis resumes it gets two writers. Jarvis warns when the session changed in the last two minutes, but cannot know for sure it is open.
+- **Questions in background runs** need `jarvis serve` running, because the gate hook asks through the bridge. Under `jarvis chat` or `ask` nobody can answer, so Claude's edits and commands are denied and listed in the summary.
+- **Your own hooks run too:** Claude Code also runs the hooks in `~/.claude/settings.json` during Jarvis's runs, so "Claude finished" may be said twice.
+- **Cost:** each prompt uses your Claude plan or API credit like any other Claude Code prompt.
+- **Sign-in:** the CLI signs in separately from the Claude desktop app. On 2026-11-09 `claude auth status` said logged in, yet every `claude -p` failed with "OAuth access token has expired" until a new `claude auth login`. Jarvis reports Claude's error as "Claude stopped in <project>: ...".
+
+### R77. Code runs in Docker
+
+The folder is read-only and the network is off by default, but the image itself is trusted: a runner's image runs as root inside the container, with whatever it contains. Docker Desktop must be running; the first run of an image may pull it, which counts toward the time limit. A Windows folder is mounted through Docker Desktop's file sharing, which is slow for big folders. A folder with a comma or quote in its path is refused, since `--mount` cannot carry it.
+
 ### R11. Cancellation
 
 Python cannot kill a thread. Tools running on worker threads (UI automation, file indexing) check the cancel token between steps and have timeouts. The agent returns control to you immediately on "stop", even if a background step takes a moment to wind down.

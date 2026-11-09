@@ -240,17 +240,29 @@ class Phone:
 
     async def alert(self, text: str, *, ring: bool = False, title: str = "Jarvis") -> str:
         """Tell the phone `text` (and ring it); which way it went. KDE Connect first, ntfy if
-        the phone is away. Used by reminders and the Claude Code bridge, which own the text."""
+        the phone is away. Used by reminders and the Claude Code bridge, which own the text.
+
+        KDE Connect's ring screen shows only a "Found it" button, so a ring goes first and the
+        text follows, waiting on top once the ring is stopped. A ringing alert also goes to ntfy
+        when a topic is set, as one alert with a title and the text (ADR-104)."""
+        sent = ""
         device = await self.device()
         if device is not None:
             try:
-                await self.ping(device, f"{title}: {text}")
                 if ring:
                     await self.ring(device)
-                return KDE
+                await self.ping(device, f"{title}: {text}")
+                sent = KDE
             except PhoneError as exc:
                 log.info("KDE Connect alert failed, trying ntfy: %s", exc)
-        if self.ntfy_ready:
-            await self.push(title, text, priority=5 if ring else 4)
-            return NTFY
+        if self.ntfy_ready and (ring or not sent):
+            try:
+                await self.push(title, text, priority=5 if ring else 4)
+            except PhoneError as exc:
+                if not sent:
+                    raise
+                log.info("The ntfy copy of an alert failed: %s", exc)
+            return sent or NTFY
+        if sent:
+            return sent
         raise PhoneError(await self.why_not())

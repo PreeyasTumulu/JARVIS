@@ -333,11 +333,41 @@ async def test_a_phone_that_cannot_be_reached_still_lets_the_reminder_speak() ->
     assert said == ["Reminder: tea."]
 
 
-async def test_alert_rings_after_the_notification_and_falls_back_to_ntfy() -> None:
+async def test_a_ringing_alert_rings_first_so_the_text_is_on_top_after_found_it() -> None:
+    kde, ntfy = FakeKde(), Ntfy()
+    phone = make_phone(kde, ntfy)
+    assert await phone.alert("call the bank", ring=True) == "kdeconnect"
+    assert [call[2] for call in kde.actions()] == ["--ring", "--ping-msg"]
+    assert "call the bank" in kde.actions()[-1][3]
+    assert ntfy.sent == []
+
+
+async def test_with_a_topic_a_ringing_alert_also_goes_to_ntfy() -> None:
     kde, ntfy = FakeKde(), Ntfy()
     phone = make_phone(kde, ntfy, ntfy_topic="t")
     assert await phone.alert("call the bank", ring=True) == "kdeconnect"
-    assert [call[2] for call in kde.actions()] == ["--ping-msg", "--ring"]
+    assert [call[2] for call in kde.actions()] == ["--ring", "--ping-msg"]
+    assert ntfy.sent[-1]["message"] == "call the bank"
+    assert ntfy.sent[-1]["priority"] == 5
+
+
+async def test_a_failed_ntfy_copy_does_not_undo_a_ring_that_worked() -> None:
+    kde = FakeKde()
+    down = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    phone = Phone(PhoneSettings(ntfy_topic="t"), runner=kde, http=down, ntfy_token="")
+    assert await phone.alert("call the bank", ring=True) == "kdeconnect"
+    assert [call[2] for call in kde.actions()] == ["--ring", "--ping-msg"]
+
+
+async def test_a_quiet_alert_that_reached_kde_connect_skips_ntfy() -> None:
+    kde, ntfy = FakeKde(), Ntfy()
+    phone = make_phone(kde, ntfy, ntfy_topic="t")
+    assert await phone.alert("call the bank") == "kdeconnect"
+    assert ntfy.sent == []
+
+
+async def test_alert_falls_back_to_ntfy_when_the_phone_is_away() -> None:
+    ntfy = Ntfy()
     away = make_phone(FakeKde(AWAY), ntfy, ntfy_topic="t")
     assert await away.alert("call the bank", ring=True) == "ntfy"
     assert ntfy.sent[-1]["priority"] == 5

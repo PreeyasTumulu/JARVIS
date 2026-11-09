@@ -35,16 +35,16 @@ Older versions (0.4.0 to 1.7.0) stay as entries in the changelog; tagging them a
 
 | Phase | Item |
 |---|---|
-| 19.5 | Lock the PC while Jarvis runs: the microphone closes, and nothing private is said aloud |
-| 20.5 | Clipboard history: "the second last thing I copied" with a real Ctrl+V |
+| 19.5 | A reminder that falls due while the PC is locked: only "something is waiting" while locked, the reminder after unlock (the microphone closing while locked passed on 2026-11-09, H.4) |
+| 20.5 | Clipboard history: "the second last thing I copied" with a real Ctrl+V (deferred by the user on 2026-11-09; needs `[clipboard] history = true` in local.toml) |
+| 29 | "Send the clipboard to my phone" (deferred with 20.5); optionally an ntfy topic, then a phone reminder arrives there too (ADR-104) |
 | 17 | A real WhatsApp call ("call Amma") and "hang up", with someone who expects it |
-| 24 | A real voice turn with streamed speech, and "stop" during it |
 | 25 | `claude mcp add jarvis -- uv run --directory <repo> jarvis mcp serve`, then ask Claude Code for the weather |
 | 27 | Spotify keys in `.env`; Docker Desktop running with a `[docker.projects]` entry; an `[ssh.profiles]` entry |
 | 28 | "What's on my screen" on your real screen, by voice |
-| 29 | Pair the phone in KDE Connect, then "find my phone", "send the clipboard to my phone", and a phone reminder; optionally an ntfy topic |
 | 30 | `ui-demos`: "Use my microphone" with your own microphone; `/review-animations` on `chat.html` if you want that report |
-| 32 | The mic button with voice on, and "open Jarvis" by voice (the real window, `jarvis ui`, and a typed "open Jarvis" were checked on 2026-11-07) |
+
+Passed on 2026-11-09 (docs/HANDTESTS.md, H.1 to H.6): the mic button with voice on and "open Jarvis" by voice (32), "stop" during a spoken reply (24), the microphone closing while locked (19.5), pairing the phone, "find my phone", and a phone reminder (29). The phone reminder fix (ADR-104) is on `phase/33-hands-on-fixes`.
 
 The merge is done. Then:
 
